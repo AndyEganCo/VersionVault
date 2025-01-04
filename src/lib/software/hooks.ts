@@ -11,20 +11,30 @@ export function useSoftwareList() {
 
   const refreshSoftware = useCallback(async () => {
     try {
-      setLoading(true);
       const data = await getAllSoftware();
       setSoftware(data);
     } catch (error) {
       console.error('Error loading software:', error);
       toast.error('Failed to load software list');
-    } finally {
-      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    refreshSoftware();
-  }, [refreshSoftware]);
+    async function loadInitialData() {
+      setLoading(true);
+      try {
+        const data = await getAllSoftware();
+        setSoftware(data);
+      } catch (error) {
+        console.error('Error loading software:', error);
+        toast.error('Failed to load software list');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadInitialData();
+  }, []);
 
   return { software, loading, refreshSoftware };
 }

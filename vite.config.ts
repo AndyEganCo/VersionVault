@@ -9,7 +9,24 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  optimizeDeps: {
-    exclude: ['lucide-react'],
+  server: {
+    port: 5173,
+    host: true,
+    strictPort: true,
+    watch: {
+      usePolling: true,
+    },
+    cors: true,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5173',
+        changeOrigin: true,
+        secure: false,
+      }
+    },
   },
+  preview: {
+    port: 5173,
+    host: true,
+  }
 });
