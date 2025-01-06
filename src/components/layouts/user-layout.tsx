@@ -1,11 +1,13 @@
-import { Outlet } from 'react-router-dom';
-import { Card } from '@/components/ui/card';
-import { AuthCheck } from '@/components/auth/auth-check';
+import { ReactNode } from 'react';
 
 type UserLayoutProps = {
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 export function UserLayout({ children }: UserLayoutProps) {
-  return <div>{children}</div>;
+  return (
+    <div className="space-y-6">
+      {children}
+    </div>
+  );
 }

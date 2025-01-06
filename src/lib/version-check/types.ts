@@ -12,12 +12,9 @@ export type CheckResult = {
   version: string | null;
   confidence: number;
   source: string;
+  success?: boolean;
+  error?: string;
+  currentVersion?: string;
 };
 
-export type ScrapeStatus = {
-  version: string | null;
-  confidence: number;
-  source: string;
-};
-
-export type CheckResult = ScrapeStatus;
+export type ScrapeStatus = CheckResult;
