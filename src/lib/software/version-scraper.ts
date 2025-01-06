@@ -1,11 +1,5 @@
-import OpenAI from 'openai';
 import { supabase } from '@/lib/supabase';
 import type { Software } from './types';
-
-const openai = new OpenAI({
-  apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true
-});
 
 type VersionInfo = {
   version: string;
