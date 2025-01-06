@@ -2,13 +2,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Bell, Globe } from 'lucide-react';
+import { NotificationFrequency } from '@/lib/settings';
 
 type NotificationPreferencesProps = {
   preferences: {
     emailNotifications: boolean;
     browserNotifications: boolean;
+    notificationFrequency: NotificationFrequency;
   };
-  onPreferenceChange: (key: string, value: boolean) => void;
+  onPreferenceChange: (key: string, value: boolean | NotificationFrequency) => void;
   loading: boolean;
 };
 

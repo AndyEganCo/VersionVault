@@ -39,10 +39,12 @@ export function ManualCheckForm({ onStatusChange }: ManualCheckFormProps) {
       const status: ScrapeStatus = {
         success: result.success,
         version: result.version,
+        source: result.source,
         content: `Source: ${result.source}\nConfidence: ${result.confidence}`,
         softwareName: software?.name || 'Unknown Software',
         currentVersion: software?.currentVersion,
-        error: result.error
+        error: result.error,
+        confidence: result.confidence
       };
 
       onStatusChange(status);

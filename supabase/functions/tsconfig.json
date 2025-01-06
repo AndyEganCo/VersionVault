@@ -10,7 +10,7 @@
     "noFallthroughCasesInSwitch": true,
     "moduleResolution": "node",
     "noEmit": true,
-    "lib": ["deno.window"],
+    "lib": ["es2021", "dom"],
     "types": ["@types/node"]
   }
-} 
+}

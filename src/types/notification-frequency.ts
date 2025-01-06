@@ -1,0 +1,1 @@
+export type NotificationFrequency = 'immediate' | 'daily' | 'weekly'; 

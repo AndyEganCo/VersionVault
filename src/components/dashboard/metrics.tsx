@@ -1,5 +1,3 @@
-import { Card } from '@/components/ui/card';
-import { Metric } from './metric';
 import { useAuth } from '@/contexts/auth-context';
 import { softwareList } from '@/data/software-list';
 import { getTrackedSoftware } from '@/lib/software';
