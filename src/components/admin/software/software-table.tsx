@@ -50,8 +50,8 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                   <Badge variant="secondary">{software.category}</Badge>
                 </TableCell>
                 <TableCell>{software.manufacturer}</TableCell>
-                <TableCell>{software.currentVersion || 'N/A'}</TableCell>
-                <TableCell>{software.lastChecked || 'Never'}</TableCell>
+                <TableCell>{software.current_version || 'N/A'}</TableCell>
+                <TableCell>{software.last_checked || 'Never'}</TableCell>
                 <TableCell className="text-right space-x-2">
                   <Button
                     variant="ghost"
@@ -74,19 +74,23 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
         </Table>
       </div>
 
-      <EditSoftwareDialog
-        software={editingSoftware}
-        open={!!editingSoftware}
-        onOpenChange={(open) => !open && setEditingSoftware(null)}
-        onSuccess={onUpdate}
-      />
+      {editingSoftware && (
+        <EditSoftwareDialog
+          software={editingSoftware}
+          open={!!editingSoftware}
+          onOpenChange={(open) => !open && setEditingSoftware(null)}
+          onSuccess={onUpdate}
+        />
+      )}
 
-      <DeleteSoftwareDialog
-        software={deletingSoftware}
-        open={!!deletingSoftware}
-        onOpenChange={(open) => !open && setDeletingSoftware(null)}
-        onSuccess={onUpdate}
-      />
+      {deletingSoftware && (
+        <DeleteSoftwareDialog
+          software={deletingSoftware}
+          open={!!deletingSoftware}
+          onOpenChange={(open) => !open && setDeletingSoftware(null)}
+          onSuccess={onUpdate}
+        />
+      )}
     </>
   );
 }

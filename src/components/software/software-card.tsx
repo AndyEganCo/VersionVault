@@ -45,17 +45,17 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
               {software.category}
             </Badge>
             
-            {software.currentVersion && (
+            {software.current_version && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Version</span>
-                <Badge variant="outline">{software.currentVersion}</Badge>
+                <Badge variant="outline">{software.current_version}</Badge>
               </div>
             )}
             
-            {software.lastChecked && (
+            {software.last_checked && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Last checked</span>
-                <span className="text-sm">{software.lastChecked}</span>
+                <span className="text-sm">{software.last_checked}</span>
               </div>
             )}
           </CardContent>

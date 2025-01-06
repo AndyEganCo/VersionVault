@@ -8,17 +8,18 @@ export const ReleaseNoteSchema = z.object({
   type: z.enum(['major', 'minor', 'patch'])
 });
 
-export const SoftwareSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  category: z.enum(Object.values(softwareCategories) as [string, ...string[]]),
-  manufacturer: z.string(),
-  website: z.string().url(),
-  current_version: z.string().optional(),
-  last_checked: z.string().optional(),
-  tracked: z.boolean(),
-  selected: z.boolean().optional()
-});
+export type Software = {
+  id: string;
+  name: string;
+  category: string;
+  manufacturer: string;
+  website: string;
+  tracked: boolean;
+  selected?: boolean;
+  current_version?: string;
+  last_checked?: string;
+};
+
+export type SoftwareUpdate = Partial<Software>;
 
 export type ReleaseNote = z.infer<typeof ReleaseNoteSchema>;
-export type Software = z.infer<typeof SoftwareSchema>;

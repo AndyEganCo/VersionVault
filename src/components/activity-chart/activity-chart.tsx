@@ -1,8 +1,20 @@
-import { LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, TooltipProps } from 'recharts';
 import { ActivityChartProps } from './types';
 import { ChartTooltip } from './chart-components/tooltip';
 import { ChartGradient } from './chart-components/gradient';
 import { DataLine } from './chart-components/data-line';
+
+type ChartTooltipProps = {
+  active?: boolean;
+  payload?: Array<{
+    payload: ChartDataPoint;
+  }>;
+};
+
+const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
+  if (!active || !payload?.length) return null;
+  // Rest of the tooltip code...
+};
 
 export function ActivityChart({ data }: ActivityChartProps) {
   if (!data.length) {

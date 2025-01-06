@@ -9,12 +9,9 @@ export type VersionInfo = {
 };
 
 export type CheckResult = {
-  success: boolean;
   version: string | null;
-  confidence: VersionInfo['confidence'];
-  source: ScrapeResult['source'];
-  content: string;
-  error?: string;
-  softwareName?: string;
-  currentVersion?: string;
+  confidence: number;
+  source: string;
 };
+
+export type ScrapeStatus = CheckResult;
