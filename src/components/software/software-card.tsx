@@ -22,8 +22,7 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
   const [showReleaseNotes, setShowReleaseNotes] = useState(false);
   const { releaseNotes } = useReleaseNotes(software.id);
 
-  const handleTrackingChange = (e: React.MouseEvent, checked: boolean) => {
-    e.stopPropagation();
+  const handleTrackingChange = (_e: unknown | null, checked: boolean) => {
     onTrackingChange(software.id, checked);
   };
 
@@ -85,7 +84,7 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
                 </span>
                 <Switch 
                   checked={software.tracked} 
-                  onCheckedChange={(checked) => handleTrackingChange(event as React.MouseEvent, checked)}
+                  onCheckedChange={(checked) => handleTrackingChange(null, checked)}
                 />
               </div>
             )}
