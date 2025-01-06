@@ -19,6 +19,18 @@ export type Software = {
   selected?: boolean;
   current_version?: string;
   last_checked?: string;
+  release_date?: string;
 };
 
 export type SoftwareUpdate = Partial<Software>;
+
+export type SoftwareVersion = {
+  major: number;
+  minor?: number;
+  patch?: number;
+  build?: string;
+  beta?: boolean;
+  releaseDate?: string;
+  features?: string[];
+  changelog?: string;
+};

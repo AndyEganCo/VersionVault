@@ -16,83 +16,61 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
     // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      setLoading(false);
+      checkAdminStatus(session?.user?.id);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      checkAdminStatus(session?.user?.id);
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // Check admin status whenever user changes
-  useEffect(() => {
-    async function checkAdminStatus() {
-      if (!user) {
-        setIsAdmin(false);
-        return;
-      }
-
-      try {
-        console.log('Checking admin status for user:', user.id); // Debug log
-        const { data, error } = await supabase
-          .from('admin_users')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
-
-        if (error) {
-          console.error('Admin check error:', error); // Debug log
-          throw error;
-        }
-        
-        const isUserAdmin = !!data;
-        console.log('Admin status:', isUserAdmin); // Debug log
-        setIsAdmin(isUserAdmin);
-      } catch (error) {
-        console.error('Error checking admin status:', error);
-        setIsAdmin(false);
-      }
+  async function checkAdminStatus(userId: string | undefined) {
+    if (!userId) {
+      setIsAdmin(false);
+      return;
     }
 
-    checkAdminStatus();
-  }, [user]);
+    const { data } = await supabase
+      .from('admin_users')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
 
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    navigate('/'); // Redirect to root after successful sign in
-  };
-
-  const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error;
-  };
-
-  const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-  };
+    setIsAdmin(!!data);
+  }
 
   return (
     <AuthContext.Provider value={{
       user,
       isAdmin,
       loading,
-      signIn,
-      signUp,
-      signOut
+      signIn: async (email, password) => {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        navigate('/dashboard');
+      },
+      signUp: async (email, password) => {
+        const { error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+      },
+      signOut: async () => {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        navigate('/login');
+      }
     }}>
       {children}
     </AuthContext.Provider>

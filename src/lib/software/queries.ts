@@ -1,9 +1,12 @@
 import { supabase } from '@/lib/supabase';
-import { softwareList } from '@/data/software-list';
+import { getSoftwareList } from './api';
 import type { Software } from './types';
 
 export async function getAllSoftware(): Promise<Software[]> {
   try {
+    // Get software from database
+    const software = await getSoftwareList();
+
     // Get tracked software IDs for logged-in users
     const { data: { session } } = await supabase.auth.getSession();
     const { data: tracked } = session ? await supabase
@@ -13,13 +16,13 @@ export async function getAllSoftware(): Promise<Software[]> {
 
     const trackedIds = new Set(tracked?.map(t => t.software_id) || []);
 
-    // Map software list with tracked status
-    return softwareList.map(s => ({
+    // Map software with tracked status
+    return software.map(s => ({
       ...s,
       tracked: trackedIds.has(s.id)
     }));
   } catch (error) {
     console.error('Error fetching software:', error);
-    return softwareList.map(s => ({ ...s, tracked: true }));
+    return [];
   }
 }

@@ -12,9 +12,26 @@ export type CheckResult = {
   version: string | null;
   confidence: number;
   source: string;
-  success?: boolean;
   error?: string;
-  currentVersion?: string;
+  softwareId?: string;
+  content?: string;
+  timestamp?: string;
+  isBeta?: boolean;
+  releaseDate?: string;
 };
 
-export type ScrapeStatus = CheckResult;
+export type ScrapeStatus = {
+  id?: string;
+  software_id: string;
+  url: string;
+  detected_version: string | null;
+  current_version: string | null;
+  status: 'success' | 'error';
+  error?: string;
+  content?: string;
+  source: string;
+  confidence: number;
+  checked_at: string;
+  is_beta?: boolean;
+  release_date?: string;
+};

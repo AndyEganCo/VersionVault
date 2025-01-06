@@ -15,6 +15,7 @@ export function Software() {
   const { trackedIds, loading: trackingLoading, refreshTracking } = useTrackedSoftware();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>('name');
 
   const loading = softwareLoading || trackingLoading;
 
@@ -29,6 +30,23 @@ export function Software() {
       ...s,
       tracked: trackedIds.has(s.id)
     }));
+
+  const sortedSoftware = filteredSoftware.sort((a, b) => {
+    switch (sortBy) {
+      case 'release_date':
+        if (!a.release_date) return 1;
+        if (!b.release_date) return -1;
+        return new Date(b.release_date).getTime() - new Date(a.release_date).getTime();
+      case 'last_checked':
+        if (!a.last_checked) return 1;
+        if (!b.last_checked) return -1;
+        return new Date(b.last_checked).getTime() - new Date(a.last_checked).getTime();
+      case 'category':
+        return a.category.localeCompare(b.category);
+      default:
+        return a.name.localeCompare(b.name);
+    }
+  });
 
   const handleTrackingChange = async (id: string, tracked: boolean) => {
     if (!user) {
@@ -62,9 +80,11 @@ export function Software() {
           onSearchChange={setSearch}
           selectedCategory={selectedCategory}
           onCategoryChange={setSelectedCategory}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
         />
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredSoftware.map((s) => (
+          {sortedSoftware.map((s) => (
             <SoftwareCard
               key={s.id}
               software={s}

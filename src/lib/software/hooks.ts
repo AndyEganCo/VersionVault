@@ -12,6 +12,7 @@ export function useSoftwareList() {
   const refreshSoftware = useCallback(async () => {
     try {
       const data = await getAllSoftware();
+      console.log('Fetched software data:', data);
       setSoftware(data);
     } catch (error) {
       console.error('Error loading software:', error);
@@ -67,4 +68,49 @@ export function useTrackedSoftware() {
   }, [refreshTracking]);
 
   return { trackedIds, loading, refreshTracking };
+}
+
+export function useRecentUpdates() {
+  const { user } = useAuth();
+  const [updates, setUpdates] = useState<Software[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadRecentUpdates() {
+      try {
+        const data = await getAllSoftware();
+        
+        let trackedIds = new Set<string>();
+        if (user) {
+          trackedIds = await getTrackedSoftware(user.id);
+        }
+        
+        const recentUpdates = data
+          .filter(s => {
+            const hasUpdate = s.release_date || s.last_checked;
+            const isTracked = user ? trackedIds.has(s.id) : true;
+            return hasUpdate && isTracked;
+          })
+          .sort((a, b) => {
+            // Prioritize release date, fall back to last_checked
+            const dateA = a.release_date || a.last_checked;
+            const dateB = b.release_date || b.last_checked;
+            if (!dateA) return 1;
+            if (!dateB) return -1;
+            return new Date(dateB).getTime() - new Date(dateA).getTime();
+          })
+          .slice(0, 15);  // Limit to 15 most recent updates
+
+        setUpdates(recentUpdates);
+      } catch (error) {
+        console.error('Error loading recent updates:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadRecentUpdates();
+  }, [user]);
+
+  return { updates, loading };
 }

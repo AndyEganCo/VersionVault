@@ -11,6 +11,7 @@ import {
   CardContent,
   CardHeader,
 } from '@/components/ui/card';
+import { formatRelativeDate, formatDate } from '@/lib/date';
 
 type SoftwareCardProps = {
   software: Software;
@@ -54,7 +55,18 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
             {software.last_checked && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Last checked</span>
-                <span className="text-sm">{software.last_checked}</span>
+                <span className="text-sm">
+                  {formatRelativeDate(software.last_checked)}
+                </span>
+              </div>
+            )}
+            
+            {software.release_date && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Released</span>
+                <span className="text-sm">
+                  {formatDate(software.release_date)}
+                </span>
               </div>
             )}
           </CardContent>

@@ -3,6 +3,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ReleaseNotesList } from "./list";
@@ -27,6 +28,9 @@ export function ReleaseNotesDialog({
         <DialogHeader>
           <DialogTitle>{softwareName} Release Notes</DialogTitle>
         </DialogHeader>
+        <DialogDescription className="sr-only">
+          Release notes for {softwareName}
+        </DialogDescription>
         <ScrollArea className="h-[500px] pr-4">
           <ReleaseNotesList notes={releaseNotes} />
         </ScrollArea>

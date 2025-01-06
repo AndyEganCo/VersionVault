@@ -43,7 +43,11 @@ export async function extractVersion(
   softwareName: string, 
   content: string, 
   source: string
-): Promise<{ version: string | null; confidence: 'high' | 'medium' | 'low' }> {
+): Promise<{ 
+  version: string | null; 
+  confidence: 'high' | 'medium' | 'low';
+  releaseDate?: string;
+}> {
   try {
     const prompt = `Extract the latest version number for ${softwareName}.
 Content source: ${source}
@@ -74,9 +78,14 @@ Remember: Return ONLY the version number or 'null' if no version is found.`;
       confidence = 'medium';
     }
 
+    // Look for release date in content
+    const dateMatch = content.match(/released on (\d{4}-\d{2}-\d{2})|release date[:\s]+(\d{4}-\d{2}-\d{2})/i);
+    const releaseDate = dateMatch ? dateMatch[1] || dateMatch[2] : undefined;
+
     return {
       version: version === 'null' ? null : version,
-      confidence
+      confidence,
+      releaseDate
     };
   } catch (error) {
     console.error('Version extraction error:', error);

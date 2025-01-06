@@ -1,5 +1,20 @@
 import { supabase } from '@/lib/supabase';
-import type { Software } from './types';
+import type { Software, SoftwareVersion } from './types';
+
+// Version patterns for different formats
+const versionPatterns = [
+  // Version with build number pattern (e.g., "VERSION 18 (301989919)")
+  /VERSION\s*(\d+).*?\((\d+)\)/i,
+  
+  // Simple version number pattern (e.g., "Version 18")
+  /version\s*(\d+(\.\d+)*)/i,
+  
+  // Build number pattern
+  /\((\d{9})\)/,
+  
+  // Beta version pattern
+  /BETA.*?(\d+(\.\d+)*)/i
+];
 
 type VersionInfo = {
   version: string;
@@ -7,20 +22,7 @@ type VersionInfo = {
 };
 
 function extractVersionFromText(text: string): VersionInfo | null {
-  // Common version patterns, now including beta
-  const patterns = [
-    // Beta patterns first
-    /version\s*(\d+\.\d+(\.\d+)?)\s*beta/i,           // Version 1.2.3 Beta
-    /v(\d+\.\d+(\.\d+)?)\s*beta/i,                    // v1.2.3 Beta
-    /(\d+\.\d+(\.\d+)?)\s*beta/i,                     // 1.2.3 Beta
-    // Regular version patterns
-    /version\s*(\d+\.\d+(\.\d+)?)/i,                  // Version 1.2.3
-    /v(\d+\.\d+(\.\d+)?)/i,                          // v1.2.3
-    /(\d+\.\d+(\.\d+)?)\s*release/i,                 // 1.2.3 Release
-    /\b(\d+\.\d+(\.\d+)?)\b/                        // Bare version number
-  ];
-
-  for (const pattern of patterns) {
+  for (const pattern of versionPatterns) {
     const match = text.match(pattern);
     if (match && match[1]) {
       const isBeta = text.toLowerCase().includes('beta');
@@ -56,8 +58,6 @@ export async function checkSoftwareVersion(software: Software): Promise<void> {
         return data;
       }, 3);
 
-      console.log(`Edge function response for ${url}:`, response);
-      
       if (!response) {
         throw new Error('No response from version check');
       }
@@ -75,68 +75,22 @@ export async function checkSoftwareVersion(software: Software): Promise<void> {
         const { version, isBeta } = versionInfo;
         const softwareName = isBeta ? `${software.name} - Beta` : software.name;
 
-        console.log(`Found version ${version} for ${softwareName} (current: ${software.current_version})`);
-
         // Only update if version is different and newer
         if (version !== software.current_version && isNewerVersion(version, software.current_version)) {
           console.log(`Updating ${softwareName} to version ${version}`);
           
-          const updateData = {
+          await updateSoftwareVersion(software.id, {
             name: softwareName,
             current_version: version,
             last_checked: new Date().toISOString()
-          };
-
-          console.log('Updating software with:', updateData);
-          const { error: updateError, data: updateResult } = await supabase
-            .from('software')
-            .update(updateData)
-            .eq('id', software.id)
-            .select()
-            .single();
-
-          if (updateError) {
-            console.error('Error updating software:', updateError);
-            throw updateError;
-          }
-
-          console.log('Software updated:', updateResult);
+          });
 
           // Store version history
-          const { error: historyError, data: historyResult } = await supabase
-            .from('version_checks')
-            .insert({
-              software_id: software.id,
-              version,
-              is_beta: isBeta,
-              status: 'success',
-              checked_at: new Date().toISOString()
-            })
-            .select()
-            .single();
-
-          if (historyError) {
-            console.error('Error storing version history:', historyError);
-            throw historyError;
-          }
-
-          console.log('Version history stored:', historyResult);
+          await recordVersionCheck(software.id, version, isBeta);
         } else {
           console.log(`No update needed for ${software.name}`);
           // Update last checked timestamp even if version hasn't changed
-          const { error: updateError, data: updateResult } = await supabase
-            .from('software')
-            .update({ last_checked: new Date().toISOString() })
-            .eq('id', software.id)
-            .select()
-            .single();
-
-          if (updateError) {
-            console.error('Error updating last_checked:', updateError);
-            throw updateError;
-          }
-
-          console.log('Last checked timestamp updated:', updateResult);
+          await updateLastChecked(software.id);
         }
         return; // Exit if version found
       }
@@ -152,6 +106,41 @@ export async function checkSoftwareVersion(software: Software): Promise<void> {
 
   // If we get here, no version was found at any URL
   throw lastError || new Error('Failed to find version');
+}
+
+async function updateSoftwareVersion(id: string, data: Partial<Software>) {
+  const { error, data: result } = await supabase
+    .from('software')
+    .update(data)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return result;
+}
+
+async function recordVersionCheck(softwareId: string, version: string, isBeta: boolean) {
+  const { error } = await supabase
+    .from('version_checks')
+    .insert({
+      software_id: softwareId,
+      version,
+      is_beta: isBeta,
+      status: 'success',
+      checked_at: new Date().toISOString()
+    });
+
+  if (error) throw error;
+}
+
+async function updateLastChecked(id: string) {
+  const { error } = await supabase
+    .from('software')
+    .update({ last_checked: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw error;
 }
 
 function isNewerVersion(newVersion: string, currentVersion: string | null | undefined): boolean {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 export function TestVersionCheck() {
   const [url, setUrl] = useState('');
@@ -11,20 +12,26 @@ export function TestVersionCheck() {
   const handleTest = async () => {
     try {
       setLoading(true);
-      const { data, error: apiError } = await supabase.functions.invoke('fetch-version', {
-        body: { url }
+      setResult(null);
+
+      const { data, error } = await supabase.functions.invoke('fetch-version', {
+        body: { url },
       });
 
-      if (apiError) {
-        throw new Error(apiError.message);
-      }
+      if (error) throw error;
 
       setResult(data);
-      console.log('Version check result:', data);
+      
+      if (!data.version) {
+        toast.warning('No version found');
+      } else {
+        toast.success(`Found version: ${data.version}`);
+      }
+
     } catch (err) {
-      const error = err as Error;
-      console.error('Test failed:', error);
-      setResult({ error: error.message });
+      const message = err instanceof Error ? err.message : 'Failed to check version';
+      toast.error(message);
+      setResult({ error: message });
     } finally {
       setLoading(false);
     }
@@ -39,6 +46,8 @@ export function TestVersionCheck() {
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Enter URL to test"
           className="flex-1"
+          type="url"
+          required
         />
         <Button 
           onClick={handleTest}
@@ -48,7 +57,7 @@ export function TestVersionCheck() {
         </Button>
       </div>
       {result && (
-        <pre className="p-4 bg-muted rounded-lg overflow-auto max-h-[200px]">
+        <pre className="p-4 bg-muted rounded-lg overflow-auto max-h-[200px] text-sm">
           {JSON.stringify(result, null, 2)}
         </pre>
       )}

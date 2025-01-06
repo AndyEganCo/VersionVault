@@ -10,8 +10,7 @@ export function AdminCheck() {
   }
 
   if (!user || !isAdmin) {
-    console.log('Access denied:', { user, isAdmin }); // Debug log
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <Outlet />;

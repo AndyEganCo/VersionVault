@@ -1,31 +1,43 @@
 import { useAuth } from '@/contexts/auth-context';
-import { softwareList } from '@/data/software-list';
 import { getTrackedSoftware } from '@/lib/software';
+import { getSoftwareList } from '@/lib/software/api';
 import { useEffect, useState } from 'react';
 import { MetricCard } from './metric-card';
 import { isMajorUpdate, getThisWeeksUpdates } from '@/lib/version';
+import type { Software } from '@/lib/software/types';
 
 export function DashboardMetrics() {
   const { user } = useAuth();
   const [trackedCount, setTrackedCount] = useState(0);
+  const [software, setSoftware] = useState<Software[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadTrackedSoftware() {
-      if (user) {
-        const tracked = await getTrackedSoftware(user.id);
-        setTrackedCount(tracked.size);
-      } else {
-        setTrackedCount(softwareList.length);
+    async function loadData() {
+      try {
+        // Get software from database
+        const softwareData = await getSoftwareList();
+        setSoftware(softwareData);
+
+        // Get tracked software
+        if (user) {
+          const tracked = await getTrackedSoftware(user.id);
+          setTrackedCount(tracked.size);
+        } else {
+          setTrackedCount(softwareData.length);
+        }
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
 
-    loadTrackedSoftware();
+    loadData();
   }, [user]);
 
-  const thisWeeksUpdates = getThisWeeksUpdates(softwareList);
-  const majorUpdates = softwareList.filter(s => s.currentVersion && isMajorUpdate(s)).length;
+  const thisWeeksUpdates = getThisWeeksUpdates(software);
+  const majorUpdates = software.filter(s => s.current_version && isMajorUpdate(s)).length;
 
   if (loading) {
     return <div>Loading...</div>;
