@@ -7,7 +7,6 @@ import { useSoftwareList } from '@/lib/software/hooks';
 export function RecentUpdates() {
   const { software, loading } = useSoftwareList();
   const [activeCategory, setActiveCategory] = useState<string | null>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const filteredSoftware = software.filter(s => 
     activeCategory === 'all' || s.category === activeCategory
@@ -23,7 +22,6 @@ export function RecentUpdates() {
         <div className="flex items-center justify-between">
           <CardTitle>Recent Updates</CardTitle>
           <RecentUpdatesHeader 
-            activeCategory={activeCategory}
             onCategoryChange={handleCategoryChange}
           />
         </div>

@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/auth-context';
+import { MouseEvent } from 'react';
 
 type SoftwareCardActionsProps = {
   website: string;
@@ -10,16 +11,6 @@ type SoftwareCardActionsProps = {
 
 export function SoftwareCardActions({ website, tracked, onTrackingChange }: SoftwareCardActionsProps) {
   const { user } = useAuth();
-
-  const handleTrackingChange = (e: React.MouseEvent, checked: boolean) => {
-    e.stopPropagation(); // Prevent card click
-    onTrackingChange(checked);
-  };
-
-  const handleClick = (e: MouseEvent<Element>) => {
-    e.preventDefault();
-    // ... rest of the handler
-  };
 
   return (
     <div className="space-y-2" onClick={e => e.stopPropagation()}>
@@ -46,7 +37,7 @@ export function SoftwareCardActions({ website, tracked, onTrackingChange }: Soft
           </span>
           <Switch 
             checked={tracked} 
-            onCheckedChange={(checked) => handleTrackingChange(event as React.MouseEvent, checked)}
+            onCheckedChange={onTrackingChange}
           />
         </div>
       )}

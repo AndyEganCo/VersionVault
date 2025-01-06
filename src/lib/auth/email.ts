@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
 
 export async function updateEmail(currentEmail: string, newEmail: string, password: string): Promise<boolean> {
   try {

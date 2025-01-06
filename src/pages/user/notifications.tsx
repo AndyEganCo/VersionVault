@@ -23,7 +23,7 @@ export function UserNotifications() {
     loadPreferences();
   }, [user]);
 
-  const handlePreferenceChange = async (key: string, value: boolean | string) => {
+  const handlePreferenceChange = async (key: keyof UserSettings, value: boolean | NotificationFrequency): Promise<void> => {
     if (!user) return;
 
     setLoading(true);

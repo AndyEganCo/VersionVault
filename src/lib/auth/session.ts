@@ -22,7 +22,7 @@ export async function clearSession(): Promise<void> {
     authKeys.forEach(key => localStorage.removeItem(key));
     
     // Then clear session state
-    await supabase.auth.clearSession();
+    await supabase.auth.signOut();
     
     // Finally sign out globally
     const { error } = await supabase.auth.signOut({ 

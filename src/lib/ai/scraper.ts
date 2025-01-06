@@ -53,10 +53,9 @@ export async function scrapeWebsite(url: string): Promise<string> {
     return bodyText;
   } catch (error) {
     const err = error as Error;
-    console.error('Error:', err.message);
-    if (error.name === 'AbortError') {
+    if (err.name === 'AbortError') {
       throw new Error('Request timed out');
     }
-    throw error;
+    throw err;
   }
 }

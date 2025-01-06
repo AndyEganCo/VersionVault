@@ -48,7 +48,7 @@ export async function checkVersion(url: string): Promise<ScrapeStatus> {
     };
 
     // Save check result
-    await saveVersionCheck(url, result, software?.id);
+    await saveVersionCheck(url, result);
     
     return result;
   } catch (error) {
