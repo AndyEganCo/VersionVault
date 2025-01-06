@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { EmailPreferences } from '@/components/notifications/email-preferences';
-import { getUserSettings, updateUserSettings, type UserSettings } from '@/lib/settings';
+import { getUserSettings, updateUserSettings, type UserSettings, NotificationFrequency } from '@/lib/settings';
 
 export function UserNotifications() {
   const { user } = useAuth();
@@ -23,11 +23,11 @@ export function UserNotifications() {
     loadPreferences();
   }, [user]);
 
-  const handlePreferenceChange = async (key: keyof UserSettings, value: boolean | NotificationFrequency): Promise<void> => {
+  const handlePreferenceChange = async (key: string, value: boolean | NotificationFrequency): Promise<void> => {
     if (!user) return;
 
     setLoading(true);
-    const success = await updateUserSettings(user.id, key, value);
+    const success = await updateUserSettings(user.id, key as keyof UserSettings, value);
     
     if (success) {
       setPreferences(prev => ({ ...prev, [key]: value }));

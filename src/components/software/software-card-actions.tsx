@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/auth-context';
-import { MouseEvent } from 'react';
 
 type SoftwareCardActionsProps = {
   website: string;
