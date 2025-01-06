@@ -19,17 +19,13 @@ export function NotificationsPage() {
   });
   const [loading, setLoading] = useState(false);
 
-  const handlePreferenceChange = (
-    key: keyof NotificationSettings,
-    value: boolean | NotificationFrequency
-  ): void => {
+  const handlePreferenceChange = (key: string, value: boolean | NotificationFrequency): void => {
     setLoading(true);
     try {
       setPreferences(prev => ({
         ...prev,
         [key]: value
       }));
-      // API call would go here
     } finally {
       setLoading(false);
     }

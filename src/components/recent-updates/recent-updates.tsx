@@ -6,11 +6,16 @@ import { useSoftwareList } from '@/lib/software/hooks';
 
 export function RecentUpdates() {
   const { software, loading } = useSoftwareList();
-  const [activeCategory, setActiveCategory] = useState('all');
+  const [activeCategory, setActiveCategory] = useState<string | null>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const filteredSoftware = software.filter(s => 
     activeCategory === 'all' || s.category === activeCategory
   );
+
+  const handleCategoryChange = (category: string | null) => {
+    setActiveCategory(category || 'all');
+  };
 
   return (
     <Card>
@@ -19,7 +24,7 @@ export function RecentUpdates() {
           <CardTitle>Recent Updates</CardTitle>
           <RecentUpdatesHeader 
             activeCategory={activeCategory}
-            onCategoryChange={setActiveCategory}
+            onCategoryChange={handleCategoryChange}
           />
         </div>
       </CardHeader>

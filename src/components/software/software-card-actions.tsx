@@ -16,6 +16,11 @@ export function SoftwareCardActions({ website, tracked, onTrackingChange }: Soft
     onTrackingChange(checked);
   };
 
+  const handleClick = (e: MouseEvent<Element>) => {
+    e.preventDefault();
+    // ... rest of the handler
+  };
+
   return (
     <div className="space-y-2" onClick={e => e.stopPropagation()}>
       <Button 

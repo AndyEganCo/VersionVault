@@ -8,7 +8,7 @@ import { updateUserMetadata, getUserMetadata } from '@/lib/auth/metadata';
 import type { UserMetadata } from '@/lib/auth/types';
 
 export function ProfileForm() {
-  const { session } = useAuth();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [metadata, setMetadata] = useState<UserMetadata>({
     full_name: '',
@@ -31,7 +31,7 @@ export function ProfileForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!session) return;
+    if (!user) return;
     
     setLoading(true);
     await updateUserMetadata(metadata);
@@ -65,7 +65,7 @@ export function ProfileForm() {
               disabled={loading}
             />
           </div>
-          <Button type="submit" disabled={loading || !session}>
+          <Button type="submit" disabled={loading || !user}>
             {loading ? 'Saving...' : 'Save Changes'}
           </Button>
         </form>

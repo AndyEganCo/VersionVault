@@ -31,7 +31,9 @@ export async function checkVersion(url: string): Promise<ScrapeStatus> {
         content,
         softwareName: name,
         currentVersion: software?.currentVersion,
-        error: 'Could not detect version number'
+        error: 'Could not detect version number',
+        source: 'error',
+        confidence: 0
       };
     }
 
@@ -40,7 +42,9 @@ export async function checkVersion(url: string): Promise<ScrapeStatus> {
       version,
       content,
       softwareName: name,
-      currentVersion: software?.currentVersion
+      currentVersion: software?.currentVersion,
+      source: 'auto',
+      confidence: 1
     };
 
     // Save check result
@@ -54,7 +58,9 @@ export async function checkVersion(url: string): Promise<ScrapeStatus> {
       success: false,
       version: null,
       content: '',
-      error: errorMessage
+      error: errorMessage,
+      source: 'error',
+      confidence: 0
     };
 
     // Save failed check

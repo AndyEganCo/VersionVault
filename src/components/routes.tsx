@@ -1,4 +1,4 @@
-import { Routes as RouterRoutes, Route } from 'react-router-dom';
+import { Routes as RouterRoutes, Route, Outlet } from 'react-router-dom';
 import { Dashboard } from '@/pages/dashboard';
 import { Software } from '@/pages/software';
 import { UserLayout } from '@/components/layouts/user-layout';
@@ -27,7 +27,9 @@ export function Routes() {
       
       {/* Protected user routes */}
       <Route element={<AuthCheck />}>
-        <Route path="/user" element={<UserLayout />}>
+        <Route path="/user" element={<UserLayout>
+          <Outlet />
+        </UserLayout>}>
           <Route path="profile" element={<UserProfile />} />
           <Route path="settings" element={<UserSettings />} />
           <Route path="notifications" element={<UserNotifications />} />

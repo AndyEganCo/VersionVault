@@ -61,7 +61,7 @@ Remember: Return ONLY the version number or 'null' if no version is found.`;
       max_tokens: 20
     });
 
-    const version = completion.choices[0].message.content?.trim();
+    const version = completion.choices[0].message.content?.trim() ?? null;
     
     // Determine confidence based on source and version format
     let confidence: 'high' | 'medium' | 'low' = 'low';

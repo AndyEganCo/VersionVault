@@ -75,7 +75,6 @@ export function RecentUpdates() {
             </CardDescription>
           </div>
           <RecentUpdatesHeader
-            selectedCategory={selectedCategory}
             onCategoryChange={setSelectedCategory}
           />
         </div>

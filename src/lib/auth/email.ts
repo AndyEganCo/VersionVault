@@ -19,8 +19,7 @@ export async function updateEmail(currentEmail: string, newEmail: string, passwo
     if (updateError) throw updateError;
     return true;
   } catch (error) {
-    console.error('Error updating email:', error);
-    toast.error(error.message || 'Failed to update email');
-    return false;
+    const err = error as Error;
+    throw new Error(err.message);
   }
 }
