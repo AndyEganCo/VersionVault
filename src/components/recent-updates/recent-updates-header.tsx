@@ -9,11 +9,10 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 type RecentUpdatesHeaderProps = {
-  selectedCategory: string | null;
   onCategoryChange: (category: string | null) => void;
 };
 
-export function RecentUpdatesHeader({ selectedCategory, onCategoryChange }: RecentUpdatesHeaderProps) {
+export function RecentUpdatesHeader({ onCategoryChange }: RecentUpdatesHeaderProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

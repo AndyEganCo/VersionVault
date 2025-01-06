@@ -1,4 +1,3 @@
-import { load } from 'cheerio';
 import OpenAI from 'openai';
 import { supabase } from '@/lib/supabase';
 import type { Software } from './types';

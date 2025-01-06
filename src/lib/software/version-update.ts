@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase';
 import { getReleaseNotesForVersion } from './scraper';
-import type { ReleaseNote } from './types';
 
 export async function storeVersionUpdate(
   softwareId: string,

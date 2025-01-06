@@ -1,5 +1,4 @@
 import { supabase } from '@/lib/supabase';
-import { toast } from 'sonner';
 import { softwareList } from '@/data/software-list';
 import type { Software } from './types';
 
