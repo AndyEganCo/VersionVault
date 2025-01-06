@@ -2,7 +2,7 @@ import { scrapeWebsite } from './scraper';
 import { extractVersion } from './extractor';
 import { saveVersionCheck } from '@/lib/api/version-check';
 import { softwareList } from '@/data/software-list';
-import type { CheckResult, ScrapeStatus } from './types';
+import type { CheckResult } from './types';
 
 export type VersionSource = 'meta' | 'version-element' | 'download-section' | 'main-content' | 'body' | 'error';
 
@@ -22,7 +22,7 @@ export async function checkVersion(url: string): Promise<CheckResult> {
     const { content, source } = await scrapeWebsite(url);
     
     // Extract version
-    const { version, confidence } = await extractVersion(name, content);
+    const { version, confidence } = await extractVersion(name, content, source);
 
     const result: CheckResult = {
       version,
@@ -40,7 +40,8 @@ export async function checkVersion(url: string): Promise<CheckResult> {
     const result: CheckResult = {
       version: null,
       confidence: 0,
-      source: 'error'
+      source: 'error',
+      error: errorMessage
     };
 
     // Save failed check

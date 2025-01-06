@@ -3,6 +3,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Bell, Globe } from 'lucide-react';
 import { NotificationFrequency } from '@/lib/settings';
+import { NotificationSettings } from '@/pages/notifications';
 
 type NotificationPreferencesProps = {
   preferences: {
@@ -10,7 +11,7 @@ type NotificationPreferencesProps = {
     browserNotifications: boolean;
     notificationFrequency: NotificationFrequency;
   };
-  onPreferenceChange: (key: string, value: boolean | NotificationFrequency) => void;
+  onPreferenceChange: (key: keyof NotificationSettings, value: boolean | NotificationFrequency) => void;
   loading: boolean;
 };
 

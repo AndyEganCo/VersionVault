@@ -3,7 +3,7 @@ import { NotificationPreferences } from '@/components/notifications/notification
 import { EmailPreferences } from '@/components/notifications/email-preferences';
 import { NotificationFrequency } from '@/lib/settings';
 
-type NotificationSettings = {
+export type NotificationSettings = {
   emailNotifications: boolean;
   browserNotifications: boolean;
   notificationFrequency: NotificationFrequency;
@@ -19,7 +19,10 @@ export function NotificationsPage() {
   });
   const [loading, setLoading] = useState(false);
 
-  const handlePreferenceChange = (key: string, value: boolean | NotificationFrequency): void => {
+  const handlePreferenceChange = (
+    key: keyof NotificationSettings,
+    value: boolean | NotificationFrequency
+  ): void => {
     setLoading(true);
     try {
       setPreferences(prev => ({
