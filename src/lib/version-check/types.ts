@@ -14,4 +14,10 @@ export type CheckResult = {
   source: string;
 };
 
-export type ScrapeStatus = CheckResult;
+export type ScrapeStatus = {
+  version: string | null;
+  confidence: number;
+  source: string;
+};
+
+export type CheckResult = ScrapeStatus;

@@ -8,11 +8,16 @@ import { useVersionChecks } from '@/hooks/use-version-checks';
 import { useAuth } from '@/contexts/auth-context';
 import { Navigate } from 'react-router-dom';
 
+type Filters = {
+  status: 'all' | 'error' | 'success';
+  timeRange: '24h' | '7d' | '30d' | 'all';
+};
+
 export function AdminVersionChecks() {
   const { user, isAdmin } = useAuth();
-  const [filters, setFilters] = useState({
-    status: 'all' as const,
-    timeRange: '24h' as const
+  const [filters, setFilters] = useState<Filters>({
+    status: 'all',
+    timeRange: '24h'
   });
 
   const { checks, stats, loading } = useVersionChecks(filters);
@@ -21,6 +26,10 @@ export function AdminVersionChecks() {
   if (!user || !isAdmin) {
     return <Navigate to="/" replace />;
   }
+
+  const handleFilterChange = (newFilters: Filters) => {
+    setFilters(newFilters);
+  };
 
   return (
     <PageLayout>
@@ -33,7 +42,7 @@ export function AdminVersionChecks() {
         <VersionCheckStats stats={stats} />
         <VersionCheckFilters
           filters={filters}
-          onChange={setFilters}
+          onFilterChange={handleFilterChange}
         />
         <VersionCheckList 
           checks={checks}

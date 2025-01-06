@@ -72,10 +72,9 @@ export async function scrapeWebsite(url: string): Promise<{ content: string; sou
     }
 
     return { content: bodyText, source: 'body' };
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      throw new Error('Request timed out after 30 seconds');
-    }
-    throw new Error(`Failed to scrape website: ${error.message}`);
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error('Unknown error occurred');
+    console.error('Scraping error:', error);
+    throw error;
   }
 }

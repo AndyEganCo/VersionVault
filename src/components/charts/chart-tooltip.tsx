@@ -1,11 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { TooltipProps } from 'recharts';
 
-type ChartTooltipProps = {
-  active?: boolean;
-  payload?: TooltipProps['payload'];
-  label?: string;
-};
+type ChartTooltipProps = TooltipProps<number, string>;
 
 export function ChartTooltip({ active, payload }: ChartTooltipProps) {
   if (!active || !payload?.length) return null;

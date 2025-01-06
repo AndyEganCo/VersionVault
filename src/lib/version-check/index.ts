@@ -2,7 +2,9 @@ import { scrapeWebsite } from './scraper';
 import { extractVersion } from './extractor';
 import { saveVersionCheck } from '@/lib/api/version-check';
 import { softwareList } from '@/data/software-list';
-import type { CheckResult } from './types';
+import type { CheckResult, ScrapeStatus } from './types';
+
+export type VersionSource = 'meta' | 'version-element' | 'download-section' | 'main-content' | 'body' | 'error';
 
 export async function checkVersion(url: string): Promise<CheckResult> {
   try {
@@ -20,16 +22,12 @@ export async function checkVersion(url: string): Promise<CheckResult> {
     const { content, source } = await scrapeWebsite(url);
     
     // Extract version
-    const { version, confidence } = await extractVersion(name, content, source);
+    const { version, confidence } = await extractVersion(name, content);
 
     const result: CheckResult = {
-      success: version !== null,
       version,
-      confidence,
-      source,
-      content: `Source: ${source}\nConfidence: ${confidence}`,
-      softwareName: name,
-      currentVersion: software?.currentVersion
+      confidence: typeof confidence === 'string' ? 0.5 : confidence,
+      source
     };
 
     // Save check result
@@ -40,12 +38,9 @@ export async function checkVersion(url: string): Promise<CheckResult> {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     
     const result: CheckResult = {
-      success: false,
       version: null,
-      confidence: 'low',
-      source: 'error',
-      content: `Error: ${errorMessage}`,
-      error: errorMessage
+      confidence: 0,
+      source: 'error'
     };
 
     // Save failed check

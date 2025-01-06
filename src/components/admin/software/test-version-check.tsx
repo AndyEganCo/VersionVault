@@ -11,14 +11,18 @@ export function TestVersionCheck() {
   const handleTest = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase.functions.invoke('fetch-version', {
+      const { data, error: apiError } = await supabase.functions.invoke('fetch-version', {
         body: { url }
       });
 
-      if (error) throw error;
+      if (apiError) {
+        throw new Error(apiError.message);
+      }
+
       setResult(data);
       console.log('Version check result:', data);
-    } catch (error) {
+    } catch (err) {
+      const error = err as Error;
       console.error('Test failed:', error);
       setResult({ error: error.message });
     } finally {

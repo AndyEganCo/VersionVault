@@ -17,9 +17,10 @@ type DeleteSoftwareDialogProps = {
   software: Software | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess: () => Promise<void>;
 };
 
-export function DeleteSoftwareDialog({ software, open, onOpenChange }: DeleteSoftwareDialogProps) {
+export function DeleteSoftwareDialog({ software, open, onOpenChange, onSuccess }: DeleteSoftwareDialogProps) {
   const [loading, setLoading] = useState(false);
 
   const handleDelete = async () => {
@@ -30,6 +31,7 @@ export function DeleteSoftwareDialog({ software, open, onOpenChange }: DeleteSof
       await deleteSoftware(software.id);
       onOpenChange(false);
       toast.success('Software deleted successfully');
+      await onSuccess();
     } catch (error) {
       toast.error('Failed to delete software');
     } finally {
