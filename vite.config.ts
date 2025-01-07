@@ -1,5 +1,5 @@
 import path from 'path';
-import react from '@vitejs/plugin-react';
+import react from '@vitro/plugin-react';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -9,24 +9,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
-  server: {
-    port: 5173,
-    host: true,
-    strictPort: true,
-    watch: {
-      usePolling: true,
-    },
-    cors: true,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5173',
-        changeOrigin: true,
-        secure: false,
-      }
+  build: {
+    outDir: 'dist',
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          ui: ['@radix-ui/react-icons', '@radix-ui/react-slot'],
+        },
+      },
     },
   },
-  preview: {
+  server: {
     port: 5173,
-    host: true,
-  }
+  },
 });
