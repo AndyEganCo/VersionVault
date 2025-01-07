@@ -3,6 +3,7 @@ import { scrapeWebsite } from './ai/scraper';
 import { extractVersion } from './ai/version-extractor';
 import { softwareList } from '@/data/software-list';
 import { saveVersionCheck } from './api/version-check';
+import type { ScrapeStatus, CheckResult } from './version-check/types';
 
 export async function checkVersion(url: string): Promise<ScrapeStatus> {
   try {
@@ -74,3 +75,9 @@ export async function checkVersion(url: string): Promise<ScrapeStatus> {
     return result;
   }
 }
+
+// Add timestamp when converting ScrapeStatus to CheckResult
+const result: CheckResult = {
+  ...scrapeStatus,
+  timestamp: scrapeStatus.checked_at
+};

@@ -56,7 +56,8 @@ export async function checkVersion(url: string): Promise<CheckResult> {
       version: null,
       confidence: 0,
       source: 'error',
-      error: errorMessage
+      error: errorMessage,
+      timestamp: new Date().toISOString()
     };
 
     // Save failed check
@@ -66,7 +67,7 @@ export async function checkVersion(url: string): Promise<CheckResult> {
   }
 }
 
-async function updateVersionCheckStats({ 
+export async function updateVersionCheckStats({ 
   newVersion = false, 
   success = false 
 }) {

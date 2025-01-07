@@ -1,3 +1,5 @@
+import type { SoftwareVersion } from '../types';
+
 export async function scrapeProPresenter(url: string): Promise<SoftwareVersion | null> {
   try {
     const response = await fetch(url);

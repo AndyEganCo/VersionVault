@@ -17,6 +17,7 @@ export type CheckResult = {
   timestamp: string;
   releaseDate?: string;
   error?: string;
+  content?: string;
 };
 
 export type ScrapeStatus = {
@@ -33,4 +34,5 @@ export type ScrapeStatus = {
   checked_at: string;
   is_beta?: boolean;
   release_date?: string;
+  timestamp: string;
 };

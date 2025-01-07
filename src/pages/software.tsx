@@ -8,6 +8,7 @@ import { useSoftwareList, useTrackedSoftware } from '@/lib/software/hooks';
 import { toggleSoftwareTracking } from '@/lib/software/tracking';
 import { LoadingPage } from '@/components/loading';
 import { toast } from 'sonner';
+import type { SortOption } from '@/types/software';
 
 export function Software() {
   const { user } = useAuth();
