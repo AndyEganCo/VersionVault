@@ -3,11 +3,12 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { formatDate } from '@/lib/date';
 import type { Software } from '@/lib/software/types';
 
-type UpdateListProps = {
+export type UpdateListProps = {
   updates: Software[];
+  loading: boolean;
 };
 
-export function UpdateList({ updates }: UpdateListProps) {
+export function UpdateList({ updates, loading }: UpdateListProps) {
   return (
     <ScrollArea className="h-[400px] pr-4">
       <div className="space-y-6">

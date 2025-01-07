@@ -10,14 +10,13 @@ export type VersionInfo = {
 
 export type CheckResult = {
   version: string | null;
+  currentVersion?: string;
   confidence: number;
   source: string;
-  error?: string;
   softwareId?: string;
-  content?: string;
-  timestamp?: string;
-  isBeta?: boolean;
+  timestamp: string;
   releaseDate?: string;
+  error?: string;
 };
 
 export type ScrapeStatus = {

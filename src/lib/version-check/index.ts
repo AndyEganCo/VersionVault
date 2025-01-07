@@ -3,6 +3,7 @@ import { extractVersion } from './extractor';
 import { saveVersionCheck } from '@/lib/api/version-check';
 import { getSoftwareList } from '@/lib/software/api';
 import type { CheckResult } from './types';
+import { supabase } from '@/lib/supabase';
 
 export async function checkVersion(url: string): Promise<CheckResult> {
   try {

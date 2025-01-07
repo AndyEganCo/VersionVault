@@ -1,13 +1,13 @@
-import { ReactNode } from 'react';
+import { Outlet } from 'react-router-dom';
 
-type UserLayoutProps = {
-  children: ReactNode;
+export type UserLayoutProps = {
+  children?: React.ReactNode;
 };
 
-export function UserLayout({ children }: UserLayoutProps) {
+export function UserLayout() {
   return (
-    <div className="space-y-6">
-      {children}
+    <div className="container py-6">
+      <Outlet />
     </div>
   );
 }

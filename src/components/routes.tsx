@@ -1,4 +1,4 @@
-import { Routes as RouterRoutes, Route, Navigate, Outlet } from 'react-router-dom';
+import { Routes as RouterRoutes, Route, Navigate } from 'react-router-dom';
 import { AuthCheck } from './auth/auth-check';
 import { AdminCheck } from './auth/admin-check';
 import { Dashboard } from '@/pages/dashboard';
