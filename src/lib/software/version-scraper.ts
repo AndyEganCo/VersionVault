@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { Software, SoftwareVersion } from './types';
+import type { Software } from './types';
 
 // Version patterns for different formats
 const versionPatterns = [

@@ -1,17 +1,18 @@
-export function compareVersions(current: SoftwareVersion, detected: SoftwareVersion): boolean {
-  // Compare major version first
-  if (detected.major > current.major) return true;
-  if (detected.major < current.major) return false;
+import type { Software } from './types';
+
+export function compareVersions(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a) return true;
+  if (!b) return false;
   
-  // Compare build numbers if available
-  if (detected.build && current.build) {
-    return parseInt(detected.build) > parseInt(current.build);
-  }
+  const aParts = a.split('.').map(Number);
+  const bParts = b.split('.').map(Number);
   
-  // Compare minor/patch versions
-  if (detected.minor && current.minor) {
-    if (detected.minor > current.minor) return true;
-    if (detected.minor < current.minor) return false;
+  for (let i = 0; i < Math.max(aParts.length, bParts.length); i++) {
+    const aPart = aParts[i] || 0;
+    const bPart = bParts[i] || 0;
+    
+    if (bPart > aPart) return true;
+    if (bPart < aPart) return false;
   }
   
   return false;

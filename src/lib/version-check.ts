@@ -1,11 +1,20 @@
-import { ScrapeStatus } from '@/types/scrape';
 import { scrapeWebsite } from './ai/scraper';
 import { extractVersion } from './ai/version-extractor';
 import { softwareList } from '@/data/software-list';
 import { saveVersionCheck } from './api/version-check';
-import type { ScrapeStatus, CheckResult } from './version-check/types';
+import type { CheckResult } from './version-check/types';
 
-export async function checkVersion(url: string): Promise<ScrapeStatus> {
+export type ScrapeResult = {
+  success: boolean;
+  version: string | null;
+  content: string;
+  error?: string;
+  source: string;
+  confidence: number;
+  timestamp: string;
+};
+
+export async function checkVersion(url: string): Promise<CheckResult> {
   try {
     // Validate URL
     const urlObj = new URL(url);
@@ -38,46 +47,30 @@ export async function checkVersion(url: string): Promise<ScrapeStatus> {
       };
     }
 
-    const result: ScrapeStatus = {
-      success: true,
+    const result: CheckResult = {
       version,
-      content,
-      softwareName: name,
-      currentVersion: software?.currentVersion,
+      confidence: 1,
       source: 'auto',
-      confidence: 1
+      timestamp: new Date().toISOString(),
+      content
     };
 
-    // Save check result
     await saveVersionCheck(url, result);
-    
     return result;
+
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     
-    const result: ScrapeStatus = {
-      success: false,
+    const result: CheckResult = {
       version: null,
-      content: '',
-      error: errorMessage,
+      confidence: 0,
       source: 'error',
-      confidence: 0
+      timestamp: new Date().toISOString(),
+      error: errorMessage,
+      content: ''
     };
 
-    // Save failed check
-    try {
-      await saveVersionCheck(url, result);
-    } catch (saveError) {
-      console.error('Failed to save version check:', saveError);
-      // Don't throw here to ensure we return the original error to the user
-    }
-    
+    await saveVersionCheck(url, result);
     return result;
   }
 }
-
-// Add timestamp when converting ScrapeStatus to CheckResult
-const result: CheckResult = {
-  ...scrapeStatus,
-  timestamp: scrapeStatus.checked_at
-};

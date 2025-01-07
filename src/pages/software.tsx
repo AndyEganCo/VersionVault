@@ -34,16 +34,18 @@ export function Software() {
 
   const sortedSoftware = filteredSoftware.sort((a, b) => {
     switch (sortBy) {
-      case 'release_date':
+      case 'releaseDate':
         if (!a.release_date) return 1;
         if (!b.release_date) return -1;
         return new Date(b.release_date).getTime() - new Date(a.release_date).getTime();
-      case 'last_checked':
+      case 'lastChecked':
         if (!a.last_checked) return 1;
         if (!b.last_checked) return -1;
         return new Date(b.last_checked).getTime() - new Date(a.last_checked).getTime();
       case 'category':
         return a.category.localeCompare(b.category);
+      case 'version':
+        return (b.current_version || '').localeCompare(a.current_version || '');
       default:
         return a.name.localeCompare(b.name);
     }
@@ -82,7 +84,7 @@ export function Software() {
           selectedCategory={selectedCategory}
           onCategoryChange={setSelectedCategory}
           sortBy={sortBy}
-          onSortChange={setSortBy}
+          onSortChange={(value: SortOption) => setSortBy(value)}
         />
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {sortedSoftware.map((s) => (
