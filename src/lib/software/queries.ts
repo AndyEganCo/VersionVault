@@ -1,28 +1,32 @@
 import { supabase } from '@/lib/supabase';
-import { getSoftwareList } from './api';
 import type { Software } from './types';
 
 export async function getAllSoftware(): Promise<Software[]> {
-  try {
-    // Get software from database
-    const software = await getSoftwareList();
+  const { data, error } = await supabase
+    .from('software')
+    .select('*')
+    .order('name');
 
-    // Get tracked software IDs for logged-in users
-    const { data: { session } } = await supabase.auth.getSession();
-    const { data: tracked } = session ? await supabase
-      .from('tracked_software')
-      .select('software_id')
-      .eq('user_id', session.user.id) : { data: null };
-
-    const trackedIds = new Set(tracked?.map(t => t.software_id) || []);
-
-    // Map software with tracked status
-    return software.map(s => ({
-      ...s,
-      tracked: trackedIds.has(s.id)
-    }));
-  } catch (error) {
+  if (error) {
     console.error('Error fetching software:', error);
-    return [];
+    throw new Error('Failed to fetch software');
   }
+
+  return data;
+}
+
+export async function getCategories(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('software')
+    .select('category')
+    .order('category');
+
+  if (error) {
+    console.error('Error fetching categories:', error);
+    throw new Error('Failed to fetch categories');
+  }
+
+  // Get unique categories
+  const categories = [...new Set(data.map(s => s.category))];
+  return categories;
 }

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/auth-context';
 import { ReleaseNotesDialog } from './release-notes/dialog';
-import { useReleaseNotes } from '@/hooks/use-release-notes';
+
 import {
   Card,
   CardContent,
@@ -13,18 +13,17 @@ import {
 } from '@/components/ui/card';
 import { formatRelativeDate, formatDate } from '@/lib/date';
 
-type SoftwareCardProps = {
+interface SoftwareCardProps {
   software: Software;
-  onTrackingChange: (id: string, tracked: boolean) => void;
-};
+  onTrackingChange: (id: string, tracked: boolean) => Promise<void>;
+}
 
 export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) {
   const { user } = useAuth();
   const [showReleaseNotes, setShowReleaseNotes] = useState(false);
-  const { releaseNotes } = useReleaseNotes(software.id);
 
-  const handleTrackingChange = (_e: unknown | null, checked: boolean) => {
-    onTrackingChange(software.id, checked);
+  const handleTrackingChange = async (_e: unknown | null, checked: boolean) => {
+    await onTrackingChange(software.id, checked);
   };
 
   return (
@@ -108,7 +107,7 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
         open={showReleaseNotes}
         onOpenChange={setShowReleaseNotes}
         softwareName={software.name}
-        releaseNotes={releaseNotes}
+        releaseNotes={software.release_notes || []}
       />
     </>
   );

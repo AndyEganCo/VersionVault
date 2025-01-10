@@ -49,17 +49,6 @@ export function MainNav({
           >
             Manage Software
           </NavLink>
-          <NavLink
-            to="/admin/version-checks"
-            className={({ isActive }) =>
-              cn(
-                'text-sm font-medium transition-colors hover:text-primary',
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              )
-            }
-          >
-            Version Checks
-          </NavLink>
         </>
       )}
     </nav>

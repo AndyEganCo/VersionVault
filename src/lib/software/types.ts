@@ -9,20 +9,28 @@ export const ReleaseNoteSchema = z.object({
 
 export type ReleaseNote = z.infer<typeof ReleaseNoteSchema>;
 
-export type Software = {
-  id: string;
-  name: string;
-  category: string;
-  manufacturer: string;
-  website: string;
-  tracked: boolean;
-  selected?: boolean;
-  current_version?: string;
-  last_checked?: string;
-  release_date?: string;
-};
+export interface Software {
+  readonly id: string;
+  readonly name: string;
+  readonly manufacturer: string;
+  readonly website: string;
+  readonly category: string;
+  readonly current_version?: string;
+  readonly release_date?: string;
+  readonly last_checked?: string;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
 
-export type SoftwareUpdate = Partial<Software>;
+export interface SoftwareUpdate {
+  readonly name?: string;
+  readonly manufacturer?: string;
+  readonly website?: string;
+  readonly category?: string;
+  readonly current_version?: string;
+  readonly release_date?: string;
+  readonly last_checked?: string;
+}
 
 export type SoftwareVersion = {
   major: number;

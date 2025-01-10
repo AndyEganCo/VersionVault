@@ -1,24 +1,40 @@
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { softwareList } from '@/data/software-list';
+import { Software } from './types';
+
+async function getAllSoftwareIds(): Promise<string[]> {
+  try {
+    const { data, error } = await supabase
+      .from('software')
+      .select('id');
+
+    if (error) throw error;
+    return data.map(s => s.id);
+  } catch (error) {
+    console.error('Error fetching software IDs:', error);
+    return [];
+  }
+}
 
 export async function getTrackedSoftware(userId: string): Promise<Set<string>> {
   try {
-    const { data, error } = await supabase
+    const { data: tracked, error: trackingError } = await supabase
       .from('tracked_software')
       .select('software_id')
       .eq('user_id', userId);
 
-    if (error) throw error;
+    if (trackingError) throw trackingError;
 
     // If no tracked software, track all by default
-    if (!data?.length) {
-      const softwareIds = softwareList.map(s => s.id);
-      await trackAllSoftware(userId, softwareIds);
-      return new Set(softwareIds);
+    if (!tracked?.length) {
+      const softwareIds = await getAllSoftwareIds();
+      if (softwareIds.length) {
+        await trackAllSoftware(userId, softwareIds);
+        return new Set(softwareIds);
+      }
     }
 
-    return new Set(data.map(item => item.software_id));
+    return new Set(tracked?.map(item => item.software_id) || []);
   } catch (error) {
     console.error('Error fetching tracked software:', error);
     return new Set();
@@ -47,7 +63,6 @@ export async function toggleSoftwareTracking(
 ): Promise<boolean> {
   try {
     if (tracked) {
-      // Use the safe tracking function
       const { error } = await supabase.rpc('track_software', {
         p_user_id: userId,
         p_software_id: softwareId

@@ -8,9 +8,7 @@ import { Plus } from 'lucide-react';
 import { SoftwareTable } from '@/components/admin/software/software-table';
 import { SoftwareFilters } from '@/components/admin/software/software-filters';
 import { AddSoftwareDialog } from '@/components/admin/software/add-software-dialog';
-import { CheckVersionsButton } from '@/components/admin/software/check-versions-button';
 import { useSoftwareList } from '@/lib/software/hooks';
-import { TestVersionCheck } from '@/components/admin/software/test-version-check';
 
 export function AdminSoftware() {
   const { user, isAdmin } = useAuth();
@@ -45,15 +43,10 @@ export function AdminSoftware() {
       />
       
       <div className="flex justify-end gap-2 mb-6">
-        <CheckVersionsButton />
         <Button onClick={() => setShowAddDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Add Software
         </Button>
-      </div>
-
-      <div className="mb-6">
-        <TestVersionCheck />
       </div>
 
       <SoftwareFilters

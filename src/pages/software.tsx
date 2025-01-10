@@ -9,6 +9,7 @@ import { toggleSoftwareTracking } from '@/lib/software/tracking';
 import { LoadingPage } from '@/components/loading';
 import { toast } from 'sonner';
 import type { SortOption } from '@/types/software';
+import { RequestSoftwareModal } from '@/components/software/request-software-modal';
 
 export function Software() {
   const { user } = useAuth();
@@ -78,6 +79,10 @@ export function Software() {
         description="Browse and track software updates"
       />
       <div className="space-y-6">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold">Software Updates</h1>
+          <RequestSoftwareModal />
+        </div>
         <SoftwareFilters
           search={search}
           onSearchChange={setSearch}

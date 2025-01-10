@@ -1,114 +1,86 @@
 import { supabase } from '@/lib/supabase';
 import { Software, SoftwareUpdate } from './types';
 import { toast } from 'sonner';
-import { checkSoftwareVersion } from './version-scraper';
+
+interface ApiResponse<T> {
+  readonly data: T | null;
+  readonly error: Error | null;
+}
+
+async function handleDatabaseOperation<T>(
+  operation: () => Promise<{ data: T | null; error: any }>,
+  successMessage: string,
+  errorMessage: string
+): Promise<ApiResponse<T>> {
+  try {
+    const { data, error } = await operation();
+    
+    if (error) throw error;
+    if (successMessage) toast.success(successMessage);
+
+    return { data, error: null };
+  } catch (error) {
+    console.error(`${errorMessage}:`, error);
+    toast.error(errorMessage);
+    return { 
+      data: null, 
+      error: error instanceof Error ? error : new Error(errorMessage) 
+    };
+  }
+}
 
 export async function getSoftwareList(): Promise<Software[]> {
-  try {
-    const { data, error } = await supabase
+  const { data } = await handleDatabaseOperation(
+    () => supabase
       .from('software')
       .select('*')
-      .order('name');
+      .order('name'),
+    '',
+    'Failed to load software list'
+  );
 
-    if (error) throw error;
-    return data || [];
-  } catch (error) {
-    console.error('Error fetching software:', error);
-    toast.error('Failed to load software list');
-    return [];
-  }
+  return data || [];
 }
 
-export async function updateSoftware(id: string, update: SoftwareUpdate): Promise<boolean> {
-  try {
-    const { error } = await supabase
+export async function updateSoftware(
+  id: string, 
+  update: SoftwareUpdate
+): Promise<boolean> {
+  const { error } = await handleDatabaseOperation(
+    () => supabase
       .from('software')
       .update(update)
-      .eq('id', id);
+      .eq('id', id),
+    'Software updated successfully',
+    'Failed to update software'
+  );
 
-    if (error) throw error;
-    toast.success('Software updated successfully');
-    return true;
-  } catch (error) {
-    console.error('Error updating software:', error);
-    toast.error('Failed to update software');
-    return false;
-  }
+  return !error;
 }
 
-export async function createSoftware(software: Omit<Software, 'created_at' | 'updated_at'>): Promise<boolean> {
-  try {
-    const { error } = await supabase
+export async function createSoftware(
+  software: Omit<Software, 'id' | 'created_at' | 'updated_at'>
+): Promise<boolean> {
+  const { error } = await handleDatabaseOperation(
+    () => supabase
       .from('software')
-      .insert(software);
+      .insert(software),
+    'Software added successfully',
+    'Failed to add software'
+  );
 
-    if (error) throw error;
-    toast.success('Software added successfully');
-    return true;
-  } catch (error) {
-    console.error('Error creating software:', error);
-    toast.error('Failed to add software');
-    return false;
-  }
+  return !error;
 }
 
 export async function deleteSoftware(id: string): Promise<boolean> {
-  try {
-    const { error } = await supabase
+  const { error } = await handleDatabaseOperation(
+    () => supabase
       .from('software')
       .delete()
-      .eq('id', id);
+      .eq('id', id),
+    'Software deleted successfully',
+    'Failed to delete software'
+  );
 
-    if (error) throw error;
-    toast.success('Software deleted successfully');
-    return true;
-  } catch (error) {
-    console.error('Error deleting software:', error);
-    toast.error('Failed to delete software');
-    return false;
-  }
-}
-
-export async function checkVersions(softwareId?: string): Promise<void> {
-  try {
-    if (softwareId) {
-      const { data } = await supabase
-        .from('software')
-        .select('*')
-        .eq('id', softwareId)
-        .single();
-      
-      if (data) {
-        await checkSoftwareVersion(data);
-        toast.success('Version check completed');
-      }
-    } else {
-      // Get all software
-      const { data: allSoftware, error } = await supabase
-        .from('software')
-        .select('*');
-
-      if (error) throw error;
-      if (!allSoftware?.length) {
-        toast.info('No software found to check');
-        return;
-      }
-
-      // Check versions one by one
-      for (const software of allSoftware) {
-        try {
-          await checkSoftwareVersion(software);
-        } catch (error) {
-          console.error(`Error checking ${software.name}:`, error);
-          // Continue with next software even if one fails
-        }
-      }
-
-      toast.success('All version checks completed');
-    }
-  } catch (error) {
-    console.error('Error checking versions:', error);
-    toast.error('Failed to check versions');
-    throw error;
-  }
+  return !error;
 }
