@@ -14,10 +14,8 @@ async function handleDatabaseOperation<T>(
 ): Promise<ApiResponse<T>> {
   try {
     const { data, error } = await operation();
-    
     if (error) throw error;
     if (successMessage) toast.success(successMessage);
-
     return { data, error: null };
   } catch (error) {
     console.error(`${errorMessage}:`, error);
@@ -34,7 +32,8 @@ export async function getSoftwareList(): Promise<Software[]> {
     () => supabase
       .from('software')
       .select('*')
-      .order('name'),
+      .order('name')
+      .then(({ data, error }) => ({ data, error })),
     '',
     'Failed to load software list'
   );
@@ -50,7 +49,8 @@ export async function updateSoftware(
     () => supabase
       .from('software')
       .update(update)
-      .eq('id', id),
+      .eq('id', id)
+      .then(({ data, error }) => ({ data, error })),
     'Software updated successfully',
     'Failed to update software'
   );
@@ -64,7 +64,8 @@ export async function createSoftware(
   const { error } = await handleDatabaseOperation(
     () => supabase
       .from('software')
-      .insert(software),
+      .insert(software)
+      .then(({ data, error }) => ({ data, error })),
     'Software added successfully',
     'Failed to add software'
   );
@@ -77,7 +78,8 @@ export async function deleteSoftware(id: string): Promise<boolean> {
     () => supabase
       .from('software')
       .delete()
-      .eq('id', id),
+      .eq('id', id)
+      .then(({ data, error }) => ({ data, error })),
     'Software deleted successfully',
     'Failed to delete software'
   );

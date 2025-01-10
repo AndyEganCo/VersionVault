@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 import { SoftwareRequestFormData } from '@/types/software';
+import { supabase } from '@/lib/supabase';
 
 export function RequestSoftwareModal(): JSX.Element {
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -41,7 +42,7 @@ export function RequestSoftwareModal(): JSX.Element {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('software_requests')
         .insert([
           {

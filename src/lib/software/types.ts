@@ -20,6 +20,7 @@ export interface Software {
   readonly last_checked?: string;
   readonly created_at: string;
   readonly updated_at: string;
+  readonly tracked?: boolean;
 }
 
 export interface SoftwareUpdate {
