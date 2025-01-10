@@ -2,12 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { CalendarIcon } from 'lucide-react';
+
 
 import {
   Dialog,
@@ -74,9 +69,13 @@ export function ReleaseNotesDialog({
             ? currentVersionEntry.notes.join('\n')
             : currentVersionEntry.notes;
           setNotes(noteText);
+          if (currentVersionEntry.release_date) {
+            setReleaseDate(formatDateForInput(currentVersionEntry.release_date));
+          }
         } else {
           setType('minor');
           setNotes('');
+          setReleaseDate(formatDateForInput(new Date().toISOString()));
         }
         setIsCreatingNew(false);
         setNewVersion('');
@@ -110,7 +109,7 @@ export function ReleaseNotesDialog({
       const success = await addVersionHistory(software.id, {
         software_id: software.id,
         version: isCreatingNew ? newVersion : (software.current_version || ''),
-        detected_at: new Date(isoDate).toISOString(),
+        release_date: new Date(isoDate).toISOString(),
         notes: notes,
         type
       });
@@ -134,7 +133,7 @@ export function ReleaseNotesDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Release Notes for {software.name}</DialogTitle>
+          <DialogTitle>Version History for {software.name}</DialogTitle>
           <DialogDescription>
             {isCreatingNew 
               ? 'Add a new version with release notes'

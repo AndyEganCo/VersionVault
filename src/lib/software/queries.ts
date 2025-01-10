@@ -1,48 +1,45 @@
 import { supabase } from '@/lib/supabase';
 import type { Software } from './types';
 
-export async function getAllSoftware(): Promise<Software[]> {
+export async function getAllSoftwareWithVersions(): Promise<Software[]> {
   // First get all software
-  const { data: softwareData, error } = await supabase
+  const { data: softwareData, error: softwareError } = await supabase
     .from('software')
     .select('*')
     .order('name');
 
-  if (error) {
-    console.error('Error fetching software:', error);
+  if (softwareError) {
+    console.error('Error fetching software:', softwareError);
     throw new Error('Failed to fetch software');
   }
 
-  // Get latest version info for each software
-  const softwareWithDates = await Promise.all(
+  // Then get latest version for each software
+  const softwareWithVersions = await Promise.all(
     softwareData.map(async (software) => {
-      try {
-        const { data: versionHistory } = await supabase
-          .from('software_version_history')
-          .select('release_date, last_checked, version, notes, type')
-          .eq('software_id', software.id)
-          .order('release_date', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+      const { data: versionHistory } = await supabase
+        .from('software_version_history')
+        .select('version, notes, type, release_date, last_checked')
+        .eq('software_id', software.id)
+        .order('release_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-        if (!versionHistory) {
-          return software;
-        }
-
-        return {
-          ...software,
-          release_date: versionHistory.release_date || software.release_date,
-          last_checked: versionHistory.last_checked || software.last_checked,
-          current_version: versionHistory.version || software.current_version
-        };
-      } catch (err) {
-        console.error(`Error fetching version history for software ${software.id}:`, err);
-        return software;
-      }
+      return {
+        ...software,
+        current_version: versionHistory?.version || software.current_version,
+        release_date: versionHistory?.release_date || software.release_date,
+        last_checked: versionHistory?.last_checked || software.last_checked,
+        release_notes: versionHistory ? [{
+          version: versionHistory.version,
+          date: versionHistory.release_date,
+          notes: Array.isArray(versionHistory.notes) ? versionHistory.notes : [versionHistory.notes],
+          type: versionHistory.type
+        }] : []
+      };
     })
   );
 
-  return softwareWithDates;
+  return softwareWithVersions;
 }
 
 export async function getCategories(): Promise<string[]> {
