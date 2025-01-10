@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { getAllSoftware } from './queries';
+import { getAllSoftware, getLatestVersionInfo } from './queries';
 import { getTrackedSoftware } from './tracking';
 import { toast } from 'sonner';
 import type { Software } from './types';
@@ -12,8 +12,26 @@ export function useSoftwareList() {
   const refreshSoftware = useCallback(async () => {
     try {
       const data = await getAllSoftware();
-      console.log('Fetched software data:', data);
-      setSoftware(data);
+      
+      // Get latest version info for each software
+      const softwareWithVersions = await Promise.all(
+        data.map(async (s) => {
+          const versionInfo = await getLatestVersionInfo(s.id);
+          return {
+            ...s,
+            current_version: versionInfo.version || s.current_version,
+            last_checked: versionInfo.last_checked || s.last_checked,
+            release_notes: versionInfo.notes ? [{ 
+              version: versionInfo.version || '',
+              date: versionInfo.last_checked || '',
+              notes: Array.isArray(versionInfo.notes) ? versionInfo.notes : [versionInfo.notes],
+              type: versionInfo.type || 'minor'
+            }] : []
+          };
+        })
+      );
+
+      setSoftware(softwareWithVersions);
     } catch (error) {
       console.error('Error loading software:', error);
       toast.error('Failed to load software list');

@@ -107,7 +107,7 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
         open={showReleaseNotes}
         onOpenChange={setShowReleaseNotes}
         softwareName={software.name}
-        releaseNotes={software.release_notes || []}
+        softwareId={software.id}
       />
     </>
   );

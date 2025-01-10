@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ReleaseNote } from './release-notes/types';
 
 export const ReleaseNoteSchema = z.object({
   version: z.string(),
@@ -21,6 +22,7 @@ export interface Software {
   readonly created_at: string;
   readonly updated_at: string;
   readonly tracked?: boolean;
+  readonly release_notes?: ReleaseNote[];
 }
 
 export interface SoftwareUpdate {
@@ -43,3 +45,15 @@ export type SoftwareVersion = {
   features?: string[];
   changelog?: string;
 };
+
+export interface VersionHistory {
+  readonly id: string;
+  readonly software_id: string;
+  readonly version: string;
+  readonly detected_at: string;
+  readonly created_at: string;
+  readonly notes: string[];
+  readonly type: 'major' | 'minor' | 'patch';
+  readonly release_date: string;
+  readonly last_checked: string;
+}
