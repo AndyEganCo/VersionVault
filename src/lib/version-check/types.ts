@@ -1,8 +1,12 @@
 export interface VersionCheckResult {
+  softwareId: string;
   version: string;
-  releaseDate?: string;
-  notes?: string[];
-  type?: 'major' | 'minor' | 'patch';
+  currentVersion?: string;
+  error?: string;
+  content?: string;
+  source?: string;
+  confidence?: number;
+  timestamp?: string;
 }
 
 export interface VersionChecker {
