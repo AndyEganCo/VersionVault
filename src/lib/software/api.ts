@@ -27,6 +27,22 @@ async function handleDatabaseOperation<T>(
   }
 }
 
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  retries = 3,
+  delay = 1000
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return withRetry(operation, retries - 1, delay * 2);
+    }
+    throw error;
+  }
+}
+
 export async function getSoftwareList(): Promise<Software[]> {
   const { data } = await handleDatabaseOperation(
     async () => {
@@ -168,16 +184,14 @@ export async function addVersionHistory(softwareId: string, data: {
 }
 
 export async function getVersionHistory(softwareId: string) {
-  const { data, error } = await supabase
-    .from('software_version_history')
-    .select('version, notes, type, release_date, last_checked')
-    .eq('software_id', softwareId)
-    .order('release_date', { ascending: false });
+  return withRetry(async () => {
+    const { data, error } = await supabase
+      .from('software_version_history')
+      .select('version, notes, type, release_date, last_checked')
+      .eq('software_id', softwareId)
+      .order('release_date', { ascending: false });
 
-  if (error) {
-    console.error('Error fetching version history:', error);
-    throw error;
-  }
-
-  return data || [];
+    if (error) throw error;
+    return data || [];
+  });
 }

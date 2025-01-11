@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim() || 'https://idlkxmbymqduafgatdwd.supabase.co';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
 
 // Add debug logging
@@ -30,6 +30,17 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false
+  },
+  global: {
+    headers: {
+      'X-Client-Info': 'version-vault'
+    }
+  },
+  db: {
+    schema: 'public'
+  },
+  realtime: {
+    timeout: 30000
   }
 });
 
