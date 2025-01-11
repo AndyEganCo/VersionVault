@@ -112,3 +112,8 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
     </>
   );
 }
+
+function getFaviconUrl(website: string) {
+  // Use a service like Google's favicon service
+  return `https://www.google.com/s2/favicons?domain=${website}&size=32`;
+}

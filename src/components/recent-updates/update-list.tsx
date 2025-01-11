@@ -8,6 +8,10 @@ export type UpdateListProps = {
   loading: boolean;
 };
 
+function getFaviconUrl(website: string) {
+  return `https://www.google.com/s2/favicons?domain=${website}&size=32`;
+}
+
 export function UpdateList({ updates, loading }: UpdateListProps) {
   if (loading) {
     return (
@@ -34,11 +38,11 @@ export function UpdateList({ updates, loading }: UpdateListProps) {
           <div className="flex items-center" key={software.id}>
             <Avatar className="h-9 w-9">
               <AvatarImage 
-                src={`${new URL(software.website).origin}/favicon.ico`} 
+                src={getFaviconUrl(software.website)} 
                 alt={software.name} 
               />
               <AvatarFallback>
-                {software.name.split(' ').map(word => word[0]).join('')}
+                {software.name.substring(0, 2).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className="ml-4 space-y-1">
