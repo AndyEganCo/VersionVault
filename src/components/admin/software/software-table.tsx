@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, Check, FileText } from 'lucide-react';
+import { Pencil, Trash2, Check, FileText, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { EditSoftwareDialog } from './edit-software-dialog';
 import { DeleteSoftwareDialog } from './delete-software-dialog';
 import type { Software } from '@/lib/software/types';
@@ -25,10 +25,64 @@ type SoftwareTableProps = {
   onUpdate: () => Promise<void>;
 };
 
+type SortField = 'name' | 'category' | 'manufacturer' | 'current_version' | 'release_date' | 'last_checked';
+type SortDirection = 'asc' | 'desc';
+
+function SortButton({ field, label, currentSort, onSort }: {
+  field: SortField;
+  label: string;
+  currentSort: { field: SortField; direction: SortDirection };
+  onSort: (field: SortField) => void;
+}) {
+  const isActive = currentSort.field === field;
+  
+  return (
+    <Button 
+      variant="ghost" 
+      onClick={() => onSort(field)}
+      className={isActive ? 'text-primary font-medium' : ''}
+    >
+      {label}
+      {isActive ? (
+        currentSort.direction === 'asc' ? (
+          <ArrowUp className="ml-2 h-4 w-4" />
+        ) : (
+          <ArrowDown className="ml-2 h-4 w-4" />
+        )
+      ) : (
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      )}
+    </Button>
+  );
+}
+
 export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
   const [editingSoftware, setEditingSoftware] = useState<Software | null>(null);
   const [deletingSoftware, setDeletingSoftware] = useState<Software | null>(null);
   const [addingNotesTo, setAddingNotesTo] = useState<Software | null>(null);
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedData = [...data].sort((a, b) => {
+    const aValue = a[sortField];
+    const bValue = b[sortField];
+
+    if (!aValue && !bValue) return 0;
+    if (!aValue) return 1;
+    if (!bValue) return -1;
+
+    const comparison = aValue < bValue ? -1 : 1;
+    return sortDirection === 'asc' ? comparison : -comparison;
+  });
 
   const handleUpdateLastChecked = async (software: Software) => {
     try {
@@ -56,17 +110,59 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Manufacturer</TableHead>
-              <TableHead>Version</TableHead>
-              <TableHead>Release Date</TableHead>
-              <TableHead>Last Checked</TableHead>
+              <TableHead>
+                <SortButton 
+                  field="name"
+                  label="Name"
+                  currentSort={{ field: sortField, direction: sortDirection }}
+                  onSort={handleSort}
+                />
+              </TableHead>
+              <TableHead>
+                <SortButton 
+                  field="category"
+                  label="Category"
+                  currentSort={{ field: sortField, direction: sortDirection }}
+                  onSort={handleSort}
+                />
+              </TableHead>
+              <TableHead>
+                <SortButton 
+                  field="manufacturer"
+                  label="Manufacturer"
+                  currentSort={{ field: sortField, direction: sortDirection }}
+                  onSort={handleSort}
+                />
+              </TableHead>
+              <TableHead>
+                <SortButton 
+                  field="current_version"
+                  label="Version"
+                  currentSort={{ field: sortField, direction: sortDirection }}
+                  onSort={handleSort}
+                />
+              </TableHead>
+              <TableHead>
+                <SortButton 
+                  field="release_date"
+                  label="Release Date"
+                  currentSort={{ field: sortField, direction: sortDirection }}
+                  onSort={handleSort}
+                />
+              </TableHead>
+              <TableHead>
+                <SortButton 
+                  field="last_checked"
+                  label="Last Checked"
+                  currentSort={{ field: sortField, direction: sortDirection }}
+                  onSort={handleSort}
+                />
+              </TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((software) => (
+            {sortedData.map((software) => (
               <TableRow key={software.id}>
                 <TableCell className="font-medium">{software.name}</TableCell>
                 <TableCell>

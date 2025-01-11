@@ -125,93 +125,87 @@ export async function deleteSoftware(id: string): Promise<boolean> {
   return !error;
 }
 
-export async function addVersionHistory(
-  softwareId: string,
-  data: Omit<VersionHistory, 'id' | 'created_at'>
-): Promise<boolean> {
-  const { error } = await handleDatabaseOperation(
-    async () => {
-      const { data: existing } = await supabase
+export async function addVersionHistory(softwareId: string, data: {
+  software_id: string;
+  version: string;
+  release_date: string;
+  notes: string;
+  type: 'major' | 'minor' | 'patch';
+}): Promise<boolean> {
+  try {
+    // First check if this version already exists
+    const { data: existing } = await supabase
+      .from('software_version_history')
+      .select('id')
+      .eq('software_id', softwareId)
+      .eq('version', data.version)
+      .single();
+
+    const notesArray = typeof data.notes === 'string' 
+      ? data.notes.split('\n').filter(Boolean)
+      : data.notes;
+
+    if (existing) {
+      // Update existing version
+      const { error } = await supabase
         .from('software_version_history')
-        .select('id')
-        .eq('software_id', softwareId)
-        .eq('version', data.version)
-        .single();
+        .update({
+          release_date: data.release_date,
+          notes: notesArray,
+          type: data.type,
+          last_checked: new Date().toISOString()
+        })
+        .eq('id', existing.id);
 
-      const formattedNotes = data.notes
-        .split('\n')
-        .map(note => note.trim())
-        .filter(note => note.length > 0);
+      if (error) throw error;
+    } else {
+      // Insert new version
+      const { error } = await supabase
+        .from('software_version_history')
+        .insert({
+          id: crypto.randomUUID(),
+          software_id: data.software_id,
+          version: data.version,
+          release_date: data.release_date,
+          notes: notesArray,
+          type: data.type,
+          created_at: new Date().toISOString(),
+          last_checked: new Date().toISOString()
+        });
 
-      const now = new Date().toISOString();
-      let result;
-      const isUpdate = !!existing;
-      
-      if (isUpdate) {
-        // Update existing record
-        result = await supabase
-          .from('software_version_history')
-          .update({
-            notes: `{${formattedNotes.map(note => `"${note.replace(/"/g, '\\"')}"`).join(',')}}`,
-            type: data.type,
-            release_date: data.detected_at,
-            last_checked: now
-          })
-          .eq('id', existing.id);
-      } else {
-        // Insert new record
-        result = await supabase
-          .from('software_version_history')
-          .insert({
-            software_id: softwareId,
-            version: data.version,
-            detected_at: now,
-            release_date: data.detected_at,
-            last_checked: now,
-            notes: `{${formattedNotes.map(note => `"${note.replace(/"/g, '\\"')}"`).join(',')}}`,
-            type: data.type
-          });
-
-        // Update software table
-        if (!result.error) {
-          await supabase
-            .from('software')
-            .update({
-              current_version: data.version,
-              release_date: data.detected_at,
-              last_checked: now
-            })
-            .eq('id', softwareId);
-        }
-      }
-
-      return { data: result.data, error: result.error, isUpdate };
-    },
-    '',
-    'Failed to save release notes'
-  ).then(response => {
-    if (!response.error) {
-      toast.success(response.isUpdate ? 'Release notes updated successfully' : 'Release notes added successfully');
+      if (error) throw error;
     }
-    return response;
-  });
 
-  return !error;
+    // Update the software table
+    const { error: softwareError } = await supabase
+      .from('software')
+      .update({
+        current_version: data.version,
+        release_date: data.release_date,
+        last_checked: new Date().toISOString()
+      })
+      .eq('id', softwareId);
+
+    if (softwareError) throw softwareError;
+
+    return true;
+  } catch (error) {
+    console.error('Error adding version history:', error);
+    return false;
+  }
 }
 
-export async function getVersionHistory(softwareId: string): Promise<VersionHistory[]> {
-  const { data } = await handleDatabaseOperation(
-    async () => {
-      const result = await supabase
-        .from('software_version_history')
-        .select('*')
-        .eq('software_id', softwareId)
-        .order('release_date', { ascending: false });
-      return { data: result.data, error: result.error };
-    },
-    '',
-    'Failed to fetch version history'
-  );
+export async function getVersionHistory(softwareId: string) {
+  const { data, error } = await supabase
+    .from('software_version_history')
+    .select('version, notes, type, release_date, last_checked')
+    .eq('software_id', softwareId)
+    .order('release_date', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching version history:', error);
+    throw error;
+  }
 
   return data || [];
 }
