@@ -3,9 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
 
-// Add debug logging
-console.log('Supabase URL:', supabaseUrl);
-
 // Validate URL format
 function isValidUrl(url: string) {
   try {

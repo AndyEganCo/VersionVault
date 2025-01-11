@@ -5,9 +5,12 @@ import { Layout } from '@/components/layout';
 import { Routes } from '@/components/routes';
 import { AuthProvider } from '@/contexts/auth-context';
 
-function App() {
+export function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ 
+      v7_startTransition: true,
+      v7_relativeSplatPath: true 
+    }}>
       <AuthProvider>
         <ThemeProvider defaultTheme="dark" storageKey="versionvault-theme">
           <Layout>
