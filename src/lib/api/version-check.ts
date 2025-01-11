@@ -1,7 +1,7 @@
 import { supabase } from '../supabase';
-import type { CheckResult } from '../version-check/types';
+import type { VersionCheckResult } from '../version-check/types';
 
-export async function saveVersionCheck(url: string, result: CheckResult) {
+export async function saveVersionCheck(url: string, result: VersionCheckResult) {
   const { error } = await supabase
     .from('version_checks')
     .insert({

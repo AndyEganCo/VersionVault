@@ -1,9 +1,14 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActivityChart } from './activity-chart/activity-chart';
 import { generateChartData } from '@/lib/chart';
+import type { Software } from '@/lib/software/types';
 
-export function UpdateActivity() {
-  const data = generateChartData();
+interface UpdateActivityProps {
+  software: Software[];
+}
+
+export function UpdateActivity({ software }: UpdateActivityProps) {
+  const data = generateChartData(software);
   
   return (
     <Card className="w-full">

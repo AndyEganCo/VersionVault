@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { Software, SoftwareUpdate, VersionHistory } from './types';
+import { Software, SoftwareUpdate } from './types';
 import { toast } from 'sonner';
 
 interface ApiResponse<T> {
@@ -51,7 +51,8 @@ export async function updateSoftware(
     const { error } = await supabase
       .from('software')
       .update(updates)
-      .eq('id', id);
+      .eq('id', id)
+      .single();
 
     if (error) throw error;
     return true;
@@ -64,30 +65,36 @@ export async function updateSoftware(
 export async function createSoftware(
   software: Omit<Software, 'id' | 'created_at' | 'updated_at'>
 ): Promise<boolean> {
-  const { error } = await handleDatabaseOperation(
-    () => supabase
+  try {
+    const { error } = await supabase
       .from('software')
-      .insert(software)
-      .then(({ data, error }) => ({ data, error })),
-    'Software added successfully',
-    'Failed to add software'
-  );
+      .insert(software);
 
-  return !error;
+    if (error) throw error;
+    toast.success('Software added successfully');
+    return true;
+  } catch (error) {
+    console.error('Failed to add software:', error);
+    toast.error('Failed to add software');
+    return false;
+  }
 }
 
 export async function deleteSoftware(id: string): Promise<boolean> {
-  const { error } = await handleDatabaseOperation(
-    () => supabase
+  try {
+    const { error } = await supabase
       .from('software')
       .delete()
-      .eq('id', id)
-      .then(({ data, error }) => ({ data, error })),
-    'Software deleted successfully',
-    'Failed to delete software'
-  );
+      .eq('id', id);
 
-  return !error;
+    if (error) throw error;
+    toast.success('Software deleted successfully');
+    return true;
+  } catch (error) {
+    console.error('Failed to delete software:', error);
+    toast.error('Failed to delete software');
+    return false;
+  }
 }
 
 export async function addVersionHistory(softwareId: string, data: {

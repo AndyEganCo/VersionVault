@@ -3,10 +3,14 @@ import { generateChartData } from '@/lib/chart';
 import { ChartTooltip } from './charts/chart-tooltip';
 import { ChartGrid } from './charts/chart-grid';
 import { ChartAxes } from './charts/chart-axes';
-import type { ChartDataPoint } from '@/lib/chart';
+import type { Software } from '@/lib/software/types';
 
-export function UpdateTrends() {
-  const data = generateChartData();
+interface UpdateTrendsProps {
+  software: Software[];
+}
+
+export function UpdateTrends({ software }: UpdateTrendsProps) {
+  const data = generateChartData(software);
   const maxUpdates = Math.max(...data.map(d => d.updates));
   const chartHeight = Math.max(350, maxUpdates * 50);
 
