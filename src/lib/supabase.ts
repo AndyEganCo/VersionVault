@@ -18,7 +18,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 // Simplified connection check
 export async function checkSupabaseConnection(): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('tracked_software')
       .select('count')
       .single();
