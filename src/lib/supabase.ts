@@ -1,28 +1,31 @@
 import { createClient } from '@supabase/supabase-js';
 
-if (!import.meta.env.VITE_SUPABASE_URL) {
-  throw new Error('Missing VITE_SUPABASE_URL environment variable');
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase environment variables');
 }
 
-if (!import.meta.env.VITE_SUPABASE_ANON_KEY) {
-  throw new Error('Missing VITE_SUPABASE_ANON_KEY environment variable');
-}
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false
+  }
+});
 
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
-
-// Verify connection and session
+// Simplified connection check
 export async function checkSupabaseConnection(): Promise<boolean> {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return false;
+    const { data, error } = await supabase
+      .from('tracked_software')
+      .select('count')
+      .single();
     
-    // Verify connection with a simple query
-    const { error } = await supabase.from('tracked_software').select('count');
     return !error;
-  } catch {
+  } catch (err) {
+    console.error('Supabase connection error:', err);
     return false;
   }
 }
