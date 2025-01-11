@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { ReleaseNote } from './release-notes/types';
 
 export const ReleaseNoteSchema = z.object({
   version: z.string(),

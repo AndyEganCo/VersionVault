@@ -7,8 +7,6 @@ import { buttonVariants } from '@/components/ui/button';
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
-type IconProps = React.ComponentProps<typeof ChevronLeft>;
-
 type CustomComponents = DayPickerProps['components'];
 
 function Calendar({

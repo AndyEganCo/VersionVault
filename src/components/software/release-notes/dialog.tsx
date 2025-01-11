@@ -42,7 +42,7 @@ export function ReleaseNotesDialog({
         setLoading(true);
         try {
           const history = await getVersionHistory(softwareId);
-          setVersionHistory(history);
+          setVersionHistory(history as VersionHistory[]);
           setSelectedVersion(history[0]?.version || null);
         } catch (error) {
           console.error('Error loading version history:', error);

@@ -13,7 +13,6 @@ import { Pencil, Trash2, Check, FileText, ArrowUpDown, ArrowUp, ArrowDown } from
 import { EditSoftwareDialog } from './edit-software-dialog';
 import { DeleteSoftwareDialog } from './delete-software-dialog';
 import type { Software } from '@/lib/software/types';
-import { Input } from '@/components/ui/input';
 import { updateSoftware } from '@/lib/software/api';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date';

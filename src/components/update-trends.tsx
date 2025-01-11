@@ -3,6 +3,7 @@ import { generateChartData } from '@/lib/chart';
 import { ChartTooltip } from './charts/chart-tooltip';
 import { ChartGrid } from './charts/chart-grid';
 import { ChartAxes } from './charts/chart-axes';
+import type { ChartDataPoint } from '@/lib/chart';
 
 export function UpdateTrends() {
   const data = generateChartData();

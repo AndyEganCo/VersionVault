@@ -45,55 +45,20 @@ export async function getSoftwareList(): Promise<Software[]> {
 
 export async function updateSoftware(
   id: string, 
-  update: SoftwareUpdate
+  updates: SoftwareUpdate
 ): Promise<boolean> {
-  const { error } = await handleDatabaseOperation(
-    async () => {
-      // First update the software table
-      const result = await supabase
-        .from('software')
-        .update(update)
-        .eq('id', id);
+  try {
+    const { error } = await supabase
+      .from('software')
+      .update(updates)
+      .eq('id', id);
 
-      if (result.error) {
-        throw result.error;
-      }
-
-      // If there's a current version, also update its last_checked in version history
-      if (update.last_checked) {
-        try {
-          const { data: latestVersion, error: versionError } = await supabase
-            .from('software_version_history')
-            .select('id, version')
-            .eq('software_id', id)
-            .order('release_date', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
-          if (versionError) {
-            console.error('Error fetching version history:', versionError);
-          } else if (latestVersion) {
-            const updateResult = await supabase
-              .from('software_version_history')
-              .update({ last_checked: update.last_checked })
-              .eq('id', latestVersion.id);
-
-            if (updateResult.error) {
-              console.error('Error updating version history:', updateResult.error);
-            }
-          }
-        } catch (err) {
-          console.error('Error in version history update:', err);
-        }
-      }
-
-      return { data: result.data, error: null };
-    },
-    'Software updated successfully',
-    'Failed to update software'
-  );
-
-  return !error;
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error updating software:', error);
+    return false;
+  }
 }
 
 export async function createSoftware(
