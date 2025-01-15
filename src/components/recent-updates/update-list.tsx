@@ -1,7 +1,6 @@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDate } from '@/lib/date';
 import type { Software } from '@/lib/software/types';
-import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { ReleaseNotesDialog } from '../software/release-notes/dialog';
 
@@ -11,7 +10,6 @@ export type UpdateListProps = {
 };
 
 export function UpdateList({ updates, loading }: UpdateListProps) {
-  const navigate = useNavigate();
   const [showReleaseNotes, setShowReleaseNotes] = useState(false);
   const [selectedSoftware, setSelectedSoftware] = useState<Software | null>(null);
 

@@ -23,6 +23,7 @@ export function UserNav() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+          {userInitial}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end">
