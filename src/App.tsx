@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { Layout } from '@/components/layout';
 import { Routes } from '@/components/routes';
 import { AuthProvider } from '@/contexts/auth-context';
+import { Analytics } from '@vercel/analytics/react';
 
 export function App() {
   return (
@@ -17,6 +18,7 @@ export function App() {
             <Routes />
           </Layout>
           <Toaster />
+          <Analytics />
         </ThemeProvider>
       </AuthProvider>
     </BrowserRouter>
