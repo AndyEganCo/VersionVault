@@ -42,7 +42,8 @@ export function EditSoftwareDialog({
         name: software.name,
         category: software.category,
         manufacturer: software.manufacturer,
-        website: software.website
+        website: software.website,
+        version_website: software.version_website || ''
       });
     }
   }, [software]);
@@ -119,6 +120,16 @@ export function EditSoftwareDialog({
               value={formData.website}
               onChange={(e) => setFormData({ ...formData, website: e.target.value })}
               required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="version_website">Version Webpage</Label>
+            <Input
+              id="version_website"
+              type="url"
+              value={formData.version_website}
+              onChange={(e) => setFormData({ ...formData, version_website: e.target.value })}
+              placeholder="https://example.com/versions"
             />
           </div>
           <div className="flex justify-end space-x-2">

@@ -140,8 +140,7 @@ export async function addVersionHistory(softwareId: string, data: {
         .update({
           release_date: data.release_date,
           notes: notesArray,
-          type: data.type,
-          last_checked: new Date().toISOString()
+          type: data.type
         })
         .eq('id', existing.id);
 
@@ -157,14 +156,13 @@ export async function addVersionHistory(softwareId: string, data: {
           release_date: data.release_date,
           notes: notesArray,
           type: data.type,
-          created_at: new Date().toISOString(),
-          last_checked: new Date().toISOString()
+          created_at: new Date().toISOString()
         });
 
       if (error) throw error;
     }
 
-    // Update the software table
+    // Update the software table with the new version info and last_checked
     const { error: softwareError } = await supabase
       .from('software')
       .update({
@@ -187,7 +185,7 @@ export async function getVersionHistory(softwareId: string) {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('software_version_history')
-      .select('version, notes, type, release_date, last_checked')
+      .select('id, version, notes, type, release_date')
       .eq('software_id', softwareId)
       .order('release_date', { ascending: false });
 

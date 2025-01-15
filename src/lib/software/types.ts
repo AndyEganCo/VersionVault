@@ -22,6 +22,7 @@ export interface Software {
   readonly updated_at: string;
   readonly tracked?: boolean;
   readonly release_notes?: ReleaseNote[];
+  version_website?: string;
 }
 
 export interface SoftwareUpdate {
@@ -54,5 +55,4 @@ export interface VersionHistory {
   readonly notes: string[];
   readonly type: 'major' | 'minor' | 'patch';
   readonly release_date: string;
-  readonly last_checked: string;
 }

@@ -9,11 +9,11 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, Check, FileText, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Pencil, Trash2, Check, FileText, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink } from 'lucide-react';
 import { EditSoftwareDialog } from './edit-software-dialog';
 import { DeleteSoftwareDialog } from './delete-software-dialog';
 import type { Software } from '@/lib/software/types';
-import { updateSoftware } from '@/lib/software/api';
+import { updateSoftware } from '@/lib/software/admin';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date';
 import { ReleaseNotesDialog } from './release-notes-dialog';
@@ -90,12 +90,11 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
         last_checked: now
       });
       
-      // Refresh the data immediately after update
       await onUpdate();
       toast.success('Last checked date updated');
     } catch (error) {
-      toast.error('Failed to update last checked date');
       console.error('Error updating last checked date:', error);
+      toast.error('Failed to update last checked date');
     }
   };
 
@@ -157,7 +156,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                   onSort={handleSort}
                 />
               </TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right w-[160px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -186,7 +185,23 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                     <Check className="h-4 w-4" />
                   </Button>
                 </TableCell>
-                <TableCell className="text-right space-x-2">
+                <TableCell className="text-right flex justify-end items-center gap-1">
+                  {software.version_website && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      asChild
+                      title="Open version webpage"
+                    >
+                      <a
+                        href={software.version_website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="icon"

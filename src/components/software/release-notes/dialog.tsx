@@ -42,8 +42,9 @@ export function ReleaseNotesDialog({
         setLoading(true);
         try {
           const history = await getVersionHistory(softwareId);
-          setVersionHistory(history as VersionHistory[]);
-          setSelectedVersion(history[0]?.version || null);
+          const validHistory = (history as VersionHistory[]).filter(v => v && v.version);
+          setVersionHistory(validHistory);
+          setSelectedVersion(validHistory[0]?.version || null);
         } catch (error) {
           console.error('Error loading version history:', error);
         } finally {
@@ -81,9 +82,12 @@ export function ReleaseNotesDialog({
                   <SelectValue placeholder="Select version" />
                 </SelectTrigger>
                 <SelectContent>
-                  {versionHistory.map((version) => (
-                    <SelectItem key={version.id} value={version.version}>
-                      Version {version.version}
+                  {versionHistory.map((version, index) => (
+                    <SelectItem 
+                      key={version.id ? `version-${version.id}` : `version-${version.version}-${index}`}
+                      value={version.version}
+                    >
+                      {`Version ${version.version}`}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -113,7 +117,9 @@ export function ReleaseNotesDialog({
                         <ul className="list-disc list-inside space-y-1">
                           {Array.isArray(selectedNotes.notes) ? 
                             selectedNotes.notes.map((item, i) => (
-                              <li key={i} className="text-sm">{item}</li>
+                              <li key={`note-${selectedNotes.version}-${i}`} className="text-sm">
+                                {item}
+                              </li>
                             )) : (
                               <li className="text-sm">{selectedNotes.notes}</li>
                             )
@@ -127,7 +133,7 @@ export function ReleaseNotesDialog({
             </div>
           </>
         ) : (
-          <div className="flex items-center justify-center h-20 text-muted-foreground">
+          <div className="flex items-center justify-center h-20">
             No release notes available
           </div>
         )}

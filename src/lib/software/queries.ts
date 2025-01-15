@@ -18,7 +18,7 @@ export async function getAllSoftwareWithVersions(): Promise<Software[]> {
     softwareData.map(async (software) => {
       const { data: versionHistory } = await supabase
         .from('software_version_history')
-        .select('version, notes, type, release_date, last_checked')
+        .select('version, notes, type, release_date')
         .eq('software_id', software.id)
         .order('release_date', { ascending: false })
         .limit(1)
@@ -28,7 +28,6 @@ export async function getAllSoftwareWithVersions(): Promise<Software[]> {
         ...software,
         current_version: versionHistory?.version || software.current_version,
         release_date: versionHistory?.release_date || software.release_date,
-        last_checked: versionHistory?.last_checked || software.last_checked,
         release_notes: versionHistory ? [{
           version: versionHistory.version,
           date: versionHistory.release_date,
@@ -62,13 +61,12 @@ export async function getLatestVersionInfo(softwareId: string): Promise<{
   version: string | null;
   notes: string[] | null;
   release_date: string | null;
-  last_checked: string | null;
   type: 'major' | 'minor' | 'patch' | null;
 }> {
   try {
     const { data, error } = await supabase
       .from('software_version_history')
-      .select('version, notes, release_date, last_checked, type')
+      .select('version, notes, release_date, type')
       .eq('software_id', softwareId)
       .order('release_date', { ascending: false })
       .limit(1)
@@ -80,12 +78,10 @@ export async function getLatestVersionInfo(softwareId: string): Promise<{
     }
 
     if (!data) {
-      // Return null values if no version history exists
       return {
         version: null,
         notes: null,
         release_date: null,
-        last_checked: null,
         type: null
       };
     }
@@ -94,17 +90,14 @@ export async function getLatestVersionInfo(softwareId: string): Promise<{
       version: data.version,
       notes: data.notes,
       release_date: data.release_date,
-      last_checked: data.last_checked,
       type: data.type
     };
   } catch (err) {
     console.error('Error fetching latest version:', err);
-    // Return null values on error
     return {
       version: null,
       notes: null,
       release_date: null,
-      last_checked: null,
       type: null
     };
   }
