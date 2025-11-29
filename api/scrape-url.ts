@@ -55,33 +55,54 @@ export default async function handler(
     const $ = load(html);
 
     // Remove unnecessary elements
-    $('script, style, noscript, iframe').remove();
+    $('script, style, noscript, iframe, nav, header, footer, .nav, .header, .footer, .sidebar, .menu').remove();
 
-    // Try to find version information in meta tags first
-    const metaVersion = $('meta[name*="version"], meta[property*="version"]').attr('content');
-    if (metaVersion) {
-      return res.status(200).json({ content: metaVersion });
+    let content = '';
+
+    // Try multiple strategies to get clean content
+    // Strategy 1: Look for release notes specific elements
+    const releaseNotesSelectors = [
+      'article',
+      'main',
+      '[class*="release"]',
+      '[id*="release"]',
+      '[class*="changelog"]',
+      '[id*="changelog"]',
+      '[class*="version"]',
+      '[id*="version"]',
+      '.content',
+      '#content',
+      '.main-content',
+      '#main-content'
+    ];
+
+    for (const selector of releaseNotesSelectors) {
+      const element = $(selector);
+      if (element.length && element.text().trim().length > 100) {
+        content = element.text();
+        console.log(`Found content using selector: ${selector}`);
+        break;
+      }
     }
 
-    // Look for version information in specific elements
-    const versionElements = $('[class*="version"], [id*="version"], [data-version], .version, #version');
-    if (versionElements.length) {
-      return res.status(200).json({ content: versionElements.text() });
+    // Strategy 2: If no specific element found, get body but clean it
+    if (!content) {
+      content = $('body').text();
     }
 
-    // Get main content as fallback
-    const mainContent = $('main, article, .content, #content').text();
-    if (mainContent && mainContent.trim()) {
-      return res.status(200).json({ content: mainContent });
+    // Clean up the content
+    content = content
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .replace(/\n\s*\n/g, '\n') // Remove multiple newlines
+      .trim();
+
+    if (!content || content.length < 50) {
+      console.error('Insufficient content found. Length:', content.length);
+      return res.status(400).json({ error: 'No meaningful content found on page' });
     }
 
-    // Last resort: get body text
-    const bodyText = $('body').text();
-    if (!bodyText.trim()) {
-      return res.status(400).json({ error: 'No content found on page' });
-    }
-
-    return res.status(200).json({ content: bodyText });
+    console.log(`Extracted ${content.length} characters of content`);
+    return res.status(200).json({ content });
   } catch (error) {
     console.error('Error scraping URL:', error);
 

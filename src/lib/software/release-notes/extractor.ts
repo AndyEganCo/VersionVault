@@ -18,56 +18,68 @@ export interface ExtractedVersion {
  */
 async function extractVersionsFromText(softwareName: string, content: string): Promise<ExtractedVersion[]> {
   try {
+    // Log the content being processed for debugging
+    console.log('=== CONTENT BEING PROCESSED ===');
+    console.log('Software:', softwareName);
+    console.log('Content length:', content.length);
+    console.log('First 500 chars:', content.substring(0, 500));
+    console.log('===============================');
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o", // Using GPT-4o which has 128k context window
       messages: [
         {
           role: "system",
-          content: `You are a release notes parser. Extract ALL version information from the provided release notes/changelog.
+          content: `You are a release notes parser. Your job is to extract EVERY SINGLE VERSION found in the provided text.
 
-For each version, identify:
-1. Version number (e.g., "1.2.3", "v2.0", "r32.1.3", "2024.1")
-2. Release date (convert to YYYY-MM-DD format, if not found use today's date)
+IMPORTANT: Extract ALL versions present in the document, not just new ones. Include historical versions, current versions, and any version mentioned.
+
+For each version found, extract:
+1. Version number (e.g., "1.2.3", "v2.0", "r32.1.3", "2024.1", "6.2.1")
+2. Release date (convert to YYYY-MM-DD format, if not found use "2024-01-01")
 3. Build number (if present, e.g., "232426", "Full (Pro) build: 232426")
-4. ALL release notes in Markdown format - preserve ALL structure and formatting:
-   - Keep section headers (## Fixes, ## Features, ## New Features, etc.)
+4. ALL release notes in Markdown format:
+   - Keep section headers (## Fixes, ## Features, ## New Features, ## Fixed, etc.)
    - Keep issue IDs (DSOF-31635, NDI-1234, etc.)
-   - Maintain bullet points and formatting
-   - Include EVERYTHING - don't summarize or truncate
-   - Use proper Markdown syntax (## for headers, - for bullets, ** for bold)
-5. Type of update (major, minor, or patch based on semantic versioning)
+   - Keep bullet points and lists
+   - Include EVERYTHING - don't summarize
+   - Use Markdown: ## for headers, - for bullets, ** for bold
+5. Type: "major" for X.0.0, "minor" for X.X.0, "patch" for X.X.X
 
-Return ONLY a valid JSON array with this exact structure:
+Return ONLY valid JSON with this structure:
 [
   {
     "version": "r32.1.3",
     "releaseDate": "2025-11-29",
     "buildNumber": "232426",
-    "notes": "## Fixes\\n- DSOF-31635 - Selecting a MIDI device...\\n- DSOF-31439 - Video is now correctly...\\n\\n## Features\\n- New feature here",
+    "notes": "## Fixes\\n- Issue fix here\\n- Another fix\\n\\n## Features\\n- New feature",
     "type": "minor"
   }
 ]
 
 CRITICAL RULES:
-- Extract ALL versions found in the document, from newest to oldest
-- Include EVERY SINGLE release note - do NOT skip or summarize
-- Preserve the EXACT formatting and structure from the original
-- Keep ALL issue IDs, version numbers, build numbers
-- Use Markdown format for notes (## for sections, - for bullets)
-- If no date is found, use today's date in YYYY-MM-DD format
-- Return empty array [] if no versions are found
-- ONLY return the JSON array, no other text before or after`
+- Extract EVERY version in the document (not just recent ones)
+- If you see "version 1.0", "v2.3", "release 3.4.5" - extract ALL of them
+- Preserve exact formatting from source
+- Keep ALL issue IDs and details
+- If no clear date, use "2024-01-01"
+- Return [] if NO versions found
+- ONLY return JSON, no extra text`
         },
         {
           role: "user",
-          content: `Extract ALL version information with COMPLETE release notes from these release notes for ${softwareName}. Do not summarize - include EVERY detail:\n\n${content.substring(0, 50000)}`
+          content: `Extract EVERY SINGLE VERSION from these ${softwareName} release notes. Include all versions mentioned, not just the latest:\n\n${content.substring(0, 50000)}`
         }
       ],
       temperature: 0.1,
-      max_tokens: 8000 // Reduced to fit within context window
+      max_tokens: 8000
     });
 
     const response = completion.choices[0].message.content;
+    console.log('=== AI RESPONSE ===');
+    console.log(response);
+    console.log('===================');
+
     if (!response) {
       return [];
     }
@@ -75,9 +87,10 @@ CRITICAL RULES:
     // Try to parse the JSON response
     try {
       const versions = JSON.parse(response);
+      console.log('Parsed versions:', versions.length);
       return Array.isArray(versions) ? versions : [];
     } catch (parseError) {
-      console.error('Failed to parse AI response as JSON:', response);
+      console.error('Failed to parse AI response as JSON. Response was:', response);
       return [];
     }
   } catch (error) {
