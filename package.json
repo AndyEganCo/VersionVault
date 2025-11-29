@@ -49,6 +49,8 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.344.0",
     "openai": "^4.28.0",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.4.449",
     "react": "^18.2.0",
     "react-day-picker": "^9.5.0",
     "react-dom": "^18.2.0",

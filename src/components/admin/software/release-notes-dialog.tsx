@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 import {
   Dialog,
@@ -21,7 +21,11 @@ import {
 import { Label } from '@/components/ui/label';
 import { addVersionHistory, getVersionHistory } from '@/lib/software/api';
 import type { Software } from '@/lib/software/types';
-import { Plus } from 'lucide-react';
+import { Plus, Upload, Link as LinkIcon, Loader2, Check, X } from 'lucide-react';
+import { extractVersionsFromURL, extractVersionsFromPDF, type ExtractedVersion } from '@/lib/software/release-notes/extractor';
+import { parsePDFFile } from '@/lib/software/release-notes/pdf-parser';
+import { toast } from 'sonner';
+import { Badge } from '@/components/ui/badge';
 
 interface ReleaseNotesDialogProps {
   software: Software;
@@ -53,6 +57,13 @@ export function ReleaseNotesDialog({
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [newVersion, setNewVersion] = useState('');
   const [releaseDate, setReleaseDate] = useState(formatDateForInput(new Date().toISOString()));
+
+  // Bulk import states
+  const [bulkImportUrl, setBulkImportUrl] = useState('');
+  const [extracting, setExtracting] = useState(false);
+  const [extractedVersions, setExtractedVersions] = useState<ExtractedVersion[]>([]);
+  const [selectedVersions, setSelectedVersions] = useState<Set<string>>(new Set());
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     async function loadVersionHistory() {
@@ -129,20 +140,153 @@ export function ReleaseNotesDialog({
     setType('minor');
   };
 
+  const handleExtractFromURL = async () => {
+    if (!bulkImportUrl.trim()) {
+      toast.error('Please enter a URL');
+      return;
+    }
+
+    setExtracting(true);
+    try {
+      const versions = await extractVersionsFromURL(software.name, bulkImportUrl);
+      setExtractedVersions(versions);
+
+      // Select all by default
+      const allVersions = new Set(versions.map((_, i) => i.toString()));
+      setSelectedVersions(allVersions);
+
+      if (versions.length === 0) {
+        toast.warning('No versions found in the provided URL');
+      } else {
+        toast.success(`Found ${versions.length} versions`);
+      }
+    } catch (error) {
+      console.error('Error extracting from URL:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to extract versions from URL');
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handlePDFUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'application/pdf') {
+      toast.error('Please upload a PDF file');
+      return;
+    }
+
+    setExtracting(true);
+    try {
+      const pdfText = await parsePDFFile(file);
+      const versions = await extractVersionsFromPDF(software.name, pdfText);
+      setExtractedVersions(versions);
+
+      // Select all by default
+      const allVersions = new Set(versions.map((_, i) => i.toString()));
+      setSelectedVersions(allVersions);
+
+      if (versions.length === 0) {
+        toast.warning('No versions found in the PDF');
+      } else {
+        toast.success(`Found ${versions.length} versions from PDF`);
+      }
+    } catch (error) {
+      console.error('Error parsing PDF:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to parse PDF');
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const toggleVersionSelection = (index: string) => {
+    const newSelected = new Set(selectedVersions);
+    if (newSelected.has(index)) {
+      newSelected.delete(index);
+    } else {
+      newSelected.add(index);
+    }
+    setSelectedVersions(newSelected);
+  };
+
+  const handleBulkImport = async () => {
+    const versionsToImport = extractedVersions.filter((_, i) =>
+      selectedVersions.has(i.toString())
+    );
+
+    if (versionsToImport.length === 0) {
+      toast.error('Please select at least one version to import');
+      return;
+    }
+
+    setImporting(true);
+    try {
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const version of versionsToImport) {
+        try {
+          const success = await addVersionHistory(software.id, {
+            software_id: software.id,
+            version: version.version,
+            release_date: new Date(version.releaseDate).toISOString(),
+            notes: version.notes.join('\n'),
+            type: version.type
+          });
+
+          if (success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (error) {
+          console.error(`Error importing version ${version.version}:`, error);
+          failCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully imported ${successCount} version(s)`);
+        if (failCount > 0) {
+          toast.warning(`Failed to import ${failCount} version(s)`);
+        }
+
+        // Reset and close
+        setExtractedVersions([]);
+        setSelectedVersions(new Set());
+        setBulkImportUrl('');
+        await onSuccess();
+        onOpenChange(false);
+      } else {
+        toast.error('Failed to import any versions');
+      }
+    } catch (error) {
+      console.error('Error during bulk import:', error);
+      toast.error('Failed to import versions');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Version History for {software.name}</DialogTitle>
           <DialogDescription>
-            {isCreatingNew 
-              ? 'Add a new version with release notes'
-              : `Add or edit release notes for version ${software.current_version}`
-            }
+            Add release notes manually or import from a URL/PDF
           </DialogDescription>
         </DialogHeader>
 
-        <form id="release-notes-form" onSubmit={handleSubmit} className="space-y-4">
+        <Tabs defaultValue="manual" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="manual">Manual Entry</TabsTrigger>
+            <TabsTrigger value="bulk">Bulk Import</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="manual" className="space-y-4 mt-4">
+            <form id="release-notes-form" onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Version</Label>
@@ -208,24 +352,195 @@ export function ReleaseNotesDialog({
               required
             />
           </div>
-        </form>
+            </form>
 
-        <div className="flex justify-end space-x-2 pt-4 border-t mt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setIsCreatingNew(false);
-              onOpenChange(false);
-            }}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" form="release-notes-form" disabled={loading}>
-            {loading ? 'Saving...' : isCreatingNew ? 'Save New Version' : 'Update Release Notes'}
-          </Button>
-        </div>
+            <div className="flex justify-end space-x-2 pt-4 border-t mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsCreatingNew(false);
+                  onOpenChange(false);
+                }}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" form="release-notes-form" disabled={loading}>
+                {loading ? 'Saving...' : isCreatingNew ? 'Save New Version' : 'Update Release Notes'}
+              </Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="bulk" className="space-y-4 mt-4">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Import from URL</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="url"
+                    placeholder="https://example.com/release-notes"
+                    value={bulkImportUrl}
+                    onChange={(e) => setBulkImportUrl(e.target.value)}
+                    disabled={extracting}
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleExtractFromURL}
+                    disabled={extracting || !bulkImportUrl.trim()}
+                  >
+                    {extracting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Extracting...
+                      </>
+                    ) : (
+                      <>
+                        <LinkIcon className="mr-2 h-4 w-4" />
+                        Extract
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Paste a URL to release notes or changelog page
+                </p>
+              </div>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Upload PDF</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="file"
+                    accept=".pdf"
+                    onChange={handlePDFUpload}
+                    disabled={extracting}
+                    className="cursor-pointer"
+                  />
+                  <Upload className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Upload a PDF file containing release notes
+                </p>
+              </div>
+
+              {extractedVersions.length > 0 && (
+                <>
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <Label className="text-base">
+                        Extracted Versions ({selectedVersions.size} of {extractedVersions.length} selected)
+                      </Label>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedVersions(new Set(extractedVersions.map((_, i) => i.toString())))}
+                        >
+                          Select All
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedVersions(new Set())}
+                        >
+                          Deselect All
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 max-h-96 overflow-y-auto border rounded-lg p-4">
+                      {extractedVersions.map((version, index) => (
+                        <div
+                          key={index}
+                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                            selectedVersions.has(index.toString())
+                              ? 'bg-primary/10 border-primary'
+                              : 'hover:bg-muted'
+                          }`}
+                          onClick={() => toggleVersionSelection(index.toString())}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-semibold">{version.version}</span>
+                                <Badge variant="secondary">{version.type}</Badge>
+                                <span className="text-sm text-muted-foreground">
+                                  {version.releaseDate}
+                                </span>
+                              </div>
+                              <ul className="text-sm space-y-1 ml-4">
+                                {version.notes.slice(0, 3).map((note, i) => (
+                                  <li key={i} className="list-disc text-muted-foreground">
+                                    {note}
+                                  </li>
+                                ))}
+                                {version.notes.length > 3 && (
+                                  <li className="text-muted-foreground italic">
+                                    ... and {version.notes.length - 3} more
+                                  </li>
+                                )}
+                              </ul>
+                            </div>
+                            <div>
+                              {selectedVersions.has(index.toString()) ? (
+                                <Check className="h-5 w-5 text-primary" />
+                              ) : (
+                                <X className="h-5 w-5 text-muted-foreground" />
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end space-x-2 pt-4 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setExtractedVersions([]);
+                        setSelectedVersions(new Set());
+                        setBulkImportUrl('');
+                      }}
+                      disabled={importing}
+                    >
+                      Clear
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleBulkImport}
+                      disabled={importing || selectedVersions.size === 0}
+                    >
+                      {importing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Importing...
+                        </>
+                      ) : (
+                        `Import ${selectedVersions.size} Version${selectedVersions.size !== 1 ? 's' : ''}`
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
