@@ -27,22 +27,39 @@ Required in your Supabase project:
 npm install -g supabase
 ```
 
-### 2. Link to Your Project
+### 2. Login to Supabase
 
 ```bash
-supabase link --project-ref your-project-ref
+supabase login
 ```
 
-### 3. Set Environment Variables
+This will open a browser window to authenticate.
+
+### 3. Link to Your Project
+
+```bash
+supabase link --project-ref idlkxmbymqduafgatdwd
+```
+
+You'll be prompted to enter your database password.
+
+### 4. Set Environment Variables
 
 ```bash
 supabase secrets set OPENAI_API_KEY=your-openai-key
 ```
 
-### 4. Deploy the Function
+Replace `your-openai-key` with your actual OpenAI API key.
+
+### 5. Deploy the Function
 
 ```bash
 supabase functions deploy trigger-version-check
+```
+
+After deployment, your function will be available at:
+```
+https://idlkxmbymqduafgatdwd.supabase.co/functions/v1/trigger-version-check
 ```
 
 ## Usage
@@ -52,20 +69,22 @@ supabase functions deploy trigger-version-check
 Call the endpoint:
 
 ```bash
-curl -X POST https://your-project-ref.supabase.co/functions/v1/trigger-version-check \
+curl -X POST https://idlkxmbymqduafgatdwd.supabase.co/functions/v1/trigger-version-check \
   -H "Authorization: Bearer YOUR_ANON_KEY"
 ```
 
 Or visit in browser:
 ```
-https://your-project-ref.supabase.co/functions/v1/trigger-version-check
+https://idlkxmbymqduafgatdwd.supabase.co/functions/v1/trigger-version-check
 ```
+
+Note: The function will work without Authorization header, but you may want to add auth for production.
 
 ### Automated Scheduling
 
 Set up a cron job using Supabase's pg_cron or an external service like:
 
-- **Netlify Scheduled Functions**
+- **Vercel Cron Jobs** (recommended for this project)
 - **GitHub Actions**
 - **Cron-job.org**
 
@@ -84,8 +103,7 @@ jobs:
     steps:
       - name: Trigger Version Check
         run: |
-          curl -X POST https://your-project-ref.supabase.co/functions/v1/trigger-version-check \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}"
+          curl -X POST https://idlkxmbymqduafgatdwd.supabase.co/functions/v1/trigger-version-check
 ```
 
 ## Response Format
