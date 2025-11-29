@@ -75,7 +75,7 @@ CRITICAL RULES:
       max_tokens: 8000
     });
 
-    const response = completion.choices[0].message.content;
+    let response = completion.choices[0].message.content;
     console.log('=== AI RESPONSE ===');
     console.log(response);
     console.log('===================');
@@ -84,6 +84,17 @@ CRITICAL RULES:
       return [];
     }
 
+    // Remove markdown code blocks if present
+    // Sometimes AI wraps JSON in ```json ... ```
+    response = response.trim();
+    if (response.startsWith('```json')) {
+      response = response.replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+    } else if (response.startsWith('```')) {
+      response = response.replace(/^```\s*/, '').replace(/```\s*$/, '');
+    }
+
+    response = response.trim();
+
     // Try to parse the JSON response
     try {
       const versions = JSON.parse(response);
@@ -91,6 +102,7 @@ CRITICAL RULES:
       return Array.isArray(versions) ? versions : [];
     } catch (parseError) {
       console.error('Failed to parse AI response as JSON. Response was:', response);
+      console.error('Parse error:', parseError);
       return [];
     }
   } catch (error) {
