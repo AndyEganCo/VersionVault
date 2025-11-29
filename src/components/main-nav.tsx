@@ -38,17 +38,30 @@ export function MainNav({
             Software
           </NavLink>
           {isAdmin && (
-            <NavLink
-              to="/admin/software"
-              className={({ isActive }) =>
-                cn(
-                  'text-sm font-medium transition-colors hover:text-primary',
-                  isActive ? 'text-primary' : 'text-muted-foreground'
-                )
-              }
-            >
-              Manage Software
-            </NavLink>
+            <>
+              <NavLink
+                to="/admin/software"
+                className={({ isActive }) =>
+                  cn(
+                    'text-sm font-medium transition-colors hover:text-primary',
+                    isActive ? 'text-primary' : 'text-muted-foreground'
+                  )
+                }
+              >
+                Manage Software
+              </NavLink>
+              <NavLink
+                to="/admin/requests"
+                className={({ isActive }) =>
+                  cn(
+                    'text-sm font-medium transition-colors hover:text-primary',
+                    isActive ? 'text-primary' : 'text-muted-foreground'
+                  )
+                }
+              >
+                Requests
+              </NavLink>
+            </>
           )}
         </>
       ) : (

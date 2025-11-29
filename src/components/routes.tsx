@@ -11,6 +11,7 @@ import { UserSettings } from '@/pages/user/settings';
 import { UserNotifications } from '@/pages/user/notifications';
 import { Signup } from '@/pages/signup';
 import { AdminSoftware } from '@/pages/admin/software';
+import { AdminSoftwareRequests } from '@/pages/admin/software-requests';
 
 export function Routes() {
   return (
@@ -36,6 +37,7 @@ export function Routes() {
         <Route path="/admin" element={<AdminCheck />}>
           <Route index element={<Navigate to="software" replace />} />
           <Route path="software" element={<AdminSoftware />} />
+          <Route path="requests" element={<AdminSoftwareRequests />} />
         </Route>
       </Route>
 
