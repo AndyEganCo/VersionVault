@@ -21,11 +21,12 @@ You need to set up the following environment variables in your Vercel project:
 - `VITE_SUPABASE_ANON_KEY` - Your Supabase anon/public key
 - `VITE_OPENAI_API_KEY` - Your OpenAI API key
 
-**For the serverless functions (no prefix):**
+**For the Vercel cron job (no prefix):**
 - `SUPABASE_URL` - Your Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key (for server-side operations)
-- `OPENAI_API_KEY` - Your OpenAI API key
-- `CRON_SECRET` - A secret token to secure the cron endpoint (generate a random string)
+- `SUPABASE_ANON_KEY` - Your Supabase anon/public key
+
+**For the Supabase edge function:**
+The edge function `trigger-version-check` should already be deployed in your Supabase project with the necessary logic for scraping and version detection.
 
 ### Deploying to Vercel
 
@@ -54,11 +55,11 @@ This runs the `/api/check-versions` endpoint every night at midnight UTC (0 0 * 
 
 ### Manual Version Check
 
-You can also manually trigger a version check by calling the API endpoint:
+You can manually trigger a version check by calling the Supabase edge function directly:
 
 ```bash
-curl -X GET https://your-domain.vercel.app/api/check-versions \
-  -H "Authorization: Bearer YOUR_CRON_SECRET"
+curl https://YOUR_SUPABASE_URL/functions/v1/trigger-version-check \
+  -H "Authorization: Bearer YOUR_SUPABASE_ANON_KEY"
 ```
 
 ## Development
@@ -76,12 +77,18 @@ npm run build
 
 ## How It Works
 
-1. **Scheduled Check**: Vercel cron triggers the `/api/check-versions` endpoint every night
-2. **Fetch Software**: The endpoint fetches all software entries from Supabase
-3. **Scrape Pages**: For each software, it scrapes the version page URL
-4. **AI Detection**: Uses OpenAI GPT-4 to extract version numbers from scraped content
-5. **Compare & Store**: Compares detected versions with current versions and stores results
-6. **Notifications**: If a new version is detected, it can trigger notifications (to be implemented)
+1. **Scheduled Trigger**: Vercel cron triggers the `/api/check-versions` endpoint every night at midnight UTC
+2. **Call Edge Function**: The Vercel function calls the Supabase edge function `trigger-version-check`
+3. **Fetch Software**: The Supabase edge function fetches all software entries from the database
+4. **Scrape Pages**: For each software, it scrapes the version page URL
+5. **AI Detection**: Uses OpenAI GPT-4 to extract version numbers from scraped content
+6. **Compare & Store**: Compares detected versions with current versions and stores results
+7. **Notifications**: If a new version is detected, it can trigger notifications (to be implemented)
+
+**Architecture:**
+- **Vercel Cron**: Simple scheduler that runs at midnight UTC
+- **Vercel API Function**: Lightweight proxy that calls the Supabase edge function
+- **Supabase Edge Function**: Contains all the version checking logic (scraping, AI detection, database updates)
 
 ## Database Schema
 
