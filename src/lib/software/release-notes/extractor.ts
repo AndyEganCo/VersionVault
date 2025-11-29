@@ -72,7 +72,7 @@ CRITICAL RULES:
         }
       ],
       temperature: 0.1,
-      max_tokens: 8000
+      max_tokens: 16000  // GPT-4o supports up to 16k output tokens for comprehensive release notes
     });
 
     let response = completion.choices[0].message.content;
