@@ -95,7 +95,7 @@ async function intelligentVersionSearch(
 
   try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4o',  // gpt-4o supports JSON mode
       messages: [
         {
           role: 'system',
@@ -267,25 +267,8 @@ serve(async (req) => {
           }
         }
 
-        // Save the version check result
-        const { error: checkError } = await supabaseClient
-          .from('version_checks')
-          .insert({
-            software_id: software.id,
-            url: successUrl || software.version_website,
-            detected_version: version,
-            current_version: software.current_version,
-            status: version ? 'success' : 'error',
-            error: version ? null : (lastError || 'Could not detect version'),
-            source: successUrl?.includes('api.github.com') ? 'github-api' : 'openai-intelligent',
-            confidence: version ? 0.9 : 0,
-            checked_at: new Date().toISOString(),
-            is_beta: false
-          })
-
-        if (checkError) {
-          console.error(`Error saving check for ${software.name}:`, checkError)
-        }
+        // Log the check result (version_checks table requires user_id, so we skip it for automated checks)
+        console.log(`Check result for ${software.name}: ${version ? 'success' : 'error'} - ${version || lastError}`)
 
         // Update database if new version detected
         if (version && version !== software.current_version) {
