@@ -19,7 +19,7 @@ export interface ExtractedVersion {
 async function extractVersionsFromText(softwareName: string, content: string): Promise<ExtractedVersion[]> {
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4o", // Using GPT-4o which has 128k context window
       messages: [
         {
           role: "system",
@@ -60,11 +60,11 @@ CRITICAL RULES:
         },
         {
           role: "user",
-          content: `Extract ALL version information with COMPLETE release notes from these release notes for ${softwareName}. Do not summarize - include EVERY detail:\n\n${content.substring(0, 30000)}`
+          content: `Extract ALL version information with COMPLETE release notes from these release notes for ${softwareName}. Do not summarize - include EVERY detail:\n\n${content.substring(0, 50000)}`
         }
       ],
       temperature: 0.1,
-      max_tokens: 16000
+      max_tokens: 8000 // Reduced to fit within context window
     });
 
     const response = completion.choices[0].message.content;

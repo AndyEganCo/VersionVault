@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Set worker source with explicit protocol
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Use unpkg CDN which is more reliable and supports ES modules
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 /**
  * Parse a PDF file and extract all text content
@@ -14,8 +14,14 @@ export async function parsePDFFile(file: File): Promise<string> {
     const arrayBuffer = await file.arrayBuffer();
     console.log('ArrayBuffer loaded, size:', arrayBuffer.byteLength);
 
-    // Load PDF document
-    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    // Load PDF document with additional options
+    const loadingTask = pdfjsLib.getDocument({
+      data: arrayBuffer,
+      useWorkerFetch: false,
+      isEvalSupported: false,
+      useSystemFonts: true
+    });
+
     const pdf = await loadingTask.promise;
     console.log('PDF loaded, pages:', pdf.numPages);
 
@@ -27,7 +33,7 @@ export async function parsePDFFile(file: File): Promise<string> {
       const page = await pdf.getPage(pageNum);
       const textContent = await page.getTextContent();
 
-      // Combine text items
+      // Combine text items with spaces
       const pageText = textContent.items
         .map((item: any) => item.str)
         .join(' ');
