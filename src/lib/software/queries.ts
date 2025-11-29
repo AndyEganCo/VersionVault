@@ -10,8 +10,21 @@ export async function getAllSoftwareWithVersions(): Promise<Software[]> {
 
   if (softwareError) {
     console.error('Error fetching software:', softwareError);
-    throw new Error('Failed to fetch software');
+    console.error('Error details:', {
+      message: softwareError.message,
+      details: softwareError.details,
+      hint: softwareError.hint,
+      code: softwareError.code
+    });
+    throw new Error(`Failed to fetch software: ${softwareError.message}`);
   }
+
+  if (!softwareData) {
+    console.warn('No software data returned from database');
+    return [];
+  }
+
+  console.log(`Fetched ${softwareData.length} software entries`);
 
   // Then get latest version for each software
   const softwareWithVersions = await Promise.all(

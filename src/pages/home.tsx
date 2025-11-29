@@ -14,6 +14,9 @@ export function Home() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
+  // Debug logging
+  console.log('Home page - Loading:', loading, 'Software count:', software.length);
+
   const filteredSoftware = useMemo(() => {
     return software.filter((s) => {
       const matchesSearch =
