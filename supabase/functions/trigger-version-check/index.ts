@@ -75,7 +75,13 @@ async function intelligentVersionSearch(
   baseUrl: string,
   softwareName: string,
   openai: any
-): Promise<{ version: string | null, suggestedUrls: string[] }> {
+): Promise<{
+  version: string | null
+  suggestedUrls: string[]
+  releaseNotes: string[]
+  releaseDate: string | null
+  updateType: 'major' | 'minor' | 'patch'
+}> {
 
   const { links, text } = extractLinksAndContent(html, baseUrl)
 
@@ -99,32 +105,41 @@ async function intelligentVersionSearch(
       messages: [
         {
           role: 'system',
-          content: `You are a web scraping expert helping to find software version numbers.
+          content: `You are a web scraping expert helping to find software version information and release notes.
 
-Your task: Find the latest version number for the software, or identify URLs where it might be found.
+Your task: Extract comprehensive version information including release notes and dates.
 
 Return ONLY a JSON object with this exact format:
 {
   "version": "X.X.X" or null,
-  "confidence": 0.0 to 1.0,
+  "releaseDate": "YYYY-MM-DD" or null,
+  "updateType": "major" or "minor" or "patch",
+  "releaseNotes": ["note 1", "note 2", "note 3"],
   "suggestedUrls": ["url1", "url2"],
+  "confidence": 0.0 to 1.0,
   "reasoning": "brief explanation"
 }
 
-If you find a version number on this page, extract it precisely. If not, suggest which URLs from the provided list are most likely to contain version information.`
+Guidelines:
+- Extract the LATEST/NEWEST version number
+- Find the release date if mentioned (convert to YYYY-MM-DD format)
+- Determine update type: major (X.0.0), minor (X.X.0), or patch (X.X.X)
+- Extract 3-5 key release notes/changes/improvements as bullet points
+- If version found but no notes, return generic description
+- If not found, suggest URLs most likely to have this info`
         },
         {
           role: 'user',
           content: `Software: ${softwareName}
 Website: ${baseUrl}
 
-PAGE TEXT (first 4000 chars):
-${text.substring(0, 4000)}
+PAGE TEXT (first 5000 chars):
+${text.substring(0, 5000)}
 
 POTENTIALLY RELEVANT LINKS:
 ${relevantLinks.slice(0, 15).join('\n')}
 
-Find the latest version number or suggest the best URLs to check.`
+Extract version, release date, release notes, and update type. Be thorough!`
         }
       ],
       temperature: 0.1,
@@ -136,11 +151,20 @@ Find the latest version number or suggest the best URLs to check.`
 
     return {
       version: result.version || null,
-      suggestedUrls: result.suggestedUrls || []
+      suggestedUrls: result.suggestedUrls || [],
+      releaseNotes: result.releaseNotes || [],
+      releaseDate: result.releaseDate || null,
+      updateType: result.updateType || 'minor'
     }
   } catch (error) {
     console.error('OpenAI analysis failed:', error)
-    return { version: null, suggestedUrls: [] }
+    return {
+      version: null,
+      suggestedUrls: [],
+      releaseNotes: [],
+      releaseDate: null,
+      updateType: 'minor'
+    }
   }
 }
 
@@ -187,6 +211,9 @@ serve(async (req) => {
       let version: string | null = null
       let successUrl: string | null = null
       let lastError: string | null = null
+      let releaseNotes: string[] = []
+      let releaseDate: string | null = null
+      let updateType: 'major' | 'minor' | 'patch' = 'minor'
 
       try {
         console.log(`\n=== Checking ${software.name} ===`)
@@ -207,6 +234,13 @@ serve(async (req) => {
 
               if (version) {
                 successUrl = apiUrl
+                // Extract release notes from GitHub API
+                if (json.body) {
+                  releaseNotes = json.body.split('\n').filter((line: string) => line.trim()).slice(0, 5)
+                }
+                if (json.published_at) {
+                  releaseDate = json.published_at.split('T')[0]
+                }
                 console.log(`✓ Found version ${version} via GitHub API`)
               }
             }
@@ -232,6 +266,9 @@ serve(async (req) => {
             if (analysis.version) {
               version = analysis.version
               successUrl = software.version_website
+              releaseNotes = analysis.releaseNotes
+              releaseDate = analysis.releaseDate
+              updateType = analysis.updateType
               console.log(`✓ Found version ${version} on main page`)
             } else if (analysis.suggestedUrls.length > 0) {
               // Try the URLs OpenAI suggested
@@ -252,6 +289,9 @@ serve(async (req) => {
                   if (secondAnalysis.version) {
                     version = secondAnalysis.version
                     successUrl = suggestedUrl
+                    releaseNotes = secondAnalysis.releaseNotes
+                    releaseDate = secondAnalysis.releaseDate
+                    updateType = secondAnalysis.updateType
                     console.log(`✓ Found version ${version} at ${suggestedUrl}`)
                     break
                   }
@@ -274,10 +314,19 @@ serve(async (req) => {
         if (version && version !== software.current_version) {
           console.log(`🎉 New version for ${software.name}: ${version} (was ${software.current_version})`)
 
+          // Use extracted release date or default to now
+          const finalReleaseDate = releaseDate || new Date().toISOString().split('T')[0]
+
+          // Ensure we have release notes
+          const finalNotes = releaseNotes.length > 0
+            ? releaseNotes
+            : [`Version ${version} detected automatically from ${successUrl}`]
+
           await supabaseClient
             .from('software')
             .update({
               current_version: version,
+              release_date: releaseDate ? `${releaseDate}T00:00:00.000Z` : new Date().toISOString(),
               last_checked: new Date().toISOString()
             })
             .eq('id', software.id)
@@ -288,9 +337,9 @@ serve(async (req) => {
               id: crypto.randomUUID(),
               software_id: software.id,
               version: version,
-              release_date: new Date().toISOString(),
-              notes: [`Version ${version} detected automatically from ${successUrl}`],
-              type: 'minor',
+              release_date: `${finalReleaseDate}T00:00:00.000Z`,
+              notes: finalNotes,
+              type: updateType,
               created_at: new Date().toISOString()
             })
 
