@@ -8,18 +8,28 @@ type NewSoftware = {
 };
 
 export async function createSoftware(data: NewSoftware): Promise<void> {
+  const now = new Date().toISOString();
+
   const { error } = await supabase
     .from('software')
     .insert([{
       id: data.id,
       name: data.name,
       website: data.website,
-      // Let the database handle defaults for other fields
-      manufacturer: 'Unknown', // Will be updated by crawler
-      category: 'Show Control', // Default category, will be updated by crawler
+      manufacturer: 'Unknown',
+      category: 'Project Management',
+      current_version: null,
+      release_date: null,
+      last_checked: null,
+      created_at: now,
+      updated_at: now,
+      version_website: null
     }]);
 
-  if (error) throw error;
+  if (error) {
+    console.error('Error creating software:', error);
+    throw error;
+  }
 }
 
 export async function updateSoftware(id: string, data: Partial<Software>): Promise<void> {
