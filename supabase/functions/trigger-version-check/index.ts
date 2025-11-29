@@ -8,16 +8,18 @@ const corsHeaders = {
 }
 
 // Retry fetch with exponential backoff
-async function fetchWithRetry(url: string, retries = 3): Promise<string> {
+async function fetchWithRetry(url: string, retries = 2): Promise<string> {
   for (let i = 0; i < retries; i++) {
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 15000) // 15s timeout
+      const timeout = setTimeout(() => controller.abort(), 20000) // 20s timeout
 
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
         }
       })
 
@@ -31,52 +33,121 @@ async function fetchWithRetry(url: string, retries = 3): Promise<string> {
     } catch (error) {
       console.log(`Attempt ${i + 1} failed for ${url}: ${error.message}`)
       if (i === retries - 1) throw error
-      // Exponential backoff: wait 2s, 4s, 8s
       await new Promise(resolve => setTimeout(resolve, Math.pow(2, i + 1) * 1000))
     }
   }
   throw new Error('All retry attempts failed')
 }
 
-// Generate alternative URLs to try
-function getAlternativeUrls(originalUrl: string, softwareName: string): string[] {
-  const alternatives: string[] = []
+// Extract links and text from HTML
+function extractLinksAndContent(html: string, baseUrl: string): { links: string[], text: string } {
+  // Simple link extraction (regex-based for Deno environment)
+  const linkMatches = html.matchAll(/href=["']([^"']+)["']/gi)
+  const links: string[] = []
 
-  try {
-    const url = new URL(originalUrl)
-    const baseUrl = `${url.protocol}//${url.hostname}`
-
-    // Common version page patterns
-    alternatives.push(
-      originalUrl,
-      `${baseUrl}/download`,
-      `${baseUrl}/downloads`,
-      `${baseUrl}/releases`,
-      `${baseUrl}/changelog`,
-      `${baseUrl}/version`,
-      `${baseUrl}/latest`,
-    )
-
-    // If it's a GitHub URL, try the releases API
-    if (url.hostname.includes('github.com')) {
-      const pathParts = url.pathname.split('/').filter(Boolean)
-      if (pathParts.length >= 2) {
-        const [owner, repo] = pathParts
-        alternatives.push(`https://api.github.com/repos/${owner}/${repo}/releases/latest`)
-      }
+  for (const match of linkMatches) {
+    try {
+      const href = match[1]
+      // Convert relative URLs to absolute
+      const absoluteUrl = href.startsWith('http')
+        ? href
+        : new URL(href, baseUrl).toString()
+      links.push(absoluteUrl)
+    } catch (e) {
+      // Skip invalid URLs
     }
-  } catch (e) {
-    console.error('Error parsing URL:', e)
   }
 
-  return alternatives
+  // Remove HTML tags for text content
+  const text = html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return { links: [...new Set(links)], text }
 }
 
-// Extract version from GitHub API response
+// Use OpenAI to find version or suggest where to look
+async function intelligentVersionSearch(
+  html: string,
+  baseUrl: string,
+  softwareName: string,
+  openai: any
+): Promise<{ version: string | null, suggestedUrls: string[] }> {
+
+  const { links, text } = extractLinksAndContent(html, baseUrl)
+
+  // Prepare a focused subset of links for OpenAI
+  const relevantLinks = links
+    .filter(link => {
+      const lower = link.toLowerCase()
+      return lower.includes('download') ||
+             lower.includes('release') ||
+             lower.includes('version') ||
+             lower.includes('changelog') ||
+             lower.includes('update')
+    })
+    .slice(0, 20) // Limit to avoid token limits
+
+  console.log(`Found ${relevantLinks.length} potentially relevant links`)
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a web scraping expert helping to find software version numbers.
+
+Your task: Find the latest version number for the software, or identify URLs where it might be found.
+
+Return ONLY a JSON object with this exact format:
+{
+  "version": "X.X.X" or null,
+  "confidence": 0.0 to 1.0,
+  "suggestedUrls": ["url1", "url2"],
+  "reasoning": "brief explanation"
+}
+
+If you find a version number on this page, extract it precisely. If not, suggest which URLs from the provided list are most likely to contain version information.`
+        },
+        {
+          role: 'user',
+          content: `Software: ${softwareName}
+Website: ${baseUrl}
+
+PAGE TEXT (first 4000 chars):
+${text.substring(0, 4000)}
+
+POTENTIALLY RELEVANT LINKS:
+${relevantLinks.slice(0, 15).join('\n')}
+
+Find the latest version number or suggest the best URLs to check.`
+        }
+      ],
+      temperature: 0.1,
+      response_format: { type: "json_object" }
+    })
+
+    const result = JSON.parse(completion.choices[0].message.content || '{}')
+    console.log(`OpenAI analysis: ${JSON.stringify(result)}`)
+
+    return {
+      version: result.version || null,
+      suggestedUrls: result.suggestedUrls || []
+    }
+  } catch (error) {
+    console.error('OpenAI analysis failed:', error)
+    return { version: null, suggestedUrls: [] }
+  }
+}
+
+// Extract version from GitHub API
 function extractGitHubVersion(jsonResponse: any): string | null {
   try {
     if (jsonResponse.tag_name) {
-      // Remove common prefixes like 'v', 'version-', 'release-'
       return jsonResponse.tag_name.replace(/^(v|version-|release-)/i, '')
     }
     if (jsonResponse.name) {
@@ -85,51 +156,6 @@ function extractGitHubVersion(jsonResponse: any): string | null {
   } catch (e) {
     console.error('Error extracting GitHub version:', e)
   }
-  return null
-}
-
-// Try to detect version from content
-async function detectVersion(content: string, url: string, softwareName: string, openai: any): Promise<string | null> {
-  // First, check if it's a GitHub API response
-  if (url.includes('api.github.com')) {
-    try {
-      const json = JSON.parse(content)
-      const version = extractGitHubVersion(json)
-      if (version) {
-        console.log(`Extracted version from GitHub API: ${version}`)
-        return version
-      }
-    } catch (e) {
-      console.log('Not a valid GitHub API response')
-    }
-  }
-
-  // Use OpenAI to extract version from HTML/text
-  try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a version detection specialist. Extract ONLY the latest version number from the provided text. Return ONLY the version number (e.g., "7.14.1" or "2024.1.0"), nothing else. If no version is found, return exactly the word "null".'
-        },
-        {
-          role: 'user',
-          content: `Find the latest version number for ${softwareName} from this text: ${content.substring(0, 3000)}`
-        }
-      ],
-      temperature: 0.1,
-    })
-
-    const detectedVersion = completion.choices[0].message.content?.trim()
-    if (detectedVersion && detectedVersion !== 'null' && detectedVersion.length > 0) {
-      console.log(`OpenAI detected version: ${detectedVersion}`)
-      return detectedVersion
-    }
-  } catch (error) {
-    console.error('OpenAI extraction failed:', error)
-  }
-
   return null
 }
 
@@ -163,28 +189,81 @@ serve(async (req) => {
       let lastError: string | null = null
 
       try {
-        console.log(`Checking version for ${software.name}...`)
+        console.log(`\n=== Checking ${software.name} ===`)
 
-        // Get list of alternative URLs to try
-        const urlsToTry = getAlternativeUrls(software.version_website, software.name)
-
-        // Try each URL until we find a version
-        for (const url of urlsToTry) {
+        // Special handling for GitHub
+        if (software.version_website.includes('github.com')) {
           try {
-            console.log(`Trying URL: ${url}`)
-            const content = await fetchWithRetry(url, 2)
+            const url = new URL(software.version_website)
+            const pathParts = url.pathname.split('/').filter(Boolean)
+            if (pathParts.length >= 2) {
+              const [owner, repo] = pathParts
+              const apiUrl = `https://api.github.com/repos/${owner}/${repo}/releases/latest`
+              console.log(`Trying GitHub API: ${apiUrl}`)
 
-            version = await detectVersion(content, url, software.name, openai)
+              const response = await fetchWithRetry(apiUrl)
+              const json = JSON.parse(response)
+              version = extractGitHubVersion(json)
 
-            if (version) {
-              successUrl = url
-              console.log(`Successfully detected version ${version} from ${url}`)
-              break
+              if (version) {
+                successUrl = apiUrl
+                console.log(`✓ Found version ${version} via GitHub API`)
+              }
+            }
+          } catch (e) {
+            console.log(`GitHub API failed: ${e.message}`)
+          }
+        }
+
+        // If not found yet, use intelligent scraping
+        if (!version) {
+          try {
+            console.log(`Fetching main page: ${software.version_website}`)
+            const html = await fetchWithRetry(software.version_website)
+
+            // First pass: analyze the main page
+            const analysis = await intelligentVersionSearch(
+              html,
+              software.version_website,
+              software.name,
+              openai
+            )
+
+            if (analysis.version) {
+              version = analysis.version
+              successUrl = software.version_website
+              console.log(`✓ Found version ${version} on main page`)
+            } else if (analysis.suggestedUrls.length > 0) {
+              // Try the URLs OpenAI suggested
+              console.log(`Trying ${analysis.suggestedUrls.length} suggested URLs...`)
+
+              for (const suggestedUrl of analysis.suggestedUrls.slice(0, 3)) {
+                try {
+                  console.log(`Checking suggested URL: ${suggestedUrl}`)
+                  const pageHtml = await fetchWithRetry(suggestedUrl)
+
+                  const secondAnalysis = await intelligentVersionSearch(
+                    pageHtml,
+                    suggestedUrl,
+                    software.name,
+                    openai
+                  )
+
+                  if (secondAnalysis.version) {
+                    version = secondAnalysis.version
+                    successUrl = suggestedUrl
+                    console.log(`✓ Found version ${version} at ${suggestedUrl}`)
+                    break
+                  }
+                } catch (e) {
+                  console.log(`Failed to check ${suggestedUrl}: ${e.message}`)
+                  continue
+                }
+              }
             }
           } catch (error) {
-            console.log(`Failed to fetch ${url}: ${error.message}`)
             lastError = error.message
-            continue // Try next URL
+            console.error(`Main scraping failed: ${error.message}`)
           }
         }
 
@@ -197,8 +276,8 @@ serve(async (req) => {
             detected_version: version,
             current_version: software.current_version,
             status: version ? 'success' : 'error',
-            error: version ? null : (lastError || 'No version detected from any URL'),
-            source: successUrl?.includes('api.github.com') ? 'github-api' : 'openai',
+            error: version ? null : (lastError || 'Could not detect version'),
+            source: successUrl?.includes('api.github.com') ? 'github-api' : 'openai-intelligent',
             confidence: version ? 0.9 : 0,
             checked_at: new Date().toISOString(),
             is_beta: false
@@ -210,7 +289,7 @@ serve(async (req) => {
 
         // Update database if new version detected
         if (version && version !== software.current_version) {
-          console.log(`New version for ${software.name}: ${version} (was ${software.current_version})`)
+          console.log(`🎉 New version for ${software.name}: ${version} (was ${software.current_version})`)
 
           await supabaseClient
             .from('software')
@@ -232,7 +311,7 @@ serve(async (req) => {
               created_at: new Date().toISOString()
             })
 
-          // Send notifications to tracking users
+          // Notify tracking users
           const { data: trackers } = await supabaseClient
             .from('tracked_software')
             .select('user_id')
@@ -272,7 +351,7 @@ serve(async (req) => {
           results.push({
             software: software.name,
             status: 'error',
-            error: lastError || 'Could not detect version from any URL'
+            error: lastError || 'Could not detect version'
           })
         }
       } catch (error) {
