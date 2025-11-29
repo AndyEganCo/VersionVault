@@ -5,13 +5,11 @@
 [build.environment]
   NODE_VERSION = "20"
 
+# SPA fallback - this must come last
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-[functions]
-  node_bundler = "esbuild"
 
 [dev]
   command = "npm run dev"
