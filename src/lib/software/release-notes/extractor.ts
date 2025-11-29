@@ -1,5 +1,4 @@
 import OpenAI from 'openai';
-import { scrapeWebsite } from '@/lib/ai/scraper';
 
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
@@ -88,12 +87,27 @@ CRITICAL RULES:
 }
 
 /**
- * Extract versions from a URL
+ * Extract versions from a URL using server-side scraping
  */
 export async function extractVersionsFromURL(softwareName: string, url: string): Promise<ExtractedVersion[]> {
   try {
-    console.log(`Scraping release notes from ${url}...`);
-    const content = await scrapeWebsite(url);
+    console.log(`Fetching release notes from ${url} via API...`);
+
+    // Call server-side API to avoid CORS issues
+    const response = await fetch('/api/scrape-url', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP error: ${response.status}`);
+    }
+
+    const { content } = await response.json();
 
     if (!content || content.trim().length === 0) {
       throw new Error('No content found at URL');

@@ -42,7 +42,7 @@
     "@supabase/supabase-js": "^2.39.8",
     "@tailwindcss/typography": "^0.5.19",
     "@vercel/analytics": "^1.4.1",
-    "cheerio": "^1.0.0-rc.12",
+    "cheerio": "^1.1.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "cmdk": "^1.0.4",
