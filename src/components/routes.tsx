@@ -1,6 +1,7 @@
 import { Routes as RouterRoutes, Route, Navigate } from 'react-router-dom';
 import { AuthCheck } from './auth/auth-check';
 import { AdminCheck } from './auth/admin-check';
+import { Home } from '@/pages/home';
 import { Dashboard } from '@/pages/dashboard';
 import { Login } from '@/pages/login';
 import { Software } from '@/pages/software';
@@ -15,12 +16,12 @@ export function Routes() {
   return (
     <RouterRoutes>
       {/* Public routes */}
+      <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
-      
+
       {/* Protected routes */}
       <Route element={<AuthCheck />}>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/software" element={<Software />} />
         

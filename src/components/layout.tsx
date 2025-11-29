@@ -4,18 +4,20 @@ import { ModeToggle } from '@/components/mode-toggle';
 import { Terminal } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from './ui/button';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { PageContainer } from './layout/page-container';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const location = useLocation();
+  const isHomePage = location.pathname === '/' && !user;
 
   return (
     <div className="relative min-h-screen bg-background">
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <PageContainer>
           <div className="flex h-16 items-center gap-4">
-            <Link to="/" className="flex items-center gap-2">
+            <Link to={user ? "/dashboard" : "/"} className="flex items-center gap-2">
               <Terminal className="h-5 w-5" />
               <span className="font-semibold">VersionVault</span>
             </Link>
@@ -35,9 +37,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       <main className="min-h-[calc(100vh-4rem)]">
-        <PageContainer className="py-6">
-          {children}
-        </PageContainer>
+        {isHomePage ? (
+          children
+        ) : (
+          <PageContainer className="py-6">
+            {children}
+          </PageContainer>
+        )}
       </main>
     </div>
   );

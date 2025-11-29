@@ -10,3 +10,10 @@ export const softwareCategories = {
 } as const;
 
 export type CategoryKey = keyof typeof softwareCategories;
+
+// Helper array for easy iteration
+export const categories = Object.entries(softwareCategories).map(([key, value]) => ({
+  value,
+  label: value,
+  key
+}));
