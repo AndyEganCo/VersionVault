@@ -9,8 +9,9 @@ const openai = new OpenAI({
 export interface ExtractedVersion {
   version: string;
   releaseDate: string;
-  notes: string[];
+  notes: string; // Now stores Markdown-formatted text
   type: 'major' | 'minor' | 'patch';
+  buildNumber?: string;
 }
 
 /**
@@ -26,34 +27,45 @@ async function extractVersionsFromText(softwareName: string, content: string): P
           content: `You are a release notes parser. Extract ALL version information from the provided release notes/changelog.
 
 For each version, identify:
-1. Version number (e.g., "1.2.3", "v2.0", "2024.1")
-2. Release date (convert to YYYY-MM-DD format)
-3. List of changes/notes (each as a separate item)
-4. Type of update (major, minor, or patch based on semantic versioning)
+1. Version number (e.g., "1.2.3", "v2.0", "r32.1.3", "2024.1")
+2. Release date (convert to YYYY-MM-DD format, if not found use today's date)
+3. Build number (if present, e.g., "232426", "Full (Pro) build: 232426")
+4. ALL release notes in Markdown format - preserve ALL structure and formatting:
+   - Keep section headers (## Fixes, ## Features, ## New Features, etc.)
+   - Keep issue IDs (DSOF-31635, NDI-1234, etc.)
+   - Maintain bullet points and formatting
+   - Include EVERYTHING - don't summarize or truncate
+   - Use proper Markdown syntax (## for headers, - for bullets, ** for bold)
+5. Type of update (major, minor, or patch based on semantic versioning)
 
 Return ONLY a valid JSON array with this exact structure:
 [
   {
-    "version": "1.2.3",
-    "releaseDate": "2024-01-15",
-    "notes": ["Feature 1", "Bug fix 2", "Improvement 3"],
+    "version": "r32.1.3",
+    "releaseDate": "2025-11-29",
+    "buildNumber": "232426",
+    "notes": "## Fixes\\n- DSOF-31635 - Selecting a MIDI device...\\n- DSOF-31439 - Video is now correctly...\\n\\n## Features\\n- New feature here",
     "type": "minor"
   }
 ]
 
-Rules:
-- Extract ALL versions found in the document, starting with the most recent
-- If a date is not found, use "2024-01-01" as a placeholder
-- Each note should be a concise bullet point
+CRITICAL RULES:
+- Extract ALL versions found in the document, from newest to oldest
+- Include EVERY SINGLE release note - do NOT skip or summarize
+- Preserve the EXACT formatting and structure from the original
+- Keep ALL issue IDs, version numbers, build numbers
+- Use Markdown format for notes (## for sections, - for bullets)
+- If no date is found, use today's date in YYYY-MM-DD format
 - Return empty array [] if no versions are found
-- ONLY return the JSON array, no other text`
+- ONLY return the JSON array, no other text before or after`
         },
         {
           role: "user",
-          content: `Extract all version information from these release notes for ${softwareName}:\n\n${content.substring(0, 15000)}`
+          content: `Extract ALL version information with COMPLETE release notes from these release notes for ${softwareName}. Do not summarize - include EVERY detail:\n\n${content.substring(0, 30000)}`
         }
       ],
-      temperature: 0.1
+      temperature: 0.1,
+      max_tokens: 16000
     });
 
     const response = completion.choices[0].message.content;

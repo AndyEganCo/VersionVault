@@ -21,11 +21,13 @@ import {
 import { Label } from '@/components/ui/label';
 import { addVersionHistory, getVersionHistory } from '@/lib/software/api';
 import type { Software } from '@/lib/software/types';
-import { Plus, Upload, Link as LinkIcon, Loader2, Check, X } from 'lucide-react';
+import { Plus, Upload, Link as LinkIcon, Loader2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { extractVersionsFromURL, extractVersionsFromPDF, type ExtractedVersion } from '@/lib/software/release-notes/extractor';
 import { parsePDFFile } from '@/lib/software/release-notes/pdf-parser';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ReleaseNotesDialogProps {
   software: Software;
@@ -64,6 +66,7 @@ export function ReleaseNotesDialog({
   const [extractedVersions, setExtractedVersions] = useState<ExtractedVersion[]>([]);
   const [selectedVersions, setSelectedVersions] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);
+  const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     async function loadVersionHistory() {
@@ -210,6 +213,16 @@ export function ReleaseNotesDialog({
     setSelectedVersions(newSelected);
   };
 
+  const toggleVersionExpansion = (index: string) => {
+    const newExpanded = new Set(expandedVersions);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedVersions(newExpanded);
+  };
+
   const handleBulkImport = async () => {
     const versionsToImport = extractedVersions.filter((_, i) =>
       selectedVersions.has(i.toString())
@@ -231,7 +244,7 @@ export function ReleaseNotesDialog({
             software_id: software.id,
             version: version.version,
             release_date: new Date(version.releaseDate).toISOString(),
-            notes: version.notes.join('\n'),
+            notes: version.notes, // Notes are now a single Markdown string
             type: version.type
           });
 
@@ -255,6 +268,7 @@ export function ReleaseNotesDialog({
         // Reset and close
         setExtractedVersions([]);
         setSelectedVersions(new Set());
+        setExpandedVersions(new Set());
         setBulkImportUrl('');
         await onSuccess();
         onOpenChange(false);
@@ -463,48 +477,80 @@ export function ReleaseNotesDialog({
                     </div>
 
                     <div className="space-y-2 max-h-96 overflow-y-auto border rounded-lg p-4">
-                      {extractedVersions.map((version, index) => (
-                        <div
-                          key={index}
-                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                            selectedVersions.has(index.toString())
-                              ? 'bg-primary/10 border-primary'
-                              : 'hover:bg-muted'
-                          }`}
-                          onClick={() => toggleVersionSelection(index.toString())}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="font-semibold">{version.version}</span>
-                                <Badge variant="secondary">{version.type}</Badge>
-                                <span className="text-sm text-muted-foreground">
-                                  {version.releaseDate}
-                                </span>
-                              </div>
-                              <ul className="text-sm space-y-1 ml-4">
-                                {version.notes.slice(0, 3).map((note, i) => (
-                                  <li key={i} className="list-disc text-muted-foreground">
-                                    {note}
-                                  </li>
-                                ))}
-                                {version.notes.length > 3 && (
-                                  <li className="text-muted-foreground italic">
-                                    ... and {version.notes.length - 3} more
-                                  </li>
+                      {extractedVersions.map((version, index) => {
+                        const indexStr = index.toString();
+                        const isExpanded = expandedVersions.has(indexStr);
+                        const isSelected = selectedVersions.has(indexStr);
+
+                        return (
+                          <div
+                            key={index}
+                            className={`border rounded-lg transition-colors ${
+                              isSelected
+                                ? 'bg-primary/10 border-primary'
+                                : 'hover:bg-muted'
+                            }`}
+                          >
+                            <div
+                              className="p-3 cursor-pointer flex items-start justify-between"
+                              onClick={() => toggleVersionSelection(indexStr)}
+                            >
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-semibold">{version.version}</span>
+                                  <Badge variant="secondary">{version.type}</Badge>
+                                  <span className="text-sm text-muted-foreground">
+                                    {version.releaseDate}
+                                  </span>
+                                  {version.buildNumber && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Build: {version.buildNumber}
+                                    </span>
+                                  )}
+                                </div>
+                                {!isExpanded && (
+                                  <div className="text-sm text-muted-foreground line-clamp-2">
+                                    {version.notes.substring(0, 150)}...
+                                  </div>
                                 )}
-                              </ul>
+                              </div>
+                              <div className="flex items-center gap-2 ml-2">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleVersionExpansion(indexStr);
+                                  }}
+                                  className="h-6 w-6 p-0"
+                                >
+                                  {isExpanded ? (
+                                    <ChevronUp className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                {isSelected ? (
+                                  <Check className="h-5 w-5 text-primary" />
+                                ) : (
+                                  <X className="h-5 w-5 text-muted-foreground" />
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              {selectedVersions.has(index.toString()) ? (
-                                <Check className="h-5 w-5 text-primary" />
-                              ) : (
-                                <X className="h-5 w-5 text-muted-foreground" />
-                              )}
-                            </div>
+
+                            {isExpanded && (
+                              <div className="px-3 pb-3 border-t mt-2 pt-3">
+                                <div className="prose prose-sm max-w-none dark:prose-invert">
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                    {version.notes}
+                                  </ReactMarkdown>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
