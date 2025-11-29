@@ -112,7 +112,7 @@ VersionVault/
 - **UI Library:** Radix UI, Tailwind CSS
 - **Backend:** Supabase (PostgreSQL, Auth, RLS)
 - **AI:** OpenAI GPT-4 for version extraction
-- **Deployment:** Netlify
+- **Deployment:** Vercel (with Cron Jobs)
 - **Analytics:** Vercel Analytics
 
 ## Database Schema
@@ -129,19 +129,23 @@ See [SUPABASE_SETUP.md](./SUPABASE_SETUP.md) for complete schema and RLS policie
 
 ## Deployment
 
-The project is configured for Netlify deployment with the included `netlify.toml` configuration.
+The project is configured for Vercel deployment with automated cron jobs for version checking.
 
-### Deploy to Netlify
+### Deploy to Vercel
 
 1. Push your code to GitHub
-2. Connect your repository to Netlify
-3. Add environment variables in Netlify dashboard
+2. Connect your repository to Vercel
+3. Add environment variables in Vercel dashboard:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_OPENAI_API_KEY`
+   - `CRON_SECRET` (optional, for securing cron endpoints)
 4. Deploy!
 
-Environment variables needed:
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-- `VITE_OPENAI_API_KEY`
+The `vercel.json` configuration includes:
+- Automated daily version checking via cron jobs
+- Optimized build settings
+- Environment variable references
 
 ## Development Roadmap
 
@@ -150,11 +154,12 @@ Environment variables needed:
 - [x] Software tracking and subscriptions
 - [x] Admin panel for software management
 - [x] AI-powered version detection
-- [ ] Automated version checking (scheduled jobs)
-- [ ] Email notifications
-- [ ] Software request approval workflow
+- [x] Automated version checking (Vercel cron jobs)
+- [x] Software request approval workflow
+- [ ] Email notifications for version updates
 - [ ] API documentation
 - [ ] Mobile app
+- [ ] Webhook notifications
 
 ## Contributing
 

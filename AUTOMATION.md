@@ -1,4 +1,4 @@
-## VersionVault Automation Features
+# VersionVault Automation Features
 
 This document explains the automated systems in VersionVault for version checking and user software requests.
 
@@ -8,7 +8,7 @@ VersionVault automatically checks for new software versions daily using AI-power
 
 ### How It Works
 
-1. **Scheduled Function** - Netlify runs `check-versions.ts` daily at midnight
+1. **Vercel Cron Job** - Runs `/api/check-versions` daily at midnight UTC
 2. **Web Scraping** - Each software's `version_website` URL is scraped using Cheerio
 3. **AI Extraction** - OpenAI GPT-4 extracts the version number from the scraped content
 4. **Database Update** - If a new version is detected:
@@ -20,18 +20,25 @@ VersionVault automatically checks for new software versions daily using AI-power
 
 ### Configuration
 
-**Scheduled Frequency:**
-```typescript
-export const config: Config = {
-  schedule: "@daily" // Runs at midnight UTC
-};
+**Scheduled Frequency** (`vercel.json`):
+```json
+{
+  "crons": [
+    {
+      "path": "/api/check-versions",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
 ```
 
-**Other schedule options:**
-- `@hourly` - Every hour
-- `@daily` - Once per day
-- `@weekly` - Once per week
-- `0 */6 * * *` - Every 6 hours (cron syntax)
+**Cron Schedule Format:**
+- `0 0 * * *` - Daily at midnight UTC
+- `0 */6 * * *` - Every 6 hours
+- `0 0 * * 0` - Weekly (Sundays at midnight)
+- `0 0 1 * *` - Monthly (1st of month at midnight)
+
+[Cron expression reference](https://crontab.guru/)
 
 ### Manual Testing
 
@@ -39,12 +46,12 @@ To manually trigger a version check:
 
 **Via URL:**
 ```
-GET https://www.versionvault.dev/.netlify/functions/trigger-version-check
+GET https://www.versionvault.dev/api/trigger-version-check
 ```
 
 **Via cURL:**
 ```bash
-curl https://www.versionvault.dev/.netlify/functions/trigger-version-check
+curl https://www.versionvault.dev/api/trigger-version-check
 ```
 
 **Via Admin Panel** (coming soon):
@@ -72,29 +79,58 @@ curl https://www.versionvault.dev/.netlify/functions/trigger-version-check
 
 ### Environment Variables Required
 
+Set these in **Vercel Dashboard** → Project Settings → Environment Variables:
+
 ```bash
-VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 VITE_OPENAI_API_KEY=your_openai_api_key
+CRON_SECRET=random_secret_string (optional but recommended)
 ```
 
-⚠️ **Note:** These must be set in Netlify dashboard under Site Settings → Environment Variables
+⚠️ **Security Note:** The `CRON_SECRET` prevents unauthorized calls to the cron endpoint.
+
+### Vercel Deployment
+
+1. **Push to GitHub** - Vercel auto-deploys on push
+2. **Set Environment Variables** - Add all required env vars in Vercel dashboard
+3. **Enable Cron Jobs** - Automatically enabled when `vercel.json` contains crons
+4. **Monitor Logs** - View execution logs in Vercel Dashboard → Functions
+
+### Viewing Logs
+
+**Vercel Dashboard:**
+1. Go to your project
+2. Click "Functions" tab
+3. Select `check-versions`
+4. View real-time logs and execution history
+
+**Real-time monitoring:**
+```bash
+vercel logs --follow
+```
 
 ### Troubleshooting
 
 **Version not detected?**
 - Check that `software.version_website` is set correctly
 - Verify the URL contains version information
-- Check Netlify function logs for errors
+- Check Vercel function logs for errors
 
 **Rate limits or timeouts?**
-- Adjust the delay between requests (currently 2 seconds)
-- Increase timeout for slow websites (currently 30 seconds)
+- Vercel serverless functions have 10s timeout by default
+- Increase in `vercel.json`: `"maxDuration": 60`
+- Adjust delay between requests (currently 2 seconds)
 
 **OpenAI errors?**
 - Verify API key is valid
 - Check OpenAI account has credits
 - Monitor OpenAI API usage
+
+**Cron not running?**
+- Verify `vercel.json` is in project root
+- Check Vercel dashboard for cron execution history
+- Ensure project is deployed (crons only run in production)
 
 ---
 
@@ -213,6 +249,7 @@ await supabase
 
 ### Version Checker
 - Uses anonymous Supabase key (read-only for most tables)
+- Optional `CRON_SECRET` to prevent unauthorized triggers
 - Respects robots.txt and rate limits
 - Timeout after 30 seconds per website
 - No user data exposed in logs
@@ -227,12 +264,17 @@ await supabase
 
 ## 📊 Monitoring
 
-### Netlify Function Logs
+### Vercel Function Logs
 
 View version check results:
-1. Netlify Dashboard → Functions
+1. Vercel Dashboard → Functions
 2. Select `check-versions`
 3. View logs for each execution
+
+**CLI monitoring:**
+```bash
+vercel logs /api/check-versions --follow
+```
 
 ### Supabase Logs
 
@@ -243,7 +285,20 @@ Monitor database changes:
 
 ---
 
-## 🚀 Future Enhancements
+## 🚀 Vercel Deployment Checklist
+
+- [ ] Push code to GitHub
+- [ ] Connect repo to Vercel
+- [ ] Set environment variables in Vercel dashboard
+- [ ] Verify `vercel.json` is in project root
+- [ ] Deploy to production
+- [ ] Check cron jobs are scheduled (Vercel → Functions → Cron)
+- [ ] Test manual trigger: `/api/trigger-version-check`
+- [ ] Monitor first cron execution
+
+---
+
+## 💡 Future Enhancements
 
 - [ ] Email notifications when new versions detected
 - [ ] Webhook notifications for version updates
@@ -253,6 +308,40 @@ Monitor database changes:
 - [ ] Automatic category detection using AI
 - [ ] GitHub integration for software with GitHub releases
 - [ ] Custom scraping rules per software
+
+---
+
+## 🔧 Advanced Configuration
+
+### Custom Timeout
+
+Edit `vercel.json`:
+```json
+{
+  "functions": {
+    "api/check-versions.ts": {
+      "maxDuration": 60
+    }
+  }
+}
+```
+
+### Multiple Cron Jobs
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/check-versions",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cleanup-old-data",
+      "schedule": "0 0 * * 0"
+    }
+  ]
+}
+```
 
 ---
 
@@ -277,7 +366,7 @@ Monitor database changes:
 
 If you encounter issues:
 
-1. Check Netlify function logs
+1. Check Vercel function logs
 2. Verify environment variables are set
 3. Test URLs manually in browser
 4. Create GitHub issue with details
@@ -285,4 +374,4 @@ If you encounter issues:
 ---
 
 **Last Updated:** 2025-11-29
-**Version:** 1.0.0
+**Version:** 2.0.0 (Vercel)

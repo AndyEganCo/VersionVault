@@ -1,4 +1,4 @@
-import type { Config } from "@netlify/functions";
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import * as cheerio from 'cheerio';
 
@@ -161,8 +161,14 @@ async function checkSoftwareVersion(software: Software): Promise<{
   }
 }
 
-export default async (req: Request) => {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('Starting automated version check...');
+
+  // Verify cron secret for security (optional but recommended)
+  const authHeader = req.headers.authorization;
+  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
 
   try {
     // Fetch all software with version URLs
@@ -173,18 +179,12 @@ export default async (req: Request) => {
 
     if (fetchError) {
       console.error('Error fetching software:', fetchError);
-      return new Response(JSON.stringify({ error: fetchError.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(500).json({ error: fetchError.message });
     }
 
     if (!softwareList || softwareList.length === 0) {
       console.log('No software found to check');
-      return new Response(JSON.stringify({ message: 'No software to check' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return res.status(200).json({ message: 'No software to check' });
     }
 
     console.log(`Checking ${softwareList.length} software entries...`);
@@ -209,28 +209,18 @@ export default async (req: Request) => {
 
     console.log(`Version check complete: ${successful} successful, ${failed} failed, ${updated} updated`);
 
-    return new Response(JSON.stringify({
+    return res.status(200).json({
       success: true,
       checked: results.length,
       successful,
       failed,
       updated,
       results
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
     console.error('Fatal error in version checker:', error);
-    return new Response(JSON.stringify({
+    return res.status(500).json({
       error: error instanceof Error ? error.message : 'Unknown error'
-    }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
     });
   }
-};
-
-export const config: Config = {
-  schedule: "@daily" // Run once per day at midnight
-};
+}
