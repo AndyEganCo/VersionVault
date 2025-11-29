@@ -1,5 +1,6 @@
-# Netlify redirects file
-# This ensures SPA routing works correctly
+# Netlify redirects file for SPA routing
+# This file will be copied to dist/ during build
 
-# Redirect all non-file requests to index.html for client-side routing
+# SPA fallback - serve index.html for all routes
+# This allows client-side routing (React Router) to work
 /*    /index.html   200

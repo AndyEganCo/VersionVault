@@ -5,12 +5,6 @@
 [build.environment]
   NODE_VERSION = "20"
 
-# SPA fallback - this must come last
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
 [dev]
   command = "npm run dev"
   port = 5173
