@@ -4,15 +4,18 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { Navigate } from 'react-router-dom';
 import { useSoftwareList } from '@/lib/software/hooks';
+import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ExternalLink, Search } from 'lucide-react';
+import type { Software } from '@/lib/software/types';
 
 export function Home() {
   const { user, loading } = useAuth();
   const { software, loading: softwareLoading } = useSoftwareList();
   const [search, setSearch] = useState('');
+  const [selectedSoftware, setSelectedSoftware] = useState<Software | null>(null);
 
   // If logged in, redirect to dashboard
   if (loading) {
@@ -83,7 +86,11 @@ export function Home() {
             {filteredSoftware.length > 0 ? (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {filteredSoftware.map((item) => (
-                  <Card key={item.id}>
+                  <Card
+                    key={item.id}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => setSelectedSoftware(item)}
+                  >
                     <CardHeader>
                       <div className="flex items-start justify-between">
                         <div className="space-y-1">
@@ -108,15 +115,9 @@ export function Home() {
                           </span>
                         </div>
                       )}
-                      <a
-                        href={item.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-sm text-primary hover:underline pt-2"
-                      >
-                        Visit Website
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
+                      <p className="text-xs text-muted-foreground pt-2">
+                        Click to view details
+                      </p>
                     </CardContent>
                   </Card>
                 ))}
@@ -140,6 +141,14 @@ export function Home() {
               </Button>
             </div>
           </div>
+        )}
+
+        {selectedSoftware && (
+          <SoftwareDetailModal
+            open={!!selectedSoftware}
+            onOpenChange={(open) => !open && setSelectedSoftware(null)}
+            software={selectedSoftware}
+          />
         )}
       </div>
     </div>

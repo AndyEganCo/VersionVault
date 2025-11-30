@@ -2,7 +2,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDate } from '@/lib/date';
 import type { Software } from '@/lib/software/types';
 import { useState } from 'react';
-import { ReleaseNotesDialog } from '../software/release-notes/dialog';
+import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
 
 export type UpdateListProps = {
   updates: Software[];
@@ -10,7 +10,6 @@ export type UpdateListProps = {
 };
 
 export function UpdateList({ updates, loading }: UpdateListProps) {
-  const [showReleaseNotes, setShowReleaseNotes] = useState(false);
   const [selectedSoftware, setSelectedSoftware] = useState<Software | null>(null);
 
   if (loading) {
@@ -36,12 +35,9 @@ export function UpdateList({ updates, loading }: UpdateListProps) {
       <ScrollArea className="h-[400px] pr-4">
         <div className="space-y-6">
           {updates.map((software) => (
-            <div 
-              onClick={() => {
-                setSelectedSoftware(software);
-                setShowReleaseNotes(true);
-              }}
-              className="flex items-center cursor-pointer" 
+            <div
+              onClick={() => setSelectedSoftware(software)}
+              className="flex items-center cursor-pointer"
               key={software.id}
             >
               <div className="ml-4 space-y-1">
@@ -63,11 +59,10 @@ export function UpdateList({ updates, loading }: UpdateListProps) {
       </ScrollArea>
 
       {selectedSoftware && (
-        <ReleaseNotesDialog
-          open={showReleaseNotes}
-          onOpenChange={setShowReleaseNotes}
-          softwareName={selectedSoftware.name}
-          softwareId={selectedSoftware.id}
+        <SoftwareDetailModal
+          open={!!selectedSoftware}
+          onOpenChange={(open) => !open && setSelectedSoftware(null)}
+          software={selectedSoftware}
         />
       )}
     </>

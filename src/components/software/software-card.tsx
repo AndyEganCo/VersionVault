@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/auth-context';
-import { ReleaseNotesDialog } from './release-notes/dialog';
+import { SoftwareDetailModal } from './software-detail-modal';
 
 import {
   Card,
@@ -20,7 +20,7 @@ interface SoftwareCardProps {
 
 export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) {
   const { user } = useAuth();
-  const [showReleaseNotes, setShowReleaseNotes] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   const handleTrackingChange = async (_e: unknown | null, checked: boolean) => {
     await onTrackingChange(software.id, checked);
@@ -29,9 +29,9 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
   return (
     <>
       <Card>
-        <div 
-          className="cursor-pointer" 
-          onClick={() => setShowReleaseNotes(true)}
+        <div
+          className="cursor-pointer"
+          onClick={() => setShowDetails(true)}
         >
           <CardHeader className="pb-3">
             <div className="space-y-1">
@@ -103,11 +103,12 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
         </CardContent>
       </Card>
 
-      <ReleaseNotesDialog
-        open={showReleaseNotes}
-        onOpenChange={setShowReleaseNotes}
-        softwareName={software.name}
-        softwareId={software.id}
+      <SoftwareDetailModal
+        open={showDetails}
+        onOpenChange={setShowDetails}
+        software={software}
+        isTracked={software.tracked}
+        onTrackingChange={(tracked) => onTrackingChange(software.id, tracked)}
       />
     </>
   );
