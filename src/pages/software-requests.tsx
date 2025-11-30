@@ -20,9 +20,21 @@ export function SoftwareRequests() {
   const { requests, loading, updateRequestStatus, deleteRequest } = useSoftwareRequests();
 
   const handleApprove = async (id: string) => {
+    // Find the request to get its details
+    const request = requests.find(r => r.id === id);
+    if (!request) {
+      toast.error('Request not found');
+      return;
+    }
+
+    // Confirm with admin
+    if (!confirm(`Approve "${request.name}" and add it to the software tracking list?`)) {
+      return;
+    }
+
     const success = await updateRequestStatus(id, 'approved');
     if (success) {
-      toast.success('Request approved');
+      toast.success('Request approved! Remember to add this software to the tracking list via Manage Software.');
     } else {
       toast.error('Failed to approve request');
     }
@@ -150,6 +162,27 @@ export function SoftwareRequests() {
                     >
                       <X className="h-4 w-4" />
                       Reject
+                    </Button>
+                  </div>
+                )}
+
+                {isAdmin && request.status === 'approved' && (
+                  <div className="border-t pt-4 mt-4 bg-green-50 dark:bg-green-950 p-3 rounded">
+                    <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">
+                      ✅ Approved - Next step: Add to software tracking
+                    </p>
+                    <p className="text-xs text-green-700 dark:text-green-300 mb-2">
+                      Go to Manage Software and add this manually with the details above.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      asChild
+                      className="text-xs"
+                    >
+                      <a href="/admin/software">
+                        Open Manage Software →
+                      </a>
                     </Button>
                   </div>
                 )}
