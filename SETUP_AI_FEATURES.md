@@ -86,24 +86,21 @@ It analyzes this information and returns:
 
 If AI fails (no API key, network error, etc.), it falls back to:
 - **Manufacturer:** Extracted from domain name (e.g., "adobe.com" → "Adobe")
-- **Category:** "Other"
+- **Category:** "Show Control"
 
 The approval will still work, just with less accurate data.
 
 ## Available Categories
 
 The AI chooses from these categories:
-- Audio
-- Video
-- Presentation
-- Productivity
-- Design
-- Development
-- Utilities
-- Media
-- Communication
-- Security
-- Other
+- Audio Production
+- Video Production
+- Presentation & Playback
+- Lighting Control
+- Show Control
+- Design & Planning
+- Network & Control
+- Project Management
 
 ## Cost Information
 

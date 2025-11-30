@@ -23,7 +23,7 @@ export async function extractSoftwareInfo(
   try {
     const prompt = `You are a software information expert. Given the following software details, extract:
 1. The manufacturer/company name
-2. The software category (choose from: Audio, Video, Presentation, Productivity, Design, Development, Utilities, Media, Communication, Security, Other)
+2. The software category (choose EXACTLY from: Audio Production, Video Production, Presentation & Playback, Lighting Control, Show Control, Design & Planning, Network & Control, Project Management)
 
 Software Details:
 - Name: ${name}
@@ -39,8 +39,8 @@ Respond in JSON format:
 
 Guidelines:
 - For manufacturer, extract from the website domain or use common knowledge
-- For category, choose the most appropriate one from the list above
-- If uncertain, make your best educated guess`;
+- For category, choose the EXACT category name from the list above (e.g., "Audio Production" not "Audio")
+- If uncertain about category, default to "Show Control"`;
 
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -95,12 +95,12 @@ function extractFromDomain(website: string): ExtractedSoftwareInfo {
 
     return {
       manufacturer,
-      category: 'Other' // Default category
+      category: 'Show Control' // Default category
     };
   } catch {
     return {
       manufacturer: 'Unknown',
-      category: 'Other'
+      category: 'Show Control'
     };
   }
 }
