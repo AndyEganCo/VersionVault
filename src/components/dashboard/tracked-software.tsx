@@ -85,6 +85,14 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
                 <h3 className="font-semibold text-sm leading-tight truncate group-hover:underline flex-1">
                   {softwareItem.name}
                 </h3>
+                <Switch
+                  checked={true}
+                  onCheckedChange={(checked) => {
+                    handleUntrack(softwareItem.id);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="scale-75 origin-top-right"
+                />
               </div>
 
               {softwareItem.current_version && (
@@ -98,17 +106,6 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
                   {formatDate(softwareItem.release_date)}
                 </div>
               )}
-
-              <div className="flex items-center justify-between pt-2 border-t">
-                <span className="text-xs text-muted-foreground">Tracking</span>
-                <Switch
-                  checked={true}
-                  onCheckedChange={(checked) => {
-                    handleUntrack(softwareItem.id);
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
             </CardContent>
           </Card>
         ))}
