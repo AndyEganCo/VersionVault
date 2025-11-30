@@ -2,7 +2,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { UpdateList } from './recent-updates/update-list';
 import { useRecentUpdates } from '@/lib/software/hooks';
 
-export function RecentUpdates() {
+interface RecentUpdatesProps {
+  refreshTracking: () => Promise<void>;
+  trackedIds: Set<string>;
+}
+
+export function RecentUpdates({ refreshTracking, trackedIds }: RecentUpdatesProps) {
   const { updates, loading } = useRecentUpdates();
 
   return (
@@ -11,7 +16,7 @@ export function RecentUpdates() {
         <CardTitle>Recent Updates</CardTitle>
       </CardHeader>
       <CardContent>
-        <UpdateList updates={updates} loading={loading} />
+        <UpdateList updates={updates} loading={loading} refreshTracking={refreshTracking} trackedIds={trackedIds} />
       </CardContent>
     </Card>
   );

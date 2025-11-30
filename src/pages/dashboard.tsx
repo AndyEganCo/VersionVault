@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { RecentUpdates } from '@/components/recent-updates';
 import { Metrics } from '@/components/dashboard/metrics';
 import { TrackedSoftware } from '@/components/dashboard/tracked-software';
@@ -8,8 +7,7 @@ import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks';
 
 export function Dashboard() {
   const { updates } = useRecentUpdates();
-  const { trackedIds } = useTrackedSoftware();
-  const [updateKey, setUpdateKey] = useState(0);
+  const { trackedIds, refreshTracking } = useTrackedSoftware();
 
   const trackedCount = trackedIds.size;
 
@@ -32,8 +30,8 @@ export function Dashboard() {
         majorUpdates={updates.filter(s => s.release_notes?.[0]?.type === 'major').length}
       />
       <div className="space-y-12">
-        <TrackedSoftware key={updateKey} onUpdate={() => setUpdateKey(k => k + 1)} />
-        <RecentUpdates />
+        <TrackedSoftware refreshTracking={refreshTracking} trackedIds={trackedIds} />
+        <RecentUpdates refreshTracking={refreshTracking} trackedIds={trackedIds} />
       </div>
     </PageLayout>
   );
