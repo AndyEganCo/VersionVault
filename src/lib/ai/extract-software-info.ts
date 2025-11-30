@@ -19,8 +19,10 @@ export interface ExtractedSoftwareInfo {
 async function fetchWebpageContent(url: string): Promise<string> {
   try {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    if (!supabaseUrl) {
-      console.warn('VITE_SUPABASE_URL not configured, skipping webpage fetch');
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      console.warn('VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY not configured, skipping webpage fetch');
       return '';
     }
 
@@ -30,6 +32,7 @@ async function fetchWebpageContent(url: string): Promise<string> {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
       },
       body: JSON.stringify({ url })
     });
