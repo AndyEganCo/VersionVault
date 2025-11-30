@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useSoftwareList, useTrackedSoftware } from '@/lib/software/hooks';
 import { toggleSoftwareTracking } from '@/lib/software/tracking';
@@ -17,6 +17,13 @@ export function TrackedSoftware() {
   const [selectedSoftware, setSelectedSoftware] = useState<Software | null>(null);
 
   const trackedSoftware = software.filter((s) => trackedIds.has(s.id));
+
+  // Close modal if the selected software is no longer tracked
+  useEffect(() => {
+    if (selectedSoftware && !trackedIds.has(selectedSoftware.id)) {
+      setSelectedSoftware(null);
+    }
+  }, [trackedIds, selectedSoftware]);
 
   const handleUntrack = async (softwareId: string) => {
     if (!user) return;

@@ -1,7 +1,7 @@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDate } from '@/lib/date';
 import type { Software } from '@/lib/software/types';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
 import { useTrackedSoftware } from '@/lib/software/hooks';
 
@@ -13,6 +13,16 @@ export type UpdateListProps = {
 export function UpdateList({ updates, loading }: UpdateListProps) {
   const [selectedSoftware, setSelectedSoftware] = useState<Software | null>(null);
   const { trackedIds, refreshTracking } = useTrackedSoftware();
+
+  // Filter to only show tracked software
+  const trackedUpdates = updates.filter(u => trackedIds.has(u.id));
+
+  // Close modal if the selected software is no longer tracked
+  useEffect(() => {
+    if (selectedSoftware && !trackedIds.has(selectedSoftware.id)) {
+      setSelectedSoftware(null);
+    }
+  }, [trackedIds, selectedSoftware]);
 
   if (loading) {
     return (
@@ -36,7 +46,7 @@ export function UpdateList({ updates, loading }: UpdateListProps) {
     <>
       <ScrollArea className="h-[400px] pr-4">
         <div className="space-y-6">
-          {updates.map((software) => (
+          {trackedUpdates.map((software) => (
             <div
               onClick={() => setSelectedSoftware(software)}
               className="flex items-center cursor-pointer"
