@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, Check, FileText, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink } from 'lucide-react';
+import { Pencil, Trash2, Check, FileText, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, RefreshCw } from 'lucide-react';
 import { EditSoftwareDialog } from './edit-software-dialog';
 import { DeleteSoftwareDialog } from './delete-software-dialog';
 import type { Software } from '@/lib/software/types';
@@ -17,6 +17,7 @@ import { updateSoftware } from '@/lib/software/admin';
 import { toast } from 'sonner';
 import { formatDate } from '@/lib/date';
 import { ReleaseNotesDialog } from './release-notes-dialog';
+import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
 
 type SoftwareTableProps = {
   data: Software[];
@@ -59,6 +60,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
   const [editingSoftware, setEditingSoftware] = useState<Software | null>(null);
   const [deletingSoftware, setDeletingSoftware] = useState<Software | null>(null);
   const [addingNotesTo, setAddingNotesTo] = useState<Software | null>(null);
+  const [checkingVersion, setCheckingVersion] = useState<Set<string>>(new Set());
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
@@ -89,12 +91,61 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
       await updateSoftware(software.id, {
         last_checked: now
       });
-      
+
       await onUpdate();
       toast.success('Last checked date updated');
     } catch (error) {
       console.error('Error updating last checked date:', error);
       toast.error('Failed to update last checked date');
+    }
+  };
+
+  const handleCheckVersion = async (software: Software) => {
+    if (!software.version_website) {
+      toast.error('No version website configured for this software');
+      return;
+    }
+
+    // Add to checking set
+    setCheckingVersion(prev => new Set(prev).add(software.id));
+    const loadingToast = toast.loading(`Checking version for ${software.name}...`);
+
+    try {
+      // Extract version info using AI
+      const extracted = await extractSoftwareInfo(
+        software.name,
+        software.website,
+        software.version_website,
+        `Current version: ${software.current_version || 'unknown'}`
+      );
+
+      // Update software with new version info
+      await updateSoftware(software.id, {
+        current_version: extracted.currentVersion || software.current_version,
+        release_date: extracted.releaseDate || software.release_date,
+        last_checked: new Date().toISOString()
+      });
+
+      await onUpdate();
+
+      if (extracted.currentVersion) {
+        toast.success(
+          `Version check complete!\nVersion: ${extracted.currentVersion}${extracted.releaseDate ? `\nReleased: ${extracted.releaseDate}` : ''}`,
+          { id: loadingToast, duration: 5000 }
+        );
+      } else {
+        toast.warning('Version check complete, but no version found on the page', { id: loadingToast });
+      }
+    } catch (error) {
+      console.error('Error checking version:', error);
+      toast.error('Failed to check version. Please try again.', { id: loadingToast });
+    } finally {
+      // Remove from checking set
+      setCheckingVersion(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(software.id);
+        return newSet;
+      });
     }
   };
 
@@ -187,20 +238,31 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                 </TableCell>
                 <TableCell className="text-right flex justify-end items-center gap-1">
                   {software.version_website && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      asChild
-                      title="Open version webpage"
-                    >
-                      <a
-                        href={software.version_website}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        asChild
+                        title="Open version webpage"
                       >
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </Button>
+                        <a
+                          href={software.version_website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleCheckVersion(software)}
+                        disabled={checkingVersion.has(software.id)}
+                        title="Check for new version"
+                      >
+                        <RefreshCw className={`h-4 w-4 ${checkingVersion.has(software.id) ? 'animate-spin' : ''}`} />
+                      </Button>
+                    </>
                   )}
                   <Button
                     variant="ghost"

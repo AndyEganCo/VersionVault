@@ -46,10 +46,13 @@ export function RequestSoftwareModal(): JSX.Element {
         .from('software_requests')
         .insert([
           {
-            ...formData,
-            userId: user?.id,
+            name: formData.name,
+            website: formData.website,
+            version_url: formData.versionUrl,
+            description: formData.description || null,
+            user_id: user?.id,
             status: 'pending',
-            createdAt: new Date().toISOString(),
+            created_at: new Date().toISOString(),
           },
         ]);
 

@@ -14,14 +14,13 @@ export function MainNav({
       {...props}
     >
       <NavLink
-        to="/"
+        to="/dashboard"
         className={({ isActive }) =>
           cn(
             'text-sm font-medium transition-colors hover:text-primary',
             isActive ? 'text-primary' : 'text-muted-foreground'
           )
         }
-        end
       >
         Dashboard
       </NavLink>
@@ -36,6 +35,17 @@ export function MainNav({
       >
         Software
       </NavLink>
+      <NavLink
+        to="/requests"
+        className={({ isActive }) =>
+          cn(
+            'text-sm font-medium transition-colors hover:text-primary',
+            isActive ? 'text-primary' : 'text-muted-foreground'
+          )
+        }
+      >
+        Requests
+      </NavLink>
       {isAdmin && (
         <>
           <NavLink
@@ -48,6 +58,17 @@ export function MainNav({
             }
           >
             Manage Software
+          </NavLink>
+          <NavLink
+            to="/admin/users"
+            className={({ isActive }) =>
+              cn(
+                'text-sm font-medium transition-colors hover:text-primary',
+                isActive ? 'text-primary' : 'text-muted-foreground'
+              )
+            }
+          >
+            Manage Users
           </NavLink>
         </>
       )}

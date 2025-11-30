@@ -9,8 +9,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { softwareCategories } from '@/data/software-categories';
 import { toast } from 'sonner';
-import { createSoftware } from '@/lib/software/admin';
+import { supabase } from '@/lib/supabase';
 
 type AddSoftwareDialogProps = {
   open: boolean;
@@ -21,13 +22,19 @@ type AddSoftwareDialogProps = {
 type FormData = {
   name: string;
   website: string;
+  category: string;
+  manufacturer: string;
+  version_website: string;
 };
 
 export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftwareDialogProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<FormData>({
     name: '',
-    website: ''
+    website: '',
+    category: 'Show Control',
+    manufacturer: '',
+    version_website: ''
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,17 +43,32 @@ export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftware
 
     try {
       // Generate an ID from the name
-      const id = formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-      
-      await createSoftware({
-        id,
-        name: formData.name,
-        website: formData.website
-      });
-      
+      const id = crypto.randomUUID();
+
+      const { error } = await supabase
+        .from('software')
+        .insert([{
+          id,
+          name: formData.name,
+          website: formData.website,
+          category: formData.category,
+          manufacturer: formData.manufacturer,
+          version_website: formData.version_website || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }]);
+
+      if (error) throw error;
+
       await onSuccess();
       onOpenChange(false);
-      setFormData({ name: '', website: '' });
+      setFormData({
+        name: '',
+        website: '',
+        category: 'Show Control',
+        manufacturer: '',
+        version_website: ''
+      });
       toast.success('Software added successfully');
     } catch (error) {
       console.error('Error adding software:', error);
@@ -57,7 +79,13 @@ export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftware
   };
 
   const handleClose = () => {
-    setFormData({ name: '', website: '' });
+    setFormData({
+      name: '',
+      website: '',
+      category: 'Show Control',
+      manufacturer: '',
+      version_website: ''
+    });
     onOpenChange(false);
   };
 
@@ -67,7 +95,7 @@ export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftware
         <DialogHeader>
           <DialogTitle>Add New Software</DialogTitle>
           <DialogDescription>
-            Enter the software name and website URL. The system will automatically detect other details.
+            Enter the software details to start tracking it.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -82,6 +110,35 @@ export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftware
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="category">Category</Label>
+            <Input
+              id="category"
+              list="category-suggestions-add"
+              value={formData.category}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              placeholder="Type or select a category"
+              required
+            />
+            <datalist id="category-suggestions-add">
+              {Object.values(softwareCategories).map((category) => (
+                <option key={category} value={category} />
+              ))}
+            </datalist>
+            <p className="text-xs text-muted-foreground">
+              Select from suggestions or type a custom category
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="manufacturer">Manufacturer</Label>
+            <Input
+              id="manufacturer"
+              value={formData.manufacturer}
+              onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
+              placeholder="e.g. Renewed Vision"
+              required
+            />
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="website">Website</Label>
             <Input
               id="website"
@@ -90,6 +147,16 @@ export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftware
               onChange={(e) => setFormData({ ...formData, website: e.target.value })}
               placeholder="https://example.com"
               required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="version_website">Version Webpage (Optional)</Label>
+            <Input
+              id="version_website"
+              type="url"
+              value={formData.version_website}
+              onChange={(e) => setFormData({ ...formData, version_website: e.target.value })}
+              placeholder="https://example.com/downloads"
             />
           </div>
           <div className="flex justify-end space-x-2">

@@ -8,13 +8,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { softwareCategories } from '@/data/software-categories';
 import { toast } from 'sonner';
 import { updateSoftware } from '@/lib/software/admin';
@@ -86,22 +79,22 @@ export function EditSoftwareDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="category">Category</Label>
-            <Select
+            <Input
+              id="category"
+              list="category-suggestions"
               value={formData.category}
-              onValueChange={(value) => setFormData({ ...formData, category: value })}
+              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              placeholder="Type or select a category"
               required
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.values(softwareCategories).map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
+            <datalist id="category-suggestions">
+              {Object.values(softwareCategories).map((category) => (
+                <option key={category} value={category} />
+              ))}
+            </datalist>
+            <p className="text-xs text-muted-foreground">
+              Select from suggestions or type a custom category
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="manufacturer">Manufacturer</Label>
