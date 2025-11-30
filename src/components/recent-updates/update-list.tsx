@@ -3,16 +3,16 @@ import { formatDate } from '@/lib/date';
 import type { Software } from '@/lib/software/types';
 import { useState, useEffect } from 'react';
 import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
-import { useTrackedSoftware } from '@/lib/software/hooks';
 
 export type UpdateListProps = {
   updates: Software[];
   loading: boolean;
+  refreshTracking: () => Promise<void>;
+  trackedIds: Set<string>;
 };
 
-export function UpdateList({ updates, loading }: UpdateListProps) {
+export function UpdateList({ updates, loading, refreshTracking, trackedIds }: UpdateListProps) {
   const [selectedSoftware, setSelectedSoftware] = useState<Software | null>(null);
-  const { trackedIds, refreshTracking } = useTrackedSoftware();
 
   // Filter to only show tracked software
   const trackedUpdates = updates.filter(u => trackedIds.has(u.id));

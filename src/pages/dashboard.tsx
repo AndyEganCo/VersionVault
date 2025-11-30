@@ -7,7 +7,7 @@ import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks';
 
 export function Dashboard() {
   const { updates } = useRecentUpdates();
-  const { trackedIds } = useTrackedSoftware();
+  const { trackedIds, refreshTracking } = useTrackedSoftware();
 
   const trackedCount = trackedIds.size;
 
@@ -30,8 +30,8 @@ export function Dashboard() {
         majorUpdates={updates.filter(s => s.release_notes?.[0]?.type === 'major').length}
       />
       <div className="space-y-12">
-        <TrackedSoftware />
-        <RecentUpdates />
+        <TrackedSoftware refreshTracking={refreshTracking} trackedIds={trackedIds} />
+        <RecentUpdates refreshTracking={refreshTracking} trackedIds={trackedIds} />
       </div>
     </PageLayout>
   );

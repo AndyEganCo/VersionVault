@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { useSoftwareList, useTrackedSoftware } from '@/lib/software/hooks';
+import { useSoftwareList } from '@/lib/software/hooks';
 import { toggleSoftwareTracking } from '@/lib/software/tracking';
 import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,13 +10,18 @@ import { formatDate } from '@/lib/date';
 import { toast } from 'sonner';
 import { Software } from '@/lib/software/types';
 
-export function TrackedSoftware() {
+interface TrackedSoftwareProps {
+  refreshTracking: () => Promise<void>;
+  trackedIds: Set<string>;
+}
+
+export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftwareProps) {
   const { user } = useAuth();
   const { software, loading: softwareLoading, refreshSoftware } = useSoftwareList();
-  const { trackedIds, loading: trackingLoading, refreshTracking } = useTrackedSoftware();
   const [selectedSoftware, setSelectedSoftware] = useState<Software | null>(null);
 
   const trackedSoftware = software.filter((s) => trackedIds.has(s.id));
+  const loading = softwareLoading;
 
   // Close modal if the selected software is no longer tracked
   useEffect(() => {
@@ -34,8 +39,6 @@ export function TrackedSoftware() {
       toast.success('Software untracked');
     }
   };
-
-  const loading = softwareLoading || trackingLoading;
 
   if (loading) {
     return (
