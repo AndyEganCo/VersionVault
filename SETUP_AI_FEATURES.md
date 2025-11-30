@@ -15,7 +15,24 @@ This eliminates manual data entry and ensures consistency!
 
 ## Setup Instructions
 
-### Step 1: Get an OpenAI API Key
+### Step 1: Deploy the Edge Function (Required for Version Extraction)
+
+To extract version information from webpages, you need to deploy the Supabase Edge Function that bypasses CORS restrictions.
+
+**Quick setup:**
+```bash
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
+supabase functions deploy fetch-webpage
+```
+
+**📖 For detailed instructions, see [SETUP_EDGE_FUNCTION.md](./SETUP_EDGE_FUNCTION.md)**
+
+Without this Edge Function:
+- ✅ Manufacturer and category extraction will still work
+- ❌ Version and release date extraction will be skipped (CORS errors)
+
+### Step 2: Get an OpenAI API Key
 
 1. Go to https://platform.openai.com/api-keys
 2. Sign in or create an account
@@ -24,7 +41,7 @@ This eliminates manual data entry and ensures consistency!
 5. Copy the key (starts with `sk-`)
 6. **IMPORTANT:** Save it somewhere safe - you won't see it again!
 
-### Step 2: Add API Key to Your Project
+### Step 3: Add API Key to Your Project
 
 **For Local Development:**
 
@@ -53,7 +70,7 @@ This eliminates manual data entry and ensures consistency!
 
 4. Redeploy your project
 
-### Step 3: Test It!
+### Step 4: Test It!
 
 1. Log in as an admin
 2. Submit a software request (or use an existing one)

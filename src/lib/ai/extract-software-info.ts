@@ -13,22 +13,33 @@ export interface ExtractedSoftwareInfo {
 }
 
 /**
- * Fetches webpage content for version extraction
+ * Fetches webpage content for version extraction using Supabase Edge Function
+ * This bypasses CORS restrictions by fetching server-side
  */
 async function fetchWebpageContent(url: string): Promise<string> {
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (!supabaseUrl) {
+      console.warn('VITE_SUPABASE_URL not configured, skipping webpage fetch');
+      return '';
     }
-    const html = await response.text();
 
-    // Extract text content (simple approach - removes HTML tags)
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const text = doc.body.textContent || '';
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-webpage`;
 
-    // Limit to first 3000 characters to avoid token limits
-    return text.substring(0, 3000);
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Edge function error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.content || '';
   } catch (error) {
     console.error('Error fetching webpage:', error);
     return '';
