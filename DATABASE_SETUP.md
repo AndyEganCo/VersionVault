@@ -2,9 +2,39 @@
 
 This guide will help you set up the required database tables and columns in Supabase.
 
+## Quick Setup
+
+**IMPORTANT:** Run the SQL file first!
+
+```bash
+# Open the file: SETUP_USERS_TABLE.sql
+# Copy all contents and paste into your Supabase SQL Editor
+# Click "Run" to execute
+```
+
+This will automatically create the `users` table and set up triggers to keep it in sync with `auth.users`.
+
 ## Required Tables
 
-### 1. admin_users Table
+### 1. users Table
+
+This table mirrors `auth.users` in the public schema so you can easily query user information.
+
+**Created automatically by SETUP_USERS_TABLE.sql**
+
+**Columns:**
+- `id` (UUID) - Primary key, references auth.users(id)
+- `email` (TEXT) - User's email address
+- `created_at` (TIMESTAMP) - When the user signed up
+- `updated_at` (TIMESTAMP) - Last update time
+
+**Features:**
+- Automatically syncs with auth.users via triggers
+- Backfills existing users when created
+- Updates email when user changes it
+- Accessible to all authenticated users (needed for admin panel)
+
+### 2. admin_users Table
 
 This table stores which users have admin privileges.
 
@@ -43,7 +73,7 @@ CREATE POLICY "Admins can delete admin_users" ON admin_users
   );
 ```
 
-### 2. software_requests Table
+### 3. software_requests Table
 
 This table stores user requests for tracking new software.
 
@@ -179,50 +209,27 @@ Expected columns:
 2. Try disabling RLS temporarily to test (NOT recommended for production)
 3. Verify user_id matches between auth.users and your requests
 
-### Issue: Can't add new admins
+### Issue: Can't see users in admin panel
 
 **Possible causes:**
-1. Not logged in as an existing admin
-2. RLS policy preventing insert
-3. Invalid user_id format
+1. `users` table not created - Run SETUP_USERS_TABLE.sql
+2. Users table empty - Check if trigger is set up correctly
+3. RLS policy blocking access - Verify policies are in place
 
 **Debug steps:**
-1. Verify you're in the admin_users table
-2. Check that your current user_id is in admin_users
-3. Ensure the user_id you're adding is a valid UUID from auth.users
+1. Check if users table exists: `SELECT * FROM public.users LIMIT 5;`
+2. Check user count: `SELECT COUNT(*) FROM public.users;`
+3. If empty, run the backfill query from SETUP_USERS_TABLE.sql
+4. Verify trigger exists: `SELECT * FROM information_schema.triggers WHERE trigger_name = 'on_auth_user_created';`
 
-## Optional: Create a users Table
+### Issue: New users not appearing in admin panel
 
-If you want to display user emails instead of UUIDs in the admin panel, you can create a users table:
+**Possible causes:**
+1. Trigger not working
+2. RLS blocking the insert
 
-```sql
-CREATE TABLE users (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create a trigger to auto-populate this table when users sign up
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.users (id, email, created_at)
-  VALUES (NEW.id, NEW.email, NEW.created_at);
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
-
--- Backfill existing users
-INSERT INTO public.users (id, email, created_at)
-SELECT id, email, created_at FROM auth.users
-ON CONFLICT (id) DO NOTHING;
-```
-
-Then update the admin_users table to include email via join in your queries.
+**Solution:**
+Re-run the trigger setup from SETUP_USERS_TABLE.sql, especially the `handle_new_user()` function and trigger creation.
 
 ## Questions?
 

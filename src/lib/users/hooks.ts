@@ -1,79 +1,89 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export interface AdminUser {
-  readonly user_id: string;
-  readonly created_at?: string;
+export interface User {
+  readonly id: string;
+  readonly email: string;
+  readonly created_at: string;
+  readonly isAdmin: boolean;
 }
 
-export function useAdminUsers() {
-  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+export function useUsers() {
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchAdminUsers = useCallback(async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Get all admin users - only user_id is guaranteed to exist
+      // Get all users from the public.users table
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, email, created_at')
+        .order('created_at', { ascending: false });
+
+      if (usersError) throw usersError;
+
+      // Get all admin user IDs
       const { data: adminData, error: adminError } = await supabase
         .from('admin_users')
-        .select('*');
+        .select('user_id');
 
       if (adminError) throw adminError;
 
-      setAdminUsers(adminData || []);
+      // Create a Set of admin user IDs for fast lookup
+      const adminIds = new Set(adminData?.map(a => a.user_id) || []);
+
+      // Combine the data
+      const usersWithAdminStatus = (usersData || []).map(user => ({
+        ...user,
+        isAdmin: adminIds.has(user.id)
+      }));
+
+      setUsers(usersWithAdminStatus);
     } catch (error) {
-      console.error('Error fetching admin users:', error);
-      setAdminUsers([]);
+      console.error('Error fetching users:', error);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchAdminUsers();
-  }, [fetchAdminUsers]);
+    fetchUsers();
+  }, [fetchUsers]);
 
-  const addAdmin = async (userId: string) => {
+  const toggleAdmin = async (userId: string, isAdmin: boolean) => {
     try {
-      const { error } = await supabase
-        .from('admin_users')
-        .insert([{
-          user_id: userId
-        }]);
+      if (isAdmin) {
+        // Add to admin_users
+        const { error } = await supabase
+          .from('admin_users')
+          .insert([{ user_id: userId }]);
 
-      if (error) throw error;
+        if (error) throw error;
+      } else {
+        // Remove from admin_users
+        const { error } = await supabase
+          .from('admin_users')
+          .delete()
+          .eq('user_id', userId);
 
-      await fetchAdminUsers();
+        if (error) throw error;
+      }
+
+      await fetchUsers();
       return true;
     } catch (error) {
-      console.error('Error adding admin:', error);
-      return false;
-    }
-  };
-
-  const removeAdmin = async (userId: string) => {
-    try {
-      const { error } = await supabase
-        .from('admin_users')
-        .delete()
-        .eq('user_id', userId);
-
-      if (error) throw error;
-
-      await fetchAdminUsers();
-      return true;
-    } catch (error) {
-      console.error('Error removing admin:', error);
+      console.error('Error toggling admin status:', error);
       return false;
     }
   };
 
   return {
-    adminUsers,
+    users,
     loading,
-    refreshAdminUsers: fetchAdminUsers,
-    addAdmin,
-    removeAdmin,
+    refreshUsers: fetchUsers,
+    toggleAdmin,
   };
 }
