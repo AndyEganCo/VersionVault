@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { useSoftwareRequests } from '@/lib/software/requests-hooks';
@@ -12,12 +13,15 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { Check, X, Trash2, ExternalLink } from 'lucide-react';
+import { Check, X, Trash2, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
+import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
 
 export function SoftwareRequests() {
   const { isAdmin } = useAuth();
   const { requests, loading, updateRequestStatus, deleteRequest } = useSoftwareRequests();
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   const handleApprove = async (id: string) => {
     // Find the request to get its details
@@ -28,15 +32,65 @@ export function SoftwareRequests() {
     }
 
     // Confirm with admin
-    if (!confirm(`Approve "${request.name}" and add it to the software tracking list?`)) {
+    if (!confirm(`Approve "${request.name}" and automatically add it to the software tracking list?\n\nThis will use AI to extract manufacturer and category information.`)) {
       return;
     }
 
-    const success = await updateRequestStatus(id, 'approved');
-    if (success) {
-      toast.success('Request approved! Remember to add this software to the tracking list via Manage Software.');
-    } else {
-      toast.error('Failed to approve request');
+    setProcessingId(id);
+    const loadingToast = toast.loading('Processing request with AI...');
+
+    try {
+      // Step 1: Extract manufacturer and category using AI
+      toast.loading('Extracting software information...', { id: loadingToast });
+      const extracted = await extractSoftwareInfo(
+        request.name,
+        request.website,
+        request.version_url,
+        request.description
+      );
+
+      // Step 2: Add software to tracking list
+      toast.loading('Adding to software tracking list...', { id: loadingToast });
+      const { error: insertError } = await supabase
+        .from('software')
+        .insert([{
+          name: request.name,
+          manufacturer: extracted.manufacturer,
+          website: request.website,
+          version_website: request.version_url,
+          category: extracted.category,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }]);
+
+      if (insertError) {
+        // Check if it's a duplicate
+        if (insertError.code === '23505') {
+          toast.error('This software is already in the tracking list', { id: loadingToast });
+          return;
+        }
+        throw insertError;
+      }
+
+      // Step 3: Update request status to approved
+      toast.loading('Updating request status...', { id: loadingToast });
+      const success = await updateRequestStatus(id, 'approved');
+
+      if (!success) {
+        toast.error('Software added but failed to update request status', { id: loadingToast });
+        return;
+      }
+
+      // Success!
+      toast.success(
+        `✅ ${request.name} approved and added to tracking!\n\nManufacturer: ${extracted.manufacturer}\nCategory: ${extracted.category}`,
+        { id: loadingToast, duration: 5000 }
+      );
+    } catch (error) {
+      console.error('Error approving request:', error);
+      toast.error('Failed to process request. Please try again.', { id: loadingToast });
+    } finally {
+      setProcessingId(null);
     }
   };
 
@@ -150,15 +204,26 @@ export function SoftwareRequests() {
                       size="sm"
                       onClick={() => handleApprove(request.id)}
                       className="flex items-center gap-1"
+                      disabled={processingId === request.id}
                     >
-                      <Check className="h-4 w-4" />
-                      Approve
+                      {processingId === request.id ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-4 w-4" />
+                          Approve & Add
+                        </>
+                      )}
                     </Button>
                     <Button
                       size="sm"
                       variant="destructive"
                       onClick={() => handleReject(request.id)}
                       className="flex items-center gap-1"
+                      disabled={processingId === request.id}
                     >
                       <X className="h-4 w-4" />
                       Reject
@@ -169,21 +234,11 @@ export function SoftwareRequests() {
                 {isAdmin && request.status === 'approved' && (
                   <div className="border-t pt-4 mt-4 bg-green-50 dark:bg-green-950 p-3 rounded">
                     <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">
-                      ✅ Approved - Next step: Add to software tracking
+                      ✅ Approved and added to software tracking
                     </p>
-                    <p className="text-xs text-green-700 dark:text-green-300 mb-2">
-                      Go to Manage Software and add this manually with the details above.
+                    <p className="text-xs text-green-700 dark:text-green-300">
+                      This software is now being tracked. You can view it in the Software page.
                     </p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      asChild
-                      className="text-xs"
-                    >
-                      <a href="/admin/software">
-                        Open Manage Software →
-                      </a>
-                    </Button>
                   </div>
                 )}
 
