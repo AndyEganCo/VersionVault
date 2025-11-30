@@ -60,6 +60,8 @@ export function SoftwareRequests() {
           website: request.website,
           version_website: request.version_url,
           category: extracted.category,
+          current_version: extracted.currentVersion || null,
+          release_date: extracted.releaseDate || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }]);
@@ -83,8 +85,15 @@ export function SoftwareRequests() {
       }
 
       // Success!
+      const successDetails = [
+        `Manufacturer: ${extracted.manufacturer}`,
+        `Category: ${extracted.category}`,
+        extracted.currentVersion && `Version: ${extracted.currentVersion}`,
+        extracted.releaseDate && `Released: ${extracted.releaseDate}`
+      ].filter(Boolean).join('\n');
+
       toast.success(
-        `✅ ${request.name} approved and added to tracking!\n\nManufacturer: ${extracted.manufacturer}\nCategory: ${extracted.category}`,
+        `✅ ${request.name} approved and added to tracking!\n\n${successDetails}`,
         { id: loadingToast, duration: 5000 }
       );
     } catch (error) {

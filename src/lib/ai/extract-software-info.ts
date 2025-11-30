@@ -8,11 +8,35 @@ const openai = new OpenAI({
 export interface ExtractedSoftwareInfo {
   manufacturer: string;
   category: string;
-  suggestedCurrentVersion?: string;
+  currentVersion?: string;
+  releaseDate?: string;
 }
 
 /**
- * Uses OpenAI to extract manufacturer and category information from software details
+ * Fetches webpage content for version extraction
+ */
+async function fetchWebpageContent(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const html = await response.text();
+
+    // Extract text content (simple approach - removes HTML tags)
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const text = doc.body.textContent || '';
+
+    // Limit to first 3000 characters to avoid token limits
+    return text.substring(0, 3000);
+  } catch (error) {
+    console.error('Error fetching webpage:', error);
+    return '';
+  }
+}
+
+/**
+ * Uses OpenAI to extract manufacturer, category, and version information from software details
  */
 export async function extractSoftwareInfo(
   name: string,
@@ -21,9 +45,14 @@ export async function extractSoftwareInfo(
   description?: string
 ): Promise<ExtractedSoftwareInfo> {
   try {
+    // Fetch version webpage content
+    const versionPageContent = await fetchWebpageContent(versionUrl);
+
     const prompt = `You are a software information expert. Given the following software details, extract:
 1. The manufacturer/company name
 2. The software category (choose EXACTLY from: Audio Production, Video Production, Presentation & Playback, Lighting Control, Show Control, Design & Planning, Network & Control, Project Management)
+3. The current version number (if available from the version page)
+4. The release date of the current version (if available, format as YYYY-MM-DD)
 
 Software Details:
 - Name: ${name}
@@ -31,15 +60,23 @@ Software Details:
 - Version URL: ${versionUrl}
 ${description ? `- Description: ${description}` : ''}
 
+Version Page Content (first 3000 chars):
+${versionPageContent || 'No content available'}
+
 Respond in JSON format:
 {
   "manufacturer": "Company Name",
-  "category": "Category"
+  "category": "Category",
+  "currentVersion": "version number or null",
+  "releaseDate": "YYYY-MM-DD or null"
 }
 
 Guidelines:
 - For manufacturer, extract from the website domain or use common knowledge
 - For category, choose the EXACT category name from the list above (e.g., "Audio Production" not "Audio")
+- For currentVersion, look for version numbers in the content (e.g., "v2.1.3", "2024.1", "8.5.2")
+- For releaseDate, look for dates associated with the latest version, format as YYYY-MM-DD
+- If version or date cannot be determined, use null
 - If uncertain about category, default to "Show Control"`;
 
     const completion = await openai.chat.completions.create({
@@ -68,6 +105,14 @@ Guidelines:
     // Validate the response
     if (!extracted.manufacturer || !extracted.category) {
       throw new Error('Invalid response from AI');
+    }
+
+    // Clean up null values
+    if (extracted.currentVersion === null || extracted.currentVersion === 'null') {
+      delete extracted.currentVersion;
+    }
+    if (extracted.releaseDate === null || extracted.releaseDate === 'null') {
+      delete extracted.releaseDate;
     }
 
     return extracted;

@@ -7,7 +7,9 @@ VersionVault uses OpenAI to automatically extract software information when appr
 When an admin approves a software request, AI automatically:
 1. **Extracts the manufacturer name** - Identifies the company/developer from the website
 2. **Determines the category** - Classifies the software into the right category
-3. **Adds to tracking** - Creates the software entry with all information filled in
+3. **Fetches version information** - Scrapes the version webpage and extracts the current version number
+4. **Finds release date** - Identifies when the current version was released
+5. **Adds to tracking** - Creates the software entry with all information filled in
 
 This eliminates manual data entry and ensures consistency!
 
@@ -73,12 +75,15 @@ The AI receives:
 - Website URL
 - Version check URL
 - Description (if provided)
+- **Version webpage content** (fetched automatically)
 
 It analyzes this information and returns:
 ```json
 {
   "manufacturer": "Adobe",
-  "category": "Design"
+  "category": "Design & Planning",
+  "currentVersion": "2024.1.5",
+  "releaseDate": "2024-11-15"
 }
 ```
 
