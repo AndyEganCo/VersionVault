@@ -54,6 +54,7 @@ export function SoftwareRequests() {
       const { error: insertError } = await supabase
         .from('software')
         .insert([{
+          id: crypto.randomUUID(),
           name: request.name,
           manufacturer: extracted.manufacturer,
           website: request.website,
