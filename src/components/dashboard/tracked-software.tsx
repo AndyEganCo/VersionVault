@@ -74,28 +74,18 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         {trackedSoftware.map((softwareItem: Software) => (
           <Card
             key={softwareItem.id}
             className="cursor-pointer hover:shadow-md transition-shadow group"
             onClick={() => setSelectedSoftware(softwareItem)}
           >
-            <CardHeader className="pb-3">
+            <CardContent className="p-3 space-y-2">
               <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm leading-none truncate group-hover:underline">
-                    {softwareItem.name}
-                  </h3>
-                  <p className="text-xs text-muted-foreground truncate">{softwareItem.manufacturer}</p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-start justify-between gap-2">
-                <Badge variant="secondary" className="w-fit">
-                  {softwareItem.category}
-                </Badge>
+                <h3 className="font-semibold text-sm leading-tight truncate group-hover:underline flex-1">
+                  {softwareItem.name}
+                </h3>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -103,7 +93,7 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
                     e.stopPropagation();
                     handleUntrack(softwareItem.id);
                   }}
-                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                  className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive flex-shrink-0"
                   title="Untrack"
                 >
                   <Trash2 className="h-3 w-3" />
@@ -111,29 +101,16 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
               </div>
 
               {softwareItem.current_version && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Version</span>
-                  <Badge variant="outline">{softwareItem.current_version}</Badge>
-                </div>
-              )}
-
-              {softwareItem.last_checked && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Last checked</span>
-                  <span>{formatRelativeDate(softwareItem.last_checked)}</span>
+                <div className="flex items-center justify-between text-xs gap-2">
+                  <span className="text-muted-foreground">v{softwareItem.current_version}</span>
                 </div>
               )}
 
               {softwareItem.release_date && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Released</span>
-                  <span>{formatDate(softwareItem.release_date)}</span>
+                <div className="text-xs text-muted-foreground">
+                  {formatDate(softwareItem.release_date)}
                 </div>
               )}
-
-              <p className="text-xs text-muted-foreground pt-2">
-                Click to view details
-              </p>
             </CardContent>
           </Card>
         ))}
