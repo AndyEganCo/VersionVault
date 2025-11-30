@@ -10,11 +10,7 @@ import { formatDate } from '@/lib/date';
 import { toast } from 'sonner';
 import { Software } from '@/lib/software/types';
 
-interface TrackedSoftwareProps {
-  onUpdate?: () => void;
-}
-
-export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
+export function TrackedSoftware() {
   const { user } = useAuth();
   const { software, loading: softwareLoading, refreshSoftware } = useSoftwareList();
   const { trackedIds, loading: trackingLoading, refreshTracking } = useTrackedSoftware();
@@ -27,8 +23,7 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
 
     const success = await toggleSoftwareTracking(user.id, softwareId, false);
     if (success) {
-      await Promise.all([refreshSoftware(), refreshTracking()]);
-      onUpdate?.();
+      await refreshTracking();
       toast.success('Software untracked');
     }
   };
@@ -119,7 +114,6 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
           isTracked={trackedIds.has(selectedSoftware.id)}
           onTrackingChange={() => {
             refreshTracking();
-            onUpdate?.();
           }}
         />
       )}
