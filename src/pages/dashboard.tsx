@@ -1,12 +1,18 @@
+import { useState } from 'react';
 import { RecentUpdates } from '@/components/recent-updates';
 import { Metrics } from '@/components/dashboard/metrics';
+import { TrackedSoftware } from '@/components/dashboard/tracked-software';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
-import { useRecentUpdates } from '@/lib/software/hooks';
+import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks';
 
 export function Dashboard() {
   const { updates } = useRecentUpdates();
-  
+  const { trackedIds } = useTrackedSoftware();
+  const [updateKey, setUpdateKey] = useState(0);
+
+  const trackedCount = trackedIds.size;
+
   const thisWeeksUpdates = updates.filter(s => {
     if (!s.release_date) return false;
     const date = new Date(s.release_date);
@@ -16,16 +22,19 @@ export function Dashboard() {
 
   return (
     <PageLayout>
-      <PageHeader 
+      <PageHeader
         title="Dashboard"
         description="Monitor your software updates and activity"
       />
-      <Metrics 
-        trackedCount={updates.length}
+      <Metrics
+        trackedCount={trackedCount}
         thisWeeksUpdates={thisWeeksUpdates}
         majorUpdates={updates.filter(s => s.release_notes?.[0]?.type === 'major').length}
       />
-      <RecentUpdates />
+      <div className="space-y-12">
+        <TrackedSoftware key={updateKey} onUpdate={() => setUpdateKey(k => k + 1)} />
+        <RecentUpdates />
+      </div>
     </PageLayout>
   );
 }
