@@ -79,12 +79,10 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
           <Card
             key={softwareItem.id}
             className="cursor-pointer hover:shadow-md transition-shadow group"
+            onClick={() => setSelectedSoftware(softwareItem)}
           >
             <CardHeader className="pb-3">
-              <div
-                className="flex items-start justify-between gap-2 cursor-pointer"
-                onClick={() => setSelectedSoftware(softwareItem)}
-              >
+              <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-sm leading-none truncate group-hover:underline">
                     {softwareItem.name}
@@ -101,7 +99,10 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleUntrack(softwareItem.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleUntrack(softwareItem.id);
+                  }}
                   className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                   title="Untrack"
                 >
