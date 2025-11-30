@@ -6,12 +6,11 @@ export interface SoftwareRequestWithId {
   readonly id: string;
   readonly name: string;
   readonly website: string;
-  readonly versionUrl: string;
+  readonly version_url: string;
   readonly description?: string;
-  readonly userId: string;
+  readonly user_id: string;
   readonly status: 'pending' | 'approved' | 'rejected';
-  readonly createdAt: string;
-  readonly user_email?: string;
+  readonly created_at: string;
 }
 
 export function useSoftwareRequests() {
@@ -34,10 +33,10 @@ export function useSoftwareRequests() {
 
       // If not admin, only show user's own requests
       if (!isAdmin) {
-        query = query.eq('userId', user.id);
+        query = query.eq('user_id', user.id);
       }
 
-      const { data, error } = await query.order('createdAt', { ascending: false });
+      const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
 

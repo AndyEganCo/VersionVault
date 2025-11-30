@@ -19,7 +19,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Terminal className="h-5 w-5" />
               <span className="font-semibold">VersionVault</span>
             </Link>
-            <MainNav />
+            {user && <MainNav />}
             <div className="ml-auto flex items-center gap-2">
               <ModeToggle />
               {user ? (

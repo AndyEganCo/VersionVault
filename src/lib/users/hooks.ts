@@ -1,86 +1,97 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export interface UserWithAdmin {
-  readonly id: string;
+export interface AdminUser {
+  readonly user_id: string;
   readonly email: string;
   readonly created_at: string;
-  readonly isAdmin: boolean;
 }
 
-export function useUsers() {
-  const [users, setUsers] = useState<UserWithAdmin[]>([]);
+export function useAdminUsers() {
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchUsers = useCallback(async () => {
+  const fetchAdminUsers = useCallback(async () => {
     try {
       setLoading(true);
 
-      // Get all users from auth.users
-      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
-
-      if (authError) throw authError;
-
-      // Get all admin users
-      const { data: adminUsers, error: adminError } = await supabase
+      // Get all admin users with their email
+      const { data: adminData, error: adminError } = await supabase
         .from('admin_users')
-        .select('user_id');
+        .select('user_id, email, created_at')
+        .order('created_at', { ascending: false });
 
       if (adminError) throw adminError;
 
-      const adminUserIds = new Set(adminUsers?.map(a => a.user_id) || []);
-
-      const usersWithAdmin = authUsers.map(user => ({
-        id: user.id,
-        email: user.email || '',
-        created_at: user.created_at,
-        isAdmin: adminUserIds.has(user.id),
-      }));
-
-      setUsers(usersWithAdmin);
+      setAdminUsers(adminData || []);
     } catch (error) {
-      console.error('Error fetching users:', error);
-      setUsers([]);
+      console.error('Error fetching admin users:', error);
+      setAdminUsers([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+    fetchAdminUsers();
+  }, [fetchAdminUsers]);
 
-  const toggleAdmin = async (userId: string, isAdmin: boolean) => {
+  const addAdmin = async (email: string) => {
     try {
-      if (isAdmin) {
-        // Add to admin_users
+      // Get user by email first
+      const { data: { user }, error: userError } = await supabase.auth.admin.getUserByEmail(email);
+
+      if (userError || !user) {
+        // If admin API doesn't work, just insert with email
         const { error } = await supabase
           .from('admin_users')
-          .insert([{ user_id: userId }]);
+          .insert([{
+            email: email.toLowerCase(),
+            user_id: null  // Will be populated by trigger when user signs in
+          }]);
 
         if (error) throw error;
       } else {
-        // Remove from admin_users
         const { error } = await supabase
           .from('admin_users')
-          .delete()
-          .eq('user_id', userId);
+          .insert([{
+            user_id: user.id,
+            email: email.toLowerCase()
+          }]);
 
         if (error) throw error;
       }
 
-      await fetchUsers();
+      await fetchAdminUsers();
       return true;
     } catch (error) {
-      console.error('Error toggling admin status:', error);
+      console.error('Error adding admin:', error);
+      return false;
+    }
+  };
+
+  const removeAdmin = async (userId: string) => {
+    try {
+      const { error } = await supabase
+        .from('admin_users')
+        .delete()
+        .eq('user_id', userId);
+
+      if (error) throw error;
+
+      await fetchAdminUsers();
+      return true;
+    } catch (error) {
+      console.error('Error removing admin:', error);
       return false;
     }
   };
 
   return {
-    users,
+    adminUsers,
     loading,
-    refreshUsers: fetchUsers,
-    toggleAdmin,
+    refreshAdminUsers: fetchAdminUsers,
+    addAdmin,
+    removeAdmin,
   };
 }

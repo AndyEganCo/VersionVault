@@ -90,7 +90,7 @@ export function SoftwareRequests() {
                   <div className="space-y-1">
                     <CardTitle>{request.name}</CardTitle>
                     <CardDescription>
-                      Submitted {new Date(request.createdAt).toLocaleDateString()}
+                      Submitted {new Date(request.created_at).toLocaleDateString()}
                     </CardDescription>
                   </div>
                   {getStatusBadge(request.status)}
@@ -113,12 +113,12 @@ export function SoftwareRequests() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium">Version URL:</span>
                     <a
-                      href={request.versionUrl}
+                      href={request.version_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-primary hover:underline flex items-center gap-1"
                     >
-                      {request.versionUrl}
+                      {request.version_url}
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   </div>
