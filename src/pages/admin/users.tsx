@@ -30,7 +30,7 @@ import { toast } from 'sonner';
 export function AdminUsers() {
   const { user, isAdmin } = useAuth();
   const { adminUsers, loading, removeAdmin, addAdmin } = useAdminUsers();
-  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminUserId, setNewAdminUserId] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
   if (!user || !isAdmin) {
@@ -62,18 +62,18 @@ export function AdminUsers() {
 
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAdminEmail.trim()) {
-      toast.error('Please enter an email address');
+    if (!newAdminUserId.trim()) {
+      toast.error('Please enter a user ID');
       return;
     }
 
     setIsAdding(true);
-    const success = await addAdmin(newAdminEmail.trim());
+    const success = await addAdmin(newAdminUserId.trim());
     if (success) {
       toast.success('Admin added successfully');
-      setNewAdminEmail('');
+      setNewAdminUserId('');
     } else {
-      toast.error('Failed to add admin. User may already be an admin.');
+      toast.error('Failed to add admin. User may already be an admin or does not exist.');
     }
     setIsAdding(false);
   };
@@ -95,21 +95,21 @@ export function AdminUsers() {
           <CardHeader>
             <CardTitle>Add New Admin</CardTitle>
             <CardDescription>
-              Grant admin privileges to a user by entering their email address
+              Grant admin privileges to a user by entering their user ID. You can find user IDs in your Supabase auth dashboard.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleAddAdmin} className="flex gap-2">
               <div className="flex-1">
-                <Label htmlFor="email" className="sr-only">
-                  Email Address
+                <Label htmlFor="userId" className="sr-only">
+                  User ID
                 </Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="user@example.com"
-                  value={newAdminEmail}
-                  onChange={(e) => setNewAdminEmail(e.target.value)}
+                  id="userId"
+                  type="text"
+                  placeholder="User ID (UUID)"
+                  value={newAdminUserId}
+                  onChange={(e) => setNewAdminUserId(e.target.value)}
                   disabled={isAdding}
                   required
                 />
@@ -119,6 +119,9 @@ export function AdminUsers() {
                 {isAdding ? 'Adding...' : 'Add Admin'}
               </Button>
             </form>
+            <p className="text-xs text-muted-foreground mt-2">
+              Current user ID: <code className="bg-muted px-1 rounded">{user.id}</code>
+            </p>
           </CardContent>
         </Card>
 
@@ -134,7 +137,7 @@ export function AdminUsers() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
+                  <TableHead>User ID</TableHead>
                   <TableHead>Added</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -150,14 +153,16 @@ export function AdminUsers() {
                 ) : (
                   adminUsers.map((adminUser) => (
                     <TableRow key={adminUser.user_id}>
-                      <TableCell className="font-medium">
-                        {adminUser.email}
+                      <TableCell className="font-medium font-mono text-xs">
+                        {adminUser.user_id}
                         {adminUser.user_id === user.id && (
                           <span className="ml-2 text-xs text-muted-foreground">(you)</span>
                         )}
                       </TableCell>
                       <TableCell>
-                        {new Date(adminUser.created_at).toLocaleDateString()}
+                        {adminUser.created_at
+                          ? new Date(adminUser.created_at).toLocaleDateString()
+                          : 'N/A'}
                       </TableCell>
                       <TableCell>
                         <Badge className="bg-blue-500">

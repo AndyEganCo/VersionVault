@@ -3,8 +3,7 @@ import { supabase } from '@/lib/supabase';
 
 export interface AdminUser {
   readonly user_id: string;
-  readonly email: string;
-  readonly created_at: string;
+  readonly created_at?: string;
 }
 
 export function useAdminUsers() {
@@ -15,11 +14,10 @@ export function useAdminUsers() {
     try {
       setLoading(true);
 
-      // Get all admin users with their email
+      // Get all admin users - only user_id is guaranteed to exist
       const { data: adminData, error: adminError } = await supabase
         .from('admin_users')
-        .select('user_id, email, created_at')
-        .order('created_at', { ascending: false });
+        .select('*');
 
       if (adminError) throw adminError;
 
@@ -36,31 +34,15 @@ export function useAdminUsers() {
     fetchAdminUsers();
   }, [fetchAdminUsers]);
 
-  const addAdmin = async (email: string) => {
+  const addAdmin = async (userId: string) => {
     try {
-      // Get user by email first
-      const { data: { user }, error: userError } = await supabase.auth.admin.getUserByEmail(email);
+      const { error } = await supabase
+        .from('admin_users')
+        .insert([{
+          user_id: userId
+        }]);
 
-      if (userError || !user) {
-        // If admin API doesn't work, just insert with email
-        const { error } = await supabase
-          .from('admin_users')
-          .insert([{
-            email: email.toLowerCase(),
-            user_id: null  // Will be populated by trigger when user signs in
-          }]);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('admin_users')
-          .insert([{
-            user_id: user.id,
-            email: email.toLowerCase()
-          }]);
-
-        if (error) throw error;
-      }
+      if (error) throw error;
 
       await fetchAdminUsers();
       return true;
