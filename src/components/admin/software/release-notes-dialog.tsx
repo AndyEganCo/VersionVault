@@ -56,7 +56,8 @@ export function ReleaseNotesDialog({
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState<string>('');
   const [type, setType] = useState<'major' | 'minor' | 'patch'>('minor');
-  const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [versionHistory, setVersionHistory] = useState<Array<{id: string, version: string, notes: any, type: string, release_date: string}>>([]);
+  const [selectedVersion, setSelectedVersion] = useState<string>('current');
   const [newVersion, setNewVersion] = useState('');
   const [releaseDate, setReleaseDate] = useState(formatDateForInput(new Date().toISOString()));
 
@@ -72,7 +73,11 @@ export function ReleaseNotesDialog({
     async function loadVersionHistory() {
       if (open && software.id) {
         const history = await getVersionHistory(software.id);
-        
+        setVersionHistory(history);
+
+        // Set selected version to current by default
+        setSelectedVersion('current');
+
         const currentVersionEntry = history.find(
           entry => entry.version === software.current_version
         );
@@ -91,7 +96,6 @@ export function ReleaseNotesDialog({
           setNotes('');
           setReleaseDate(formatDateForInput(new Date().toISOString()));
         }
-        setIsCreatingNew(false);
         setNewVersion('');
       }
     }
@@ -100,17 +104,61 @@ export function ReleaseNotesDialog({
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
-    
+
     // Add slashes as user types
     if (value.length >= 4) {
       value = value.slice(0, 2) + '/' + value.slice(2, 4) + '/' + value.slice(4, 8);
     } else if (value.length >= 2) {
       value = value.slice(0, 2) + '/' + value.slice(2);
     }
-    
+
     // Limit to MM/DD/YYYY format
     if (value.length <= 10) {
       setReleaseDate(value);
+    }
+  };
+
+  const handleVersionChange = (value: string) => {
+    setSelectedVersion(value);
+
+    if (value === 'new') {
+      // Creating a new version
+      setNotes('');
+      setType('minor');
+      setReleaseDate(formatDateForInput(new Date().toISOString()));
+      setNewVersion('');
+    } else if (value === 'current') {
+      // Load current version data
+      const currentVersionEntry = versionHistory.find(
+        entry => entry.version === software.current_version
+      );
+
+      if (currentVersionEntry) {
+        setType(currentVersionEntry.type as 'major' | 'minor' | 'patch');
+        const noteText = Array.isArray(currentVersionEntry.notes)
+          ? currentVersionEntry.notes.join('\n')
+          : currentVersionEntry.notes;
+        setNotes(noteText);
+        if (currentVersionEntry.release_date) {
+          setReleaseDate(formatDateForInput(currentVersionEntry.release_date));
+        }
+      }
+    } else {
+      // Load selected version data from history
+      const selectedVersionEntry = versionHistory.find(
+        entry => entry.version === value
+      );
+
+      if (selectedVersionEntry) {
+        setType(selectedVersionEntry.type as 'major' | 'minor' | 'patch');
+        const noteText = Array.isArray(selectedVersionEntry.notes)
+          ? selectedVersionEntry.notes.join('\n')
+          : selectedVersionEntry.notes;
+        setNotes(noteText);
+        if (selectedVersionEntry.release_date) {
+          setReleaseDate(formatDateForInput(selectedVersionEntry.release_date));
+        }
+      }
     }
   };
 
@@ -120,9 +168,20 @@ export function ReleaseNotesDialog({
 
     try {
       const isoDate = parseDateString(releaseDate);
+
+      // Determine which version to use
+      let versionToSave = '';
+      if (selectedVersion === 'new') {
+        versionToSave = newVersion;
+      } else if (selectedVersion === 'current') {
+        versionToSave = software.current_version || '';
+      } else {
+        versionToSave = selectedVersion;
+      }
+
       const success = await addVersionHistory(software.id, {
         software_id: software.id,
-        version: isCreatingNew ? newVersion : (software.current_version || ''),
+        version: versionToSave,
         release_date: new Date(isoDate).toISOString(),
         notes: notes,
         type
@@ -137,11 +196,6 @@ export function ReleaseNotesDialog({
     }
   };
 
-  const handleNewVersionClick = () => {
-    setIsCreatingNew(true);
-    setNotes('');
-    setType('minor');
-  };
 
   const handleExtractFromURL = async () => {
     if (!bulkImportUrl.trim()) {
@@ -302,20 +356,8 @@ export function ReleaseNotesDialog({
           <TabsContent value="manual" className="space-y-4 mt-4">
             <form id="release-notes-form" onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Version</Label>
-              {!isCreatingNew && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleNewVersionClick}
-                >
-                  <Plus className="h-4 w-4 mr-1" />
-                </Button>
-              )}
-            </div>
-            {isCreatingNew ? (
+            <Label>Version</Label>
+            {selectedVersion === 'new' ? (
               <Input
                 value={newVersion}
                 onChange={(e) => setNewVersion(e.target.value)}
@@ -323,10 +365,32 @@ export function ReleaseNotesDialog({
                 required
               />
             ) : (
-              <Input
-                value={software.current_version || ''}
-                disabled
-              />
+              <Select
+                value={selectedVersion}
+                onValueChange={handleVersionChange}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="current">
+                    {software.current_version || 'Current Version'} (Current)
+                  </SelectItem>
+                  {versionHistory
+                    .filter(v => v.version !== software.current_version)
+                    .map((version) => (
+                      <SelectItem key={version.id} value={version.version}>
+                        {version.version}
+                      </SelectItem>
+                    ))}
+                  <SelectItem value="new">
+                    <div className="flex items-center">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create New Version
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
             )}
           </div>
           <div className="space-y-2">
@@ -373,7 +437,6 @@ export function ReleaseNotesDialog({
                 type="button"
                 variant="outline"
                 onClick={() => {
-                  setIsCreatingNew(false);
                   onOpenChange(false);
                 }}
                 disabled={loading}
@@ -381,7 +444,7 @@ export function ReleaseNotesDialog({
                 Cancel
               </Button>
               <Button type="submit" form="release-notes-form" disabled={loading}>
-                {loading ? 'Saving...' : isCreatingNew ? 'Save New Version' : 'Update Release Notes'}
+                {loading ? 'Saving...' : selectedVersion === 'new' ? 'Save New Version' : 'Update Release Notes'}
               </Button>
             </div>
           </TabsContent>
