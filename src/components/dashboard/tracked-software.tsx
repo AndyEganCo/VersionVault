@@ -3,13 +3,12 @@ import { useAuth } from '@/contexts/auth-context';
 import { useSoftwareList, useTrackedSoftware } from '@/lib/software/hooks';
 import { toggleSoftwareTracking } from '@/lib/software/tracking';
 import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { formatRelativeDate, formatDate } from '@/lib/date';
+import { Switch } from '@/components/ui/switch';
+import { formatDate } from '@/lib/date';
 import { toast } from 'sonner';
 import { Software } from '@/lib/software/types';
-import { Trash2 } from 'lucide-react';
 
 interface TrackedSoftwareProps {
   onUpdate?: () => void;
@@ -86,18 +85,6 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
                 <h3 className="font-semibold text-sm leading-tight truncate group-hover:underline flex-1">
                   {softwareItem.name}
                 </h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleUntrack(softwareItem.id);
-                  }}
-                  className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive flex-shrink-0"
-                  title="Untrack"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
               </div>
 
               {softwareItem.current_version && (
@@ -111,6 +98,17 @@ export function TrackedSoftware({ onUpdate }: TrackedSoftwareProps) {
                   {formatDate(softwareItem.release_date)}
                 </div>
               )}
+
+              <div className="flex items-center justify-between pt-2 border-t">
+                <span className="text-xs text-muted-foreground">Tracking</span>
+                <Switch
+                  checked={true}
+                  onCheckedChange={(checked) => {
+                    handleUntrack(softwareItem.id);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
             </CardContent>
           </Card>
         ))}
