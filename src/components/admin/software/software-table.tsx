@@ -15,7 +15,7 @@ import { DeleteSoftwareDialog } from './delete-software-dialog';
 import type { Software } from '@/lib/software/types';
 import { updateSoftware } from '@/lib/software/admin';
 import { toast } from 'sonner';
-import { extractAllVersions, addVersionHistory } from '@/lib/software/api';
+import { addVersionHistory } from '@/lib/software/api';
 import { formatDate } from '@/lib/date';
 import { ReleaseNotesDialog } from './release-notes-dialog';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
@@ -117,57 +117,67 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
 
     // Add to checking set
     setCheckingVersion(prev => new Set(prev).add(software.id));
-    const loadingToast = toast.loading(`Extracting all versions for ${software.name}...`);
+    const loadingToast = toast.loading(`Extracting version info for ${software.name}...`);
 
     try {
-      // Extract ALL versions from the release notes page
-      const versions = await extractAllVersions(software.name, software.version_website);
+      // Extract version info (now includes ALL versions in the versions array)
+      const extracted = await extractSoftwareInfo(
+        software.name,
+        software.website,
+        software.version_website,
+        `Current version: ${software.current_version || 'unknown'}`
+      );
 
-      if (versions.length === 0) {
-        toast.warning('No versions found on the page. Try a different URL or check the page manually.', { id: loadingToast });
-
-        // Still update last_checked
-        await updateSoftware(software.id, {
-          last_checked: new Date().toISOString()
-        });
-        await onUpdate();
-        return;
-      }
-
-      // Save all versions to the database
-      let savedCount = 0;
-      for (const version of versions) {
-        const success = await addVersionHistory(software.id, {
-          software_id: software.id,
-          version: version.version,
-          release_date: version.releaseDate,
-          notes: version.notes,
-          type: version.type
-        });
-
-        if (success) {
-          savedCount++;
-        }
-      }
-
-      // Update last_checked on the software
+      // Update software with latest version info
       await updateSoftware(software.id, {
+        current_version: extracted.currentVersion || software.current_version,
+        release_date: extracted.releaseDate || software.release_date,
         last_checked: new Date().toISOString()
       });
 
+      // Save ALL versions to database if available
+      let savedCount = 0;
+      if (extracted.versions && extracted.versions.length > 0) {
+        for (const version of extracted.versions) {
+          const success = await addVersionHistory(software.id, {
+            software_id: software.id,
+            version: version.version,
+            release_date: version.releaseDate,
+            notes: version.notes,
+            type: version.type
+          });
+
+          if (success) {
+            savedCount++;
+          }
+        }
+      }
+
       await onUpdate();
 
-      // Show success message
+      // Show appropriate message
       if (savedCount > 0) {
+        // Successfully extracted multiple versions
         toast.success(
-          `✅ Version extraction complete!\n\nFound and saved ${savedCount} version${savedCount > 1 ? 's' : ''}:\n${versions.slice(0, 3).map(v => v.version).join(', ')}${versions.length > 3 ? ` and ${versions.length - 3} more` : ''}`,
+          `✅ Version extraction complete!\n\nFound and saved ${savedCount} version${savedCount > 1 ? 's' : ''}:\n${extracted.versions!.slice(0, 3).map(v => v.version).join(', ')}${extracted.versions!.length > 3 ? ` and ${extracted.versions!.length - 3} more` : ''}`,
           { id: loadingToast, duration: 7000 }
         );
+      } else if (extracted.currentVersion) {
+        // Only got latest version, no full version history
+        if (extracted.isJavaScriptPage && extracted.lowContentWarning) {
+          toast.warning(
+            `⚠️ JavaScript Page Detected\n\n${extracted.lowContentWarning}\n\nFound version: ${extracted.currentVersion}`,
+            { id: loadingToast, duration: 10000 }
+          );
+        } else {
+          toast.success(
+            `Version check complete!\nVersion: ${extracted.currentVersion}${extracted.releaseDate ? `\nReleased: ${extracted.releaseDate}` : ''}`,
+            { id: loadingToast, duration: 5000 }
+          );
+        }
       } else {
-        toast.warning(
-          `Found ${versions.length} version${versions.length > 1 ? 's' : ''} but couldn't save them. Please try again.`,
-          { id: loadingToast }
-        );
+        // No versions found at all
+        toast.warning('No versions found on the page. Try a different URL or check manually.', { id: loadingToast });
       }
     } catch (error) {
       console.error('Error checking version:', error);

@@ -8,6 +8,12 @@ export interface ExtractedSoftwareInfo {
   releaseDate?: string;
   isJavaScriptPage?: boolean;      // True if page likely needs browser rendering
   lowContentWarning?: string;       // Warning message for manual checking
+  versions?: Array<{               // Array of ALL versions found on the page
+    version: string;
+    releaseDate: string;
+    notes: string;
+    type: 'major' | 'minor' | 'patch';
+  }>;
 }
 
 /**

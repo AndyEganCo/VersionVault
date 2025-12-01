@@ -127,12 +127,8 @@ echo ""
 # Deploy edge functions
 echo -e "${BLUE}[5/6] Deploying edge functions...${NC}"
 echo ""
-echo "Deploying extract-software-info..."
+echo "Deploying extract-software-info (includes all version extraction)..."
 supabase functions deploy extract-software-info
-
-echo ""
-echo "Deploying extract-versions..."
-supabase functions deploy extract-versions
 
 echo ""
 echo "Deploying fetch-webpage..."

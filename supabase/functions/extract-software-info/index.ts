@@ -22,6 +22,12 @@ interface ExtractedInfo {
   releaseDate?: string
   isJavaScriptPage?: boolean  // Flag for pages that likely need browser rendering
   lowContentWarning?: string  // Warning message if content was insufficient
+  versions?: Array<{           // Array of ALL versions found on the page
+    version: string
+    releaseDate: string
+    notes: string
+    type: 'major' | 'minor' | 'patch'
+  }>
 }
 
 /**
@@ -248,6 +254,18 @@ TASK: Extract the following information:
    - If multiple dates found, pick the one for the latest version
    - ONLY use null if genuinely not found
 
+5. **All Versions** (versions array): Extract EVERY version found in the content
+   - Look for ALL version numbers, not just the latest
+   - For EACH version found, extract:
+     * version: The version number (e.g., "1.5.0", "v2.3")
+     * releaseDate: Release date in YYYY-MM-DD format
+     * notes: Full release notes/changelog for that version (use markdown formatting)
+     * type: "major" for X.0.0, "minor" for X.X.0, "patch" for X.X.X
+   - Include detailed release notes if available
+   - If this is a dedicated release notes/changelog page, extract ALL versions listed
+   - If only one version found, still return it as an array with one element
+   - Return empty array only if NO versions found anywhere
+
 CRITICAL INSTRUCTIONS:
 - **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data or knowledge about this software
 - If content is provided, ONLY extract information from that content
@@ -260,14 +278,22 @@ CRITICAL INSTRUCTIONS:
 - For wiki/documentation pages, versions often appear in section headers or first paragraphs
 - Search BOTH the version page AND main website content
 - For category, choose the EXACT category name from the list (case-sensitive)
-- **IMPORTANT**: Only return null for version if you genuinely cannot find it in the PROVIDED content
+- **IMPORTANT**: Extract ALL versions from release notes pages, not just the latest
 
 Respond in JSON format:
 {
   "manufacturer": "Company Name",
   "category": "Exact Category Name",
-  "currentVersion": "version number or null",
-  "releaseDate": "YYYY-MM-DD or null"
+  "currentVersion": "latest version or null",
+  "releaseDate": "YYYY-MM-DD or null",
+  "versions": [
+    {
+      "version": "1.5.0",
+      "releaseDate": "2024-11-29",
+      "notes": "## New Features\n- Feature 1\n- Feature 2\n\n## Bug Fixes\n- Fix 1",
+      "type": "minor"
+    }
+  ]
 }`
 
   console.log('\n=== PREPARING AI REQUEST ===')
