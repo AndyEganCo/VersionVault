@@ -13,6 +13,7 @@ interface VersionCheckResult {
   name: string
   success: boolean
   versionsFound: number
+  versionsAdded: number
   error?: string
 }
 
@@ -33,21 +34,15 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authorization
+    // Verify authorization - check multiple sources
     const authHeader = req.headers.get('Authorization')
+    const customSecretHeader = req.headers.get('X-Cron-Secret')
     const cronSecret = Deno.env.get('CRON_SECRET')
 
     console.log('🔐 Checking authorization...')
     console.log(`   Auth header present: ${!!authHeader}`)
+    console.log(`   Custom secret header present: ${!!customSecretHeader}`)
     console.log(`   CRON_SECRET set: ${!!cronSecret}`)
-
-    if (!authHeader) {
-      console.error('❌ No Authorization header provided')
-      return new Response(
-        JSON.stringify({ error: 'No Authorization header provided' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
 
     if (!cronSecret) {
       console.error('❌ CRON_SECRET not configured in environment')
@@ -57,13 +52,30 @@ serve(async (req) => {
       )
     }
 
-    // Check if the secret matches
-    const providedSecret = authHeader.replace('Bearer ', '')
-    if (providedSecret !== cronSecret) {
-      console.error('❌ Invalid CRON_SECRET provided')
+    // Check custom secret header first (for custom auth)
+    let isAuthorized = false
+
+    if (customSecretHeader) {
+      console.log('   Checking X-Cron-Secret header')
+      if (customSecretHeader === cronSecret) {
+        isAuthorized = true
+      }
+    }
+
+    // Then check Authorization header (Bearer token)
+    if (!isAuthorized && authHeader) {
+      console.log('   Checking Authorization header')
+      const providedSecret = authHeader.replace('Bearer ', '')
+      if (providedSecret === cronSecret) {
+        isAuthorized = true
+      }
+    }
+
+    if (!isAuthorized) {
+      console.error('❌ Invalid or missing credentials')
       return new Response(
         JSON.stringify({ error: 'Invalid credentials' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -91,15 +103,14 @@ serve(async (req) => {
     const results: VersionCheckResult[] = []
     let totalVersionsAdded = 0
 
-    // Process each software
-    for (const software of softwareList) {
-      console.log(`\n🔍 Checking: ${software.name}`)
+    // Helper function to process a single software item
+    const processSoftware = async (software: any): Promise<VersionCheckResult> => {
+      console.log(`🔍 Checking: ${software.name}`)
 
       try {
         // Call extract-software-info edge function
         const extractUrl = `${supabaseUrl}/functions/v1/extract-software-info`
         console.log(`  📡 Calling extract-software-info for ${software.name}`)
-        console.log(`     URL: ${software.version_website}`)
 
         const response = await fetch(extractUrl, {
           method: 'POST',
@@ -188,29 +199,39 @@ serve(async (req) => {
           }
 
           console.log(`  📦 Added ${versionsAdded} new versions (${extracted.versions.length} total found)`)
-          totalVersionsAdded += versionsAdded
         }
 
-        results.push({
+        return {
           softwareId: software.id,
           name: software.name,
           success: true,
-          versionsFound: extracted.versions?.length || 0
-        })
+          versionsFound: extracted.versions?.length || 0,
+          versionsAdded
+        }
 
       } catch (error) {
         console.error(`  ❌ Failed: ${error.message}`)
-        results.push({
+        return {
           softwareId: software.id,
           name: software.name,
           success: false,
           versionsFound: 0,
+          versionsAdded: 0,
           error: error.message
-        })
+        }
       }
+    }
 
-      // Add delay between requests to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 2000))
+    // Process all software concurrently to maximize throughput and minimize execution time
+    console.log(`📊 Processing ${softwareList.length} software items concurrently`)
+
+    // Process all items in parallel using Promise.all
+    const allResults = await Promise.all(softwareList.map(processSoftware))
+
+    // Aggregate results and count new versions
+    for (const result of allResults) {
+      results.push(result)
+      totalVersionsAdded += result.versionsAdded
     }
 
     const summary: CheckSummary = {
