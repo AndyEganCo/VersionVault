@@ -222,26 +222,16 @@ serve(async (req) => {
       }
     }
 
-    // Process all software concurrently (max 10 in parallel) to avoid timeout
-    const CONCURRENCY_LIMIT = 10
+    // Process all software concurrently to maximize throughput and minimize execution time
+    console.log(`📊 Processing ${softwareList.length} software items concurrently`)
 
-    console.log(`📊 Processing ${softwareList.length} software items concurrently (max ${CONCURRENCY_LIMIT} at a time)`)
+    // Process all items in parallel using Promise.all
+    const allResults = await Promise.all(softwareList.map(processSoftware))
 
-    // Process in chunks of CONCURRENCY_LIMIT to manage resource usage
-    for (let i = 0; i < softwareList.length; i += CONCURRENCY_LIMIT) {
-      const chunk = softwareList.slice(i, i + CONCURRENCY_LIMIT)
-      const chunkResults = await Promise.all(chunk.map(processSoftware))
-
-      // Add results and count new versions
-      for (const result of chunkResults) {
-        results.push(result)
-        totalVersionsAdded += result.versionsAdded
-      }
-
-      // Small delay between chunks (100ms) to prevent overwhelming system
-      if (i + CONCURRENCY_LIMIT < softwareList.length) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-      }
+    // Aggregate results and count new versions
+    for (const result of allResults) {
+      results.push(result)
+      totalVersionsAdded += result.versionsAdded
     }
 
     const summary: CheckSummary = {
