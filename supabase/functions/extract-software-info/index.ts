@@ -208,6 +208,10 @@ Respond in JSON format:
   "releaseDate": "YYYY-MM-DD or null"
 }`
 
+  console.log('\n=== PREPARING AI REQUEST ===')
+  console.log(`Has version content: ${hasVersionContent} (${versionContent.length} chars)`)
+  console.log(`Has main content: ${hasMainContent} (${mainWebsiteContent.length} chars)`)
+  console.log(`Total prompt length: ~${prompt.length} chars`)
   console.log('Calling OpenAI API...')
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -324,8 +328,16 @@ serve(async (req) => {
         : Promise.resolve('')
     ])
 
+    console.log(`\n=== CONTENT LENGTHS ===`)
     console.log(`Version content length: ${versionContent.length}`)
     console.log(`Main website content length: ${mainWebsiteContent.length}`)
+
+    // Log what we're actually sending to the AI
+    console.log(`\n=== VERSION CONTENT BEING SENT TO AI (first 1000 chars) ===`)
+    console.log(versionContent.substring(0, 1000))
+    console.log(`\n=== MAIN WEBSITE CONTENT BEING SENT TO AI (first 1000 chars) ===`)
+    console.log(mainWebsiteContent.substring(0, 1000))
+    console.log(`\n=== END CONTENT PREVIEW ===`)
 
     // Try AI extraction
     let extracted: ExtractedInfo
