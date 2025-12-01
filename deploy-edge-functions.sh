@@ -135,6 +135,10 @@ echo "Deploying fetch-webpage..."
 supabase functions deploy fetch-webpage
 
 echo ""
+echo "Deploying trigger-version-check (automated nightly checks)..."
+supabase functions deploy trigger-version-check
+
+echo ""
 echo -e "${GREEN}✓ Edge functions deployed successfully!${NC}"
 echo ""
 
