@@ -13,6 +13,7 @@ interface VersionCheckResult {
   name: string
   success: boolean
   versionsFound: number
+  versionsAdded: number
   error?: string
 }
 
@@ -91,15 +92,14 @@ serve(async (req) => {
     const results: VersionCheckResult[] = []
     let totalVersionsAdded = 0
 
-    // Process each software
-    for (const software of softwareList) {
-      console.log(`\n🔍 Checking: ${software.name}`)
+    // Helper function to process a single software item
+    const processSoftware = async (software: any): Promise<VersionCheckResult> => {
+      console.log(`🔍 Checking: ${software.name}`)
 
       try {
         // Call extract-software-info edge function
         const extractUrl = `${supabaseUrl}/functions/v1/extract-software-info`
         console.log(`  📡 Calling extract-software-info for ${software.name}`)
-        console.log(`     URL: ${software.version_website}`)
 
         const response = await fetch(extractUrl, {
           method: 'POST',
@@ -188,29 +188,56 @@ serve(async (req) => {
           }
 
           console.log(`  📦 Added ${versionsAdded} new versions (${extracted.versions.length} total found)`)
-          totalVersionsAdded += versionsAdded
         }
 
-        results.push({
+        return {
           softwareId: software.id,
           name: software.name,
           success: true,
-          versionsFound: extracted.versions?.length || 0
-        })
+          versionsFound: extracted.versions?.length || 0,
+          versionsAdded
+        }
 
       } catch (error) {
         console.error(`  ❌ Failed: ${error.message}`)
-        results.push({
+        return {
           softwareId: software.id,
           name: software.name,
           success: false,
           versionsFound: 0,
+          versionsAdded: 0,
           error: error.message
-        })
+        }
+      }
+    }
+
+    // Process software with concurrency limit (max 3 in parallel)
+    const CONCURRENCY_LIMIT = 3
+    const chunks: any[] = []
+
+    for (let i = 0; i < softwareList.length; i += CONCURRENCY_LIMIT) {
+      chunks.push(softwareList.slice(i, i + CONCURRENCY_LIMIT))
+    }
+
+    console.log(`📊 Processing ${softwareList.length} software items in ${chunks.length} batches (max ${CONCURRENCY_LIMIT} concurrent)`)
+
+    for (let batchIndex = 0; batchIndex < chunks.length; batchIndex++) {
+      const batch = chunks[batchIndex]
+      console.log(`\n⚙️  Processing batch ${batchIndex + 1}/${chunks.length} (${batch.length} items)`)
+
+      const batchResults = await Promise.all(batch.map(processSoftware))
+
+      // Add results and count new versions
+      for (const result of batchResults) {
+        results.push(result)
+        totalVersionsAdded += result.versionsAdded
       }
 
-      // Add delay between requests to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      // Add delay between batches to avoid overwhelming the system
+      if (batchIndex < chunks.length - 1) {
+        console.log(`⏳ Waiting 1 second before next batch...`)
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
     }
 
     const summary: CheckSummary = {
