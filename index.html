@@ -6,8 +6,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Track software versions and updates" />
     <meta name="theme-color" content="#000000" />
-    <meta name="format-detection" content="telephone=no" />
+    <meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />
+    <meta name="x-apple-disable-message-reformatting" />
     <title>Version Vault</title>
+    <style>
+      /* Critical CSS to prevent phone number detection before React loads */
+      * {
+        -webkit-text-size-adjust: 100% !important;
+        -moz-text-size-adjust: 100% !important;
+        -ms-text-size-adjust: 100% !important;
+      }
+      a[href^="tel:"] {
+        pointer-events: none !important;
+        color: inherit !important;
+        text-decoration: none !important;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

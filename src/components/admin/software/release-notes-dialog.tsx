@@ -441,7 +441,15 @@ export function ReleaseNotesDialog({
                             key={`version-${index}-${version.id}`}
                             value={version.version}
                           >
-                            <span style={{ userSelect: 'none', pointerEvents: 'none' }}>
+                            <span
+                              className="select-none pointer-events-none"
+                              data-no-phone="true"
+                              style={{
+                                WebkitTextSizeAdjust: '100%',
+                                MozTextSizeAdjust: '100%',
+                                msTextSizeAdjust: '100%'
+                              }}
+                            >
                               {version.version}
                             </span>
                           </SelectItem>
