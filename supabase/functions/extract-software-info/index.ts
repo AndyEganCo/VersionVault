@@ -2,6 +2,8 @@
 // This keeps the OpenAI API key secure on the server side
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { DOMParser } from 'https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts'
+// @deno-types="npm:@types/pdfjs-dist"
+import * as pdfjsLib from 'npm:pdfjs-dist@4.0.379/legacy/build/pdf.mjs'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -70,6 +72,51 @@ async function fetchWithBrowserless(url: string): Promise<string> {
   } catch (error) {
     console.error(`❌ Browserless fetch failed for ${url}:`, error)
     return ''
+  }
+}
+
+/**
+ * Fetches and parses PDF content from a URL
+ */
+async function fetchPDFContent(url: string): Promise<string> {
+  try {
+    console.log(`📄 Fetching PDF from: ${url}`)
+
+    // Fetch the PDF file
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; VersionVault/1.0; +https://versionvault.dev)',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    // Get PDF as ArrayBuffer
+    const pdfData = await response.arrayBuffer()
+    console.log(`Downloaded PDF: ${pdfData.byteLength} bytes`)
+
+    // Parse PDF with pdfjs
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfData) })
+    const pdf = await loadingTask.promise
+
+    console.log(`PDF loaded: ${pdf.numPages} pages`)
+
+    // Extract text from all pages
+    let fullText = ''
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum)
+      const textContent = await page.getTextContent()
+      const pageText = textContent.items.map((item: any) => item.str).join(' ')
+      fullText += pageText + '\n\n'
+    }
+
+    console.log(`✅ Extracted ${fullText.length} characters from PDF`)
+    return fullText.trim()
+  } catch (error) {
+    console.error(`❌ PDF parsing failed for ${url}:`, error)
+    throw new Error(`Failed to parse PDF: ${error.message}`)
   }
 }
 
@@ -464,19 +511,30 @@ serve(async (req) => {
 
       if (isPDF) {
         console.log(`Detected PDF URL: ${versionUrl}`)
-        console.log(`⚠️ PDF parsing not yet implemented in edge function. Please parse PDF client-side and send content.`)
-        // TODO: Add PDF parsing support using a Deno PDF library
-        // For now, we'll just return an error or skip
-      }
 
-      // Fetch content from both URLs in parallel (try regular fetch first)
-      [versionContent, mainWebsiteContent] = await Promise.all([
-        isPDF ? Promise.resolve('') : fetchWebpageContent(versionUrl, 30000, false), // Skip if PDF
-        // Only fetch main website if it's different from version URL
-        versionUrl.toLowerCase() !== website.toLowerCase()
-          ? fetchWebpageContent(website, 20000, false)
-          : Promise.resolve('')
-      ])
+        // Fetch and parse PDF content
+        try {
+          versionContent = await fetchPDFContent(versionUrl)
+        } catch (pdfError) {
+          console.error('PDF parsing failed:', pdfError)
+          // Continue with empty content, will return error later
+          versionContent = ''
+        }
+
+        // Still fetch main website for manufacturer/category info
+        if (versionUrl.toLowerCase() !== website.toLowerCase()) {
+          mainWebsiteContent = await fetchWebpageContent(website, 20000, false)
+        }
+      } else {
+        // Fetch content from both URLs in parallel (try regular fetch first)
+        [versionContent, mainWebsiteContent] = await Promise.all([
+          fetchWebpageContent(versionUrl, 30000, false),
+          // Only fetch main website if it's different from version URL
+          versionUrl.toLowerCase() !== website.toLowerCase()
+            ? fetchWebpageContent(website, 20000, false)
+            : Promise.resolve('')
+        ])
+      }
 
       console.log(`\n=== INITIAL CONTENT LENGTHS ===`)
       console.log(`Version content length: ${versionContent.length}`)
