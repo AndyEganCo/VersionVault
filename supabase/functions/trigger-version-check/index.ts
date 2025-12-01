@@ -177,7 +177,7 @@ serve(async (req) => {
 
             const notesArray = typeof version.notes === 'string'
               ? version.notes.split('\n').filter(Boolean)
-              : version.notes
+              : (Array.isArray(version.notes) ? version.notes : [])
 
             if (existing) {
               // Update existing version

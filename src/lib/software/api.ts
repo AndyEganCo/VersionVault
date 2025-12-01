@@ -129,9 +129,9 @@ export async function addVersionHistory(softwareId: string, data: {
       .eq('version', data.version)
       .single();
 
-    const notesArray = typeof data.notes === 'string' 
+    const notesArray = typeof data.notes === 'string'
       ? data.notes.split('\n').filter(Boolean)
-      : data.notes;
+      : (Array.isArray(data.notes) ? data.notes : []);
 
     if (existing) {
       // Update existing version
