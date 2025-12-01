@@ -222,32 +222,25 @@ serve(async (req) => {
       }
     }
 
-    // Process software with concurrency limit (max 3 in parallel)
-    const CONCURRENCY_LIMIT = 3
-    const chunks: any[] = []
+    // Process all software concurrently (max 10 in parallel) to avoid timeout
+    const CONCURRENCY_LIMIT = 10
 
+    console.log(`📊 Processing ${softwareList.length} software items concurrently (max ${CONCURRENCY_LIMIT} at a time)`)
+
+    // Process in chunks of CONCURRENCY_LIMIT to manage resource usage
     for (let i = 0; i < softwareList.length; i += CONCURRENCY_LIMIT) {
-      chunks.push(softwareList.slice(i, i + CONCURRENCY_LIMIT))
-    }
-
-    console.log(`📊 Processing ${softwareList.length} software items in ${chunks.length} batches (max ${CONCURRENCY_LIMIT} concurrent)`)
-
-    for (let batchIndex = 0; batchIndex < chunks.length; batchIndex++) {
-      const batch = chunks[batchIndex]
-      console.log(`\n⚙️  Processing batch ${batchIndex + 1}/${chunks.length} (${batch.length} items)`)
-
-      const batchResults = await Promise.all(batch.map(processSoftware))
+      const chunk = softwareList.slice(i, i + CONCURRENCY_LIMIT)
+      const chunkResults = await Promise.all(chunk.map(processSoftware))
 
       // Add results and count new versions
-      for (const result of batchResults) {
+      for (const result of chunkResults) {
         results.push(result)
         totalVersionsAdded += result.versionsAdded
       }
 
-      // Add delay between batches to avoid overwhelming the system
-      if (batchIndex < chunks.length - 1) {
-        console.log(`⏳ Waiting 1 second before next batch...`)
-        await new Promise(resolve => setTimeout(resolve, 1000))
+      // Small delay between chunks (100ms) to prevent overwhelming system
+      if (i + CONCURRENCY_LIMIT < softwareList.length) {
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
     }
 
