@@ -432,8 +432,15 @@ export function ReleaseNotesDialog({
                       </SelectItem>
                       {versionHistory
                         .filter(v => v.version !== software.current_version)
-                        .map((version) => (
-                          <SelectItem key={version.id} value={version.version}>
+                        // Remove duplicates by version number (keep first occurrence)
+                        .filter((v, index, self) =>
+                          index === self.findIndex(t => t.version === v.version)
+                        )
+                        .map((version, index) => (
+                          <SelectItem
+                            key={`version-${index}-${version.id}`}
+                            value={version.version}
+                          >
                             {version.version}
                           </SelectItem>
                         ))}
