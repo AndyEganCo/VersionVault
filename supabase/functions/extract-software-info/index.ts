@@ -47,7 +47,9 @@ async function fetchWithBrowserless(url: string): Promise<string> {
       },
       body: JSON.stringify({
         url: url,
-        waitFor: 2000,  // Wait 2 seconds for JavaScript to load
+        gotoOptions: {
+          waitUntil: 'networkidle2'  // Wait for network to be idle
+        }
       })
     })
 
