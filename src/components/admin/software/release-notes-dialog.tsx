@@ -74,12 +74,22 @@ export function ReleaseNotesDialog({
     async function loadVersionHistory() {
       if (open && software.id) {
         const history = await getVersionHistory(software.id);
-        setVersionHistory(history);
+
+        // Filter out any entries with invalid data to prevent rendering crashes
+        const validHistory = history.filter(entry =>
+          entry &&
+          entry.id &&
+          entry.version &&
+          typeof entry.version === 'string' &&
+          entry.version.trim().length > 0
+        );
+
+        setVersionHistory(validHistory);
 
         // Set selected version to current by default
         setSelectedVersion('current');
 
-        const currentVersionEntry = history.find(
+        const currentVersionEntry = validHistory.find(
           entry => entry.version === software.current_version
         );
 
@@ -87,7 +97,7 @@ export function ReleaseNotesDialog({
           setType(currentVersionEntry.type);
           const noteText = Array.isArray(currentVersionEntry.notes)
             ? currentVersionEntry.notes.join('\n')
-            : currentVersionEntry.notes;
+            : (currentVersionEntry.notes || '');
           setNotes(noteText);
           if (currentVersionEntry.release_date) {
             setReleaseDate(formatDateForInput(currentVersionEntry.release_date));
