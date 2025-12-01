@@ -1,8 +1,17 @@
 import OpenAI from 'openai';
 
+/**
+ * ⚠️ SECURITY WARNING ⚠️
+ * This file exposes the OpenAI API key client-side using dangerouslyAllowBrowser.
+ * This is a SECURITY RISK - anyone can extract and abuse the API key from the browser.
+ *
+ * TODO: Move release notes extraction to a Supabase Edge Function (server-side)
+ * For now, this is still in use but should be migrated to server-side processing.
+ */
+
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true
+  dangerouslyAllowBrowser: true // ⚠️ SECURITY RISK - API key exposed in browser
 });
 
 export interface ExtractedVersion {

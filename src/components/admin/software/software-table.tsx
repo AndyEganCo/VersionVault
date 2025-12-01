@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { formatDate } from '@/lib/date';
 import { ReleaseNotesDialog } from './release-notes-dialog';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
+import { versionCheckLimiter } from '@/lib/utils/rate-limiter';
 
 type SoftwareTableProps = {
   data: Software[];
@@ -103,6 +104,13 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
   const handleCheckVersion = async (software: Software) => {
     if (!software.version_website) {
       toast.error('No version website configured for this software');
+      return;
+    }
+
+    // Check rate limit
+    if (!versionCheckLimiter.isAllowed(software.id)) {
+      const timeRemaining = versionCheckLimiter.getTimeRemaining(software.id);
+      toast.error(`Please wait ${timeRemaining} seconds before checking this version again`);
       return;
     }
 
