@@ -63,7 +63,7 @@ fi
 echo ""
 
 # Check for OpenAI API key secret
-echo -e "${BLUE}[4/6] Checking OpenAI API key...${NC}"
+echo -e "${BLUE}[4/6] Checking API keys...${NC}"
 SECRETS=$(supabase secrets list 2>&1)
 
 if echo "$SECRETS" | grep -q "OPENAI_API_KEY"; then
@@ -94,6 +94,34 @@ else
     supabase secrets set OPENAI_API_KEY="$OPENAI_KEY"
     echo -e "${GREEN}✓ Secret set successfully${NC}"
 fi
+
+echo ""
+
+# Check for Browserless API key (optional but recommended)
+if echo "$SECRETS" | grep -q "BROWSERLESS_API_KEY"; then
+    echo -e "${GREEN}✓ BROWSERLESS_API_KEY secret is set${NC}"
+else
+    echo -e "${YELLOW}BROWSERLESS_API_KEY secret not found (optional).${NC}"
+    echo ""
+    echo "Browserless allows rendering JavaScript-heavy pages."
+    echo "Get a free API key from: https://www.browserless.io/"
+    echo ""
+    read -p "Do you want to set BROWSERLESS_API_KEY now? (y/N): " SET_BROWSERLESS
+
+    if [[ "$SET_BROWSERLESS" =~ ^[Yy]$ ]]; then
+        read -sp "Browserless API Key: " BROWSERLESS_KEY
+        echo ""
+
+        if [ ! -z "$BROWSERLESS_KEY" ]; then
+            echo "Setting secret..."
+            supabase secrets set BROWSERLESS_API_KEY="$BROWSERLESS_KEY"
+            echo -e "${GREEN}✓ Secret set successfully${NC}"
+        fi
+    else
+        echo "Skipping Browserless setup. You can set it later with:"
+        echo "  supabase secrets set BROWSERLESS_API_KEY=your-key"
+    fi
+fi
 echo ""
 
 # Deploy edge functions
@@ -101,6 +129,10 @@ echo -e "${BLUE}[5/6] Deploying edge functions...${NC}"
 echo ""
 echo "Deploying extract-software-info..."
 supabase functions deploy extract-software-info
+
+echo ""
+echo "Deploying extract-versions..."
+supabase functions deploy extract-versions
 
 echo ""
 echo "Deploying fetch-webpage..."

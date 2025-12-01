@@ -215,3 +215,60 @@ export async function deleteVersionHistory(versionId: string): Promise<boolean> 
     return false;
   }
 }
+
+/**
+ * Extracts ALL versions from a release notes page using server-side AI
+ */
+export interface ExtractedVersion {
+  version: string;
+  releaseDate: string;
+  notes: string;
+  type: 'major' | 'minor' | 'patch';
+}
+
+export async function extractAllVersions(
+  softwareName: string,
+  url: string
+): Promise<ExtractedVersion[]> {
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase configuration not found');
+    }
+
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/extract-versions`;
+
+    console.log(`Extracting all versions for: ${softwareName} from ${url}`);
+
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({
+        softwareName,
+        url
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status}`);
+    }
+
+    const result = await response.json() as { versions: ExtractedVersion[], error?: string };
+
+    if (result.error) {
+      console.warn('Version extraction warning:', result.error);
+    }
+
+    console.log(`Extracted ${result.versions.length} versions`);
+    return result.versions || [];
+
+  } catch (error) {
+    console.error('Error extracting all versions:', error);
+    return [];
+  }
+}
