@@ -6,6 +6,8 @@ export interface ExtractedSoftwareInfo {
   category: string;
   currentVersion?: string;
   releaseDate?: string;
+  isJavaScriptPage?: boolean;      // True if page likely needs browser rendering
+  lowContentWarning?: string;       // Warning message for manual checking
 }
 
 /**

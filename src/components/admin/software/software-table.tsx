@@ -136,12 +136,21 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
 
       await onUpdate();
 
-      if (extracted.currentVersion) {
+      // Show appropriate message based on results
+      if (extracted.isJavaScriptPage && extracted.lowContentWarning) {
+        // JavaScript page warning - show special message
+        toast.warning(
+          `⚠️ JavaScript Page Detected\n\n${extracted.lowContentWarning}\n\n${extracted.currentVersion ? `Found version: ${extracted.currentVersion} (may be inaccurate)` : 'No version found'}`,
+          { id: loadingToast, duration: 10000 }
+        );
+      } else if (extracted.currentVersion) {
+        // Success - version found
         toast.success(
           `Version check complete!\nVersion: ${extracted.currentVersion}${extracted.releaseDate ? `\nReleased: ${extracted.releaseDate}` : ''}`,
           { id: loadingToast, duration: 5000 }
         );
       } else {
+        // No version found (non-JS page)
         toast.warning('Version check complete, but no version found on the page', { id: loadingToast });
       }
     } catch (error) {

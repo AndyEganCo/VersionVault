@@ -20,6 +20,8 @@ interface ExtractedInfo {
   category: string
   currentVersion?: string
   releaseDate?: string
+  isJavaScriptPage?: boolean  // Flag for pages that likely need browser rendering
+  lowContentWarning?: string  // Warning message if content was insufficient
 }
 
 /**
@@ -339,6 +341,14 @@ serve(async (req) => {
     console.log(mainWebsiteContent.substring(0, 1000))
     console.log(`\n=== END CONTENT PREVIEW ===`)
 
+    // Detect if this is likely a JavaScript-rendered page
+    const isLikelyJavaScriptPage = versionContent.length < 2000
+    const hasVeryLowContent = versionContent.length < 500
+
+    if (isLikelyJavaScriptPage) {
+      console.log(`⚠️ WARNING: Low content detected (${versionContent.length} chars) - likely JavaScript-rendered page`)
+    }
+
     // Try AI extraction
     let extracted: ExtractedInfo
     try {
@@ -355,6 +365,14 @@ serve(async (req) => {
       // Fallback to domain extraction
       console.log('Using fallback domain extraction')
       extracted = extractFromDomain(website)
+    }
+
+    // Add JavaScript page detection flag and warning
+    if (isLikelyJavaScriptPage) {
+      extracted.isJavaScriptPage = true
+      extracted.lowContentWarning = hasVeryLowContent
+        ? `This page appears to load content with JavaScript (only ${versionContent.length} characters found). Please visit the page manually to check the version.`
+        : `Limited content found (${versionContent.length} characters). The version may not be accurate. Consider checking manually.`
     }
 
     return new Response(
