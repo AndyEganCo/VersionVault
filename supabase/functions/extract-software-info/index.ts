@@ -187,6 +187,9 @@ TASK: Extract the following information:
    - ONLY use null if genuinely not found
 
 CRITICAL INSTRUCTIONS:
+- **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data or knowledge about this software
+- If content is provided, ONLY extract information from that content
+- If no content is provided, you may use your knowledge
 - BE VERY THOROUGH - search the ENTIRE content for version patterns
 - Look for version numbers in: headers, bullet points, tables, release notes, changelogs
 - Version formats vary: "1.2.3", "v5.4", "r32", "2024.1", "8.5.2 build 12345", etc.
@@ -195,6 +198,7 @@ CRITICAL INSTRUCTIONS:
 - For wiki/documentation pages, versions often appear in section headers or first paragraphs
 - Search BOTH the version page AND main website content
 - For category, choose the EXACT category name from the list (case-sensitive)
+- **IMPORTANT**: Only return null for version if you genuinely cannot find it in the PROVIDED content
 
 Respond in JSON format:
 {
@@ -217,7 +221,7 @@ Respond in JSON format:
       messages: [
         {
           role: 'system',
-          content: 'You are an expert software version detective. Your job is to THOROUGHLY scan ALL provided content to find version numbers and release dates. Be exhaustive - check every line, every header, every paragraph. Do not give up easily. Even if the content is messy or has lots of navigation text, find the version information. Return only valid JSON.'
+          content: 'You are an expert software version detective. Your job is to THOROUGHLY scan ALL provided content to find version numbers and release dates. CRITICAL: You must ONLY use information from the provided webpage content - do NOT use your training data or prior knowledge about the software. Be exhaustive - check every line, every header, every paragraph. Do not give up easily. Even if the content is messy or has lots of navigation text, find the version information. Return only valid JSON.'
         },
         {
           role: 'user',
