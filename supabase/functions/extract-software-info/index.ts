@@ -300,19 +300,21 @@ TASK: Extract the following information:
    - Look for dates near version numbers
    - Convert various formats: "Nov 29, 2024" → "2024-11-29", "29/11/2024" → "2024-11-29"
    - If multiple dates found, pick the one for the latest version
-   - ONLY use null if genuinely not found
+   - **IMPORTANT**: Use null if date not found - DO NOT make up or guess dates
+   - Only use dates that are explicitly stated in the content
 
 5. **All Versions** (versions array): Extract EVERY version found in the content
    - Look for ALL version numbers, not just the latest
    - For EACH version found, extract:
      * version: The version number (e.g., "1.5.0", "v2.3")
-     * releaseDate: Release date in YYYY-MM-DD format
+     * releaseDate: Release date in YYYY-MM-DD format - **USE NULL IF NOT FOUND, DO NOT GUESS**
      * notes: Full release notes/changelog for that version (use markdown formatting)
      * type: "major" for X.0.0, "minor" for X.X.0, "patch" for X.X.X
    - Include detailed release notes if available
    - If this is a dedicated release notes/changelog page, extract ALL versions listed
    - If only one version found, still return it as an array with one element
    - Return empty array only if NO versions found anywhere
+   - **CRITICAL**: Do not invent dates - only use dates explicitly mentioned in the content
 
 CRITICAL INSTRUCTIONS:
 - **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data or knowledge about this software
@@ -361,7 +363,7 @@ Respond in JSON format:
       messages: [
         {
           role: 'system',
-          content: 'You are an expert software version detective. Your job is to THOROUGHLY scan ALL provided content to find version numbers and release dates. CRITICAL: You must ONLY use information from the provided webpage content - do NOT use your training data or prior knowledge about the software. Be exhaustive - check every line, every header, every paragraph. Do not give up easily. Even if the content is messy or has lots of navigation text, find the version information. Return only valid JSON.'
+          content: 'You are an expert software version detective. Your job is to THOROUGHLY scan ALL provided content to find version numbers and release dates. CRITICAL RULES: (1) You must ONLY use information from the provided webpage content - do NOT use your training data or prior knowledge about the software. (2) DO NOT make up or guess release dates - use null if date is not explicitly stated in the content. (3) Be exhaustive - check every line, every header, every paragraph. Do not give up easily. Even if the content is messy or has lots of navigation text, find the version information. Return only valid JSON.'
         },
         {
           role: 'user',

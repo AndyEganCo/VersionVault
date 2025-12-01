@@ -181,16 +181,45 @@ export async function addVersionHistory(softwareId: string, data: {
   }
 }
 
+/**
+ * Compare two version strings (semantic versioning)
+ * Returns: -1 if v1 < v2, 0 if equal, 1 if v1 > v2
+ */
+function compareVersions(v1: string, v2: string): number {
+  // Remove common prefixes like 'v', 'r', 'version', etc.
+  const clean1 = v1.replace(/^[vr]|version\s*/i, '').trim();
+  const clean2 = v2.replace(/^[vr]|version\s*/i, '').trim();
+
+  // Split into parts (1.5.0 -> [1, 5, 0])
+  const parts1 = clean1.split(/[.-]/).map(p => parseInt(p) || 0);
+  const parts2 = clean2.split(/[.-]/).map(p => parseInt(p) || 0);
+
+  // Compare each part
+  const maxLength = Math.max(parts1.length, parts2.length);
+  for (let i = 0; i < maxLength; i++) {
+    const part1 = parts1[i] || 0;
+    const part2 = parts2[i] || 0;
+
+    if (part1 > part2) return 1;
+    if (part1 < part2) return -1;
+  }
+
+  return 0;
+}
+
 export async function getVersionHistory(softwareId: string) {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('software_version_history')
       .select('id, version, notes, type, release_date')
-      .eq('software_id', softwareId)
-      .order('release_date', { ascending: false });
+      .eq('software_id', softwareId);
 
     if (error) throw error;
-    return data || [];
+
+    // Sort by version number (highest first) instead of date
+    const sorted = (data || []).sort((a, b) => compareVersions(b.version, a.version));
+
+    return sorted;
   });
 }
 
