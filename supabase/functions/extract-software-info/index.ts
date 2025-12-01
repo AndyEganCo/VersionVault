@@ -348,6 +348,17 @@ Respond in JSON format:
     throw new Error('Invalid response from AI - missing required fields')
   }
 
+  // Sort versions array by version number (highest first)
+  if (extracted.versions && extracted.versions.length > 0) {
+    extracted.versions.sort((a, b) => compareVersions(b.version, a.version))
+
+    // Set currentVersion to the highest version number
+    extracted.currentVersion = extracted.versions[0].version
+    extracted.releaseDate = extracted.versions[0].releaseDate
+
+    console.log(`Sorted ${extracted.versions.length} versions. Latest: ${extracted.currentVersion}`)
+  }
+
   // Clean up null values
   if (extracted.currentVersion === null || extracted.currentVersion === 'null') {
     delete extracted.currentVersion
@@ -358,6 +369,32 @@ Respond in JSON format:
 
   console.log('Extraction successful:', extracted)
   return extracted
+}
+
+/**
+ * Compare two version strings (semantic versioning)
+ * Returns: -1 if v1 < v2, 0 if equal, 1 if v1 > v2
+ */
+function compareVersions(v1: string, v2: string): number {
+  // Remove common prefixes like 'v', 'r', 'version', etc.
+  const clean1 = v1.replace(/^[vr]|version\s*/i, '').trim()
+  const clean2 = v2.replace(/^[vr]|version\s*/i, '').trim()
+
+  // Split into parts (1.5.0 -> [1, 5, 0])
+  const parts1 = clean1.split(/[.-]/).map(p => parseInt(p) || 0)
+  const parts2 = clean2.split(/[.-]/).map(p => parseInt(p) || 0)
+
+  // Compare each part
+  const maxLength = Math.max(parts1.length, parts2.length)
+  for (let i = 0; i < maxLength; i++) {
+    const part1 = parts1[i] || 0
+    const part2 = parts2[i] || 0
+
+    if (part1 > part2) return 1
+    if (part1 < part2) return -1
+  }
+
+  return 0
 }
 
 /**
