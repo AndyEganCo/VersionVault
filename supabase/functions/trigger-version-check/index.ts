@@ -34,21 +34,15 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authorization
+    // Verify authorization - check multiple sources
     const authHeader = req.headers.get('Authorization')
+    const customSecretHeader = req.headers.get('X-Cron-Secret')
     const cronSecret = Deno.env.get('CRON_SECRET')
 
     console.log('🔐 Checking authorization...')
     console.log(`   Auth header present: ${!!authHeader}`)
+    console.log(`   Custom secret header present: ${!!customSecretHeader}`)
     console.log(`   CRON_SECRET set: ${!!cronSecret}`)
-
-    if (!authHeader) {
-      console.error('❌ No Authorization header provided')
-      return new Response(
-        JSON.stringify({ error: 'No Authorization header provided' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
 
     if (!cronSecret) {
       console.error('❌ CRON_SECRET not configured in environment')
@@ -58,13 +52,30 @@ serve(async (req) => {
       )
     }
 
-    // Check if the secret matches
-    const providedSecret = authHeader.replace('Bearer ', '')
-    if (providedSecret !== cronSecret) {
-      console.error('❌ Invalid CRON_SECRET provided')
+    // Check custom secret header first (for custom auth)
+    let isAuthorized = false
+
+    if (customSecretHeader) {
+      console.log('   Checking X-Cron-Secret header')
+      if (customSecretHeader === cronSecret) {
+        isAuthorized = true
+      }
+    }
+
+    // Then check Authorization header (Bearer token)
+    if (!isAuthorized && authHeader) {
+      console.log('   Checking Authorization header')
+      const providedSecret = authHeader.replace('Bearer ', '')
+      if (providedSecret === cronSecret) {
+        isAuthorized = true
+      }
+    }
+
+    if (!isAuthorized) {
+      console.error('❌ Invalid or missing credentials')
       return new Response(
         JSON.stringify({ error: 'Invalid credentials' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
