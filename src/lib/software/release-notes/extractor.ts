@@ -1,8 +1,17 @@
 import OpenAI from 'openai';
 
+/**
+ * ⚠️ SECURITY WARNING ⚠️
+ * This file exposes the OpenAI API key client-side using dangerouslyAllowBrowser.
+ * This is a SECURITY RISK - anyone can extract and abuse the API key from the browser.
+ *
+ * TODO: Move release notes extraction to a Supabase Edge Function (server-side)
+ * For now, this is still in use but should be migrated to server-side processing.
+ */
+
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true
+  dangerouslyAllowBrowser: true // ⚠️ SECURITY RISK - API key exposed in browser
 });
 
 export interface ExtractedVersion {
@@ -112,11 +121,12 @@ CRITICAL RULES:
 }
 
 /**
- * Extract versions from a URL using Supabase Edge Function
+ * Extract versions from a URL using SECURE server-side processing
+ * This calls the extract-software-info edge function which handles everything server-side
  */
 export async function extractVersionsFromURL(softwareName: string, url: string): Promise<ExtractedVersion[]> {
   try {
-    console.log(`Fetching release notes from ${url} via Edge Function...`);
+    console.log(`Extracting versions from ${url} via secure edge function...`);
 
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -125,37 +135,35 @@ export async function extractVersionsFromURL(softwareName: string, url: string):
       throw new Error('Supabase configuration missing');
     }
 
-    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/fetch-webpage`;
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/extract-software-info`;
 
-    // Call Supabase Edge Function to avoid CORS issues
+    // Call secure edge function - it will handle fetching, Browserless, and AI extraction
     const response = await fetch(edgeFunctionUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${supabaseAnonKey}`,
       },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({
+        name: softwareName,
+        website: url, // Use the same URL for both if we don't have manufacturer info
+        versionUrl: url
+      })
     });
 
     if (!response.ok) {
-      throw new Error(`Edge function error! status: ${response.status}`);
+      throw new Error(`Edge function error: ${response.status}`);
     }
 
-    const { content, error } = await response.json();
+    const result = await response.json();
 
-    if (error) {
-      throw new Error(error);
+    if (!result.versions || result.versions.length === 0) {
+      console.warn('No versions extracted from URL');
+      return [];
     }
 
-    if (!content || content.trim().length === 0) {
-      throw new Error('No content found at URL');
-    }
-
-    console.log(`Extracted ${content.length} characters, processing with AI...`);
-    const versions = await extractVersionsFromText(softwareName, content);
-
-    console.log(`Extracted ${versions.length} versions`);
-    return versions;
+    console.log(`Extracted ${result.versions.length} versions from URL`);
+    return result.versions;
   } catch (error) {
     console.error('Error extracting versions from URL:', error);
     throw error;
@@ -163,7 +171,8 @@ export async function extractVersionsFromURL(softwareName: string, url: string):
 }
 
 /**
- * Extract versions from PDF text content
+ * Extract versions from PDF text content using SECURE server-side processing
+ * This calls the Supabase Edge Function instead of exposing the API key
  */
 export async function extractVersionsFromPDF(softwareName: string, pdfText: string): Promise<ExtractedVersion[]> {
   try {
@@ -171,11 +180,45 @@ export async function extractVersionsFromPDF(softwareName: string, pdfText: stri
       throw new Error('PDF content is empty');
     }
 
-    console.log(`Processing PDF content (${pdfText.length} characters) with AI...`);
-    const versions = await extractVersionsFromText(softwareName, pdfText);
+    console.log(`Processing PDF content (${pdfText.length} characters) with secure edge function...`);
 
-    console.log(`Extracted ${versions.length} versions from PDF`);
-    return versions;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase configuration missing');
+    }
+
+    const edgeFunctionUrl = `${supabaseUrl}/functions/v1/extract-software-info`;
+
+    // Call secure edge function with PDF content
+    const response = await fetch(edgeFunctionUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({
+        name: softwareName,
+        website: 'https://unknown.com', // Will be ignored when content is provided
+        versionUrl: 'PDF Upload',
+        content: pdfText.substring(0, 50000) // Limit to 50k chars
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Edge function error: ${response.status}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.versions || result.versions.length === 0) {
+      console.warn('No versions extracted from PDF');
+      return [];
+    }
+
+    console.log(`Extracted ${result.versions.length} versions from PDF`);
+    return result.versions;
   } catch (error) {
     console.error('Error extracting versions from PDF:', error);
     throw error;

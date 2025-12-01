@@ -57,3 +57,18 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Prevent browser/extension phone number detection on all elements */
+* {
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+}
+
+/* Specifically disable phone number detection */
+a[href^="tel:"] {
+  pointer-events: none;
+  color: inherit !important;
+  text-decoration: none !important;
+  cursor: default !important;
+}

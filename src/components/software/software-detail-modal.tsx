@@ -24,6 +24,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
 import type { Software, VersionHistory } from '@/lib/software/types';
 import { ExternalLink } from 'lucide-react';
+import { breakPhonePattern } from '@/lib/utils/version-display';
 
 interface SoftwareDetailModalProps {
   open: boolean;
@@ -108,7 +109,7 @@ export function SoftwareDetailModal({
               <div className="flex flex-wrap gap-2">
                 <Badge variant="secondary">{software.category}</Badge>
                 {software.current_version && (
-                  <Badge variant="outline">{software.current_version}</Badge>
+                  <Badge variant="outline">{breakPhonePattern(software.current_version)}</Badge>
                 )}
               </div>
 
@@ -116,7 +117,7 @@ export function SoftwareDetailModal({
                 {software.current_version && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Current Version</span>
-                    <span className="font-medium">{software.current_version}</span>
+                    <span className="font-medium">{breakPhonePattern(software.current_version)}</span>
                   </div>
                 )}
 
@@ -184,7 +185,7 @@ export function SoftwareDetailModal({
                         key={version.id ? `version-${version.id}` : `version-${version.version}-${index}`}
                         value={version.version}
                       >
-                        {`Version ${version.version}`}
+                        {`Version ${breakPhonePattern(version.version)}`}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -198,7 +199,7 @@ export function SoftwareDetailModal({
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
                       <h4 className="font-semibold">
-                        Version {selectedNotes.version}
+                        Version {breakPhonePattern(selectedNotes.version)}
                       </h4>
                       <Badge variant={
                         selectedNotes.type === 'major' ? 'default' :

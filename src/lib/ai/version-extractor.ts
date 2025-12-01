@@ -1,8 +1,18 @@
 import OpenAI from 'openai';
 
+/**
+ * ⚠️ SECURITY WARNING ⚠️
+ * This file exposes the OpenAI API key client-side using dangerouslyAllowBrowser.
+ * This is a SECURITY RISK - anyone can extract and abuse the API key from the browser.
+ *
+ * TODO: Move this logic to a Supabase Edge Function (server-side)
+ * This file is DEPRECATED and should not be used for new features.
+ * Use the secure server-side extract-software-info edge function instead.
+ */
+
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-  dangerouslyAllowBrowser: true
+  dangerouslyAllowBrowser: true // ⚠️ SECURITY RISK - API key exposed in browser
 });
 
 export async function extractVersion(softwareName: string, text: string): Promise<string | null> {

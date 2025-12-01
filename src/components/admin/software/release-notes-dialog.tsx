@@ -19,15 +19,16 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { addVersionHistory, getVersionHistory } from '@/lib/software/api';
+import { addVersionHistory, getVersionHistory, deleteVersionHistory } from '@/lib/software/api';
 import type { Software } from '@/lib/software/types';
-import { Plus, Upload, Link as LinkIcon, Loader2, Check, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Upload, Link as LinkIcon, Loader2, Check, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { extractVersionsFromURL, extractVersionsFromPDF, type ExtractedVersion } from '@/lib/software/release-notes/extractor';
 import { parsePDFFile } from '@/lib/software/release-notes/pdf-parser';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { breakPhonePattern } from '@/lib/utils/version-display';
 
 interface ReleaseNotesDialogProps {
   software: Software;
@@ -60,6 +61,7 @@ export function ReleaseNotesDialog({
   const [selectedVersion, setSelectedVersion] = useState<string>('current');
   const [newVersion, setNewVersion] = useState('');
   const [releaseDate, setReleaseDate] = useState(formatDateForInput(new Date().toISOString()));
+  const [deleting, setDeleting] = useState(false);
 
   // Bulk import states
   const [bulkImportUrl, setBulkImportUrl] = useState('');
@@ -73,12 +75,22 @@ export function ReleaseNotesDialog({
     async function loadVersionHistory() {
       if (open && software.id) {
         const history = await getVersionHistory(software.id);
-        setVersionHistory(history);
+
+        // Filter out any entries with invalid data to prevent rendering crashes
+        const validHistory = history.filter(entry =>
+          entry &&
+          entry.id &&
+          entry.version &&
+          typeof entry.version === 'string' &&
+          entry.version.trim().length > 0
+        );
+
+        setVersionHistory(validHistory);
 
         // Set selected version to current by default
         setSelectedVersion('current');
 
-        const currentVersionEntry = history.find(
+        const currentVersionEntry = validHistory.find(
           entry => entry.version === software.current_version
         );
 
@@ -86,7 +98,7 @@ export function ReleaseNotesDialog({
           setType(currentVersionEntry.type);
           const noteText = Array.isArray(currentVersionEntry.notes)
             ? currentVersionEntry.notes.join('\n')
-            : currentVersionEntry.notes;
+            : (currentVersionEntry.notes || '');
           setNotes(noteText);
           if (currentVersionEntry.release_date) {
             setReleaseDate(formatDateForInput(currentVersionEntry.release_date));
@@ -137,7 +149,7 @@ export function ReleaseNotesDialog({
         setType(currentVersionEntry.type as 'major' | 'minor' | 'patch');
         const noteText = Array.isArray(currentVersionEntry.notes)
           ? currentVersionEntry.notes.join('\n')
-          : currentVersionEntry.notes;
+          : (currentVersionEntry.notes || '');
         setNotes(noteText);
         if (currentVersionEntry.release_date) {
           setReleaseDate(formatDateForInput(currentVersionEntry.release_date));
@@ -153,7 +165,7 @@ export function ReleaseNotesDialog({
         setType(selectedVersionEntry.type as 'major' | 'minor' | 'patch');
         const noteText = Array.isArray(selectedVersionEntry.notes)
           ? selectedVersionEntry.notes.join('\n')
-          : selectedVersionEntry.notes;
+          : (selectedVersionEntry.notes || '');
         setNotes(noteText);
         if (selectedVersionEntry.release_date) {
           setReleaseDate(formatDateForInput(selectedVersionEntry.release_date));
@@ -193,6 +205,46 @@ export function ReleaseNotesDialog({
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteVersion = async () => {
+    // Find the version entry to delete
+    const versionEntry = versionHistory.find(v => v.version === selectedVersion);
+
+    if (!versionEntry) {
+      toast.error('Version not found');
+      return;
+    }
+
+    // Confirm deletion
+    if (!confirm(`Are you sure you want to delete version ${selectedVersion}? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const success = await deleteVersionHistory(versionEntry.id);
+
+      if (success) {
+        toast.success(`Version ${selectedVersion} deleted successfully`);
+
+        // Reload version history
+        const history = await getVersionHistory(software.id);
+        setVersionHistory(history);
+
+        // Reset to current version
+        setSelectedVersion('current');
+
+        await onSuccess();
+      } else {
+        toast.error('Failed to delete version');
+      }
+    } catch (error) {
+      console.error('Error deleting version:', error);
+      toast.error('Failed to delete version');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -357,41 +409,70 @@ export function ReleaseNotesDialog({
             <form id="release-notes-form" onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Version</Label>
-            {selectedVersion === 'new' ? (
-              <Input
-                value={newVersion}
-                onChange={(e) => setNewVersion(e.target.value)}
-                placeholder="Enter new version number"
-                required
-              />
-            ) : (
-              <Select
-                value={selectedVersion}
-                onValueChange={handleVersionChange}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="current">
-                    {software.current_version || 'Current Version'} (Current)
-                  </SelectItem>
-                  {versionHistory
-                    .filter(v => v.version !== software.current_version)
-                    .map((version) => (
-                      <SelectItem key={version.id} value={version.version}>
-                        {version.version}
+            <div className="flex gap-2">
+              {selectedVersion === 'new' ? (
+                <Input
+                  value={newVersion}
+                  onChange={(e) => setNewVersion(e.target.value)}
+                  placeholder="Enter new version number"
+                  required
+                  className="flex-1"
+                />
+              ) : (
+                <>
+                  <Select
+                    value={selectedVersion}
+                    onValueChange={handleVersionChange}
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="current">
+                        {breakPhonePattern(software.current_version || 'Current Version')} (Current)
                       </SelectItem>
-                    ))}
-                  <SelectItem value="new">
-                    <div className="flex items-center">
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create New Version
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+                      {versionHistory
+                        .filter(v => v.version !== software.current_version)
+                        // Remove duplicates by version number (keep first occurrence)
+                        .filter((v, index, self) =>
+                          index === self.findIndex(t => t.version === v.version)
+                        )
+                        .map((version, index) => (
+                          <SelectItem
+                            key={`version-${index}-${version.id}`}
+                            value={version.version}
+                          >
+                            {breakPhonePattern(version.version)}
+                          </SelectItem>
+                        ))}
+                      <SelectItem value="new">
+                        <div className="flex items-center">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Create New Version
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {/* Show delete button only for non-current versions */}
+                  {selectedVersion !== 'current' && selectedVersion !== 'new' && (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      onClick={handleDeleteVersion}
+                      disabled={deleting}
+                      title="Delete this version"
+                    >
+                      {deleting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Update Type</Label>
@@ -560,14 +641,14 @@ export function ReleaseNotesDialog({
                             >
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-semibold">{version.version}</span>
+                                  <span className="font-semibold">{breakPhonePattern(version.version)}</span>
                                   <Badge variant="secondary">{version.type}</Badge>
                                   <span className="text-sm text-muted-foreground">
                                     {version.releaseDate}
                                   </span>
                                   {version.buildNumber && (
                                     <span className="text-xs text-muted-foreground">
-                                      Build: {version.buildNumber}
+                                      Build: {breakPhonePattern(version.buildNumber)}
                                     </span>
                                   )}
                                 </div>

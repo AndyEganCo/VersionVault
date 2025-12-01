@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/auth-context';
 import { SoftwareDetailModal } from './software-detail-modal';
+import { breakPhonePattern } from '@/lib/utils/version-display';
 
 import {
   Card,
@@ -47,7 +48,7 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
             {software.current_version && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Version</span>
-                <Badge variant="outline">{software.current_version}</Badge>
+                <Badge variant="outline">{breakPhonePattern(software.current_version)}</Badge>
               </div>
             )}
             
