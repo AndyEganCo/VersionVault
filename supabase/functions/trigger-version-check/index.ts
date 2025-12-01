@@ -177,26 +177,36 @@ serve(async (req) => {
 
             const notesArray = typeof version.notes === 'string'
               ? version.notes.split('\n').filter(Boolean)
-              : version.notes
+              : (Array.isArray(version.notes) ? version.notes : [])
 
             if (existing) {
-              // Update existing version
+              // Update existing version - only update release_date if it's not null
+              const updateData: any = {
+                notes: notesArray,
+                type: version.type
+              }
+
+              // Only update release_date if a valid date is provided
+              if (version.releaseDate && version.releaseDate !== 'null') {
+                updateData.release_date = version.releaseDate
+              }
+
               await supabase
                 .from('software_version_history')
-                .update({
-                  release_date: version.releaseDate,
-                  notes: notesArray,
-                  type: version.type
-                })
+                .update(updateData)
                 .eq('id', existing.id)
             } else {
-              // Insert new version
+              // Insert new version - use provided date or current date if null
+              const releaseDate = (version.releaseDate && version.releaseDate !== 'null')
+                ? version.releaseDate
+                : new Date().toISOString()
+
               await supabase
                 .from('software_version_history')
                 .insert({
                   software_id: software.id,
                   version: version.version,
-                  release_date: version.releaseDate,
+                  release_date: releaseDate,
                   notes: notesArray,
                   type: version.type,
                   created_at: new Date().toISOString()
