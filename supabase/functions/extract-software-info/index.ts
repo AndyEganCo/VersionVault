@@ -221,7 +221,7 @@ Respond in JSON format:
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o', // Using GPT-4o for better accuracy (more expensive but more capable)
       messages: [
         {
           role: 'system',
