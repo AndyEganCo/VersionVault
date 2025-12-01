@@ -441,7 +441,9 @@ export function ReleaseNotesDialog({
                             key={`version-${index}-${version.id}`}
                             value={version.version}
                           >
-                            {version.version}
+                            <span style={{ userSelect: 'none', pointerEvents: 'none' }}>
+                              {version.version}
+                            </span>
                           </SelectItem>
                         ))}
                       <SelectItem value="new">
