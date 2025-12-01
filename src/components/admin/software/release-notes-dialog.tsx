@@ -233,14 +233,25 @@ export function ReleaseNotesDialog({
       const success = await deleteVersionHistory(versionEntry.id);
 
       if (success) {
-        toast.success(`Version ${selectedVersion} deleted successfully`);
+        toast.success(`Version ${versionToDelete} deleted successfully`);
 
         // Reload version history
         const history = await getVersionHistory(software.id);
         setVersionHistory(history);
 
-        // Reset to current version
-        setSelectedVersion('current');
+        // If we deleted the current version, select the next available version
+        // Otherwise, reset to current version
+        if (selectedVersion === 'current') {
+          // Find the next available version (first one in remaining history)
+          if (history.length > 0) {
+            setSelectedVersion(history[0].version);
+          } else {
+            setSelectedVersion('new');
+          }
+        } else {
+          // If we deleted a past version, stay on current
+          setSelectedVersion('current');
+        }
 
         await onSuccess();
       } else {
