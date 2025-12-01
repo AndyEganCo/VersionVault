@@ -25,23 +25,83 @@ interface ExtractedInfo {
 }
 
 /**
- * Fetches webpage content and extracts text, with intelligent content limits
+ * Fetches webpage content using Browserless (headless Chrome) for JavaScript rendering
  */
-async function fetchWebpageContent(url: string, maxChars: number = 30000): Promise<string> {
-  try {
-    console.log(`Fetching webpage: ${url}`)
+async function fetchWithBrowserless(url: string): Promise<string> {
+  const apiKey = Deno.env.get('BROWSERLESS_API_KEY')
 
-    const response = await fetch(url, {
+  if (!apiKey) {
+    console.warn('BROWSERLESS_API_KEY not set, skipping browser rendering')
+    return ''
+  }
+
+  try {
+    console.log(`🌐 Fetching with Browserless (headless Chrome): ${url}`)
+
+    const browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}`
+
+    const response = await fetch(browserlessUrl, {
+      method: 'POST',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; VersionVault/1.0; +https://versionvault.dev)',
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        url: url,
+        waitFor: 2000,  // Wait 2 seconds for JavaScript to load
+      })
     })
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      const error = await response.text()
+      throw new Error(`Browserless error: ${response.status} - ${error}`)
     }
 
     const html = await response.text()
+    console.log(`✅ Browserless fetched ${html.length} characters`)
+    return html
+
+  } catch (error) {
+    console.error(`❌ Browserless fetch failed for ${url}:`, error)
+    return ''
+  }
+}
+
+/**
+ * Fetches webpage content and extracts text, with intelligent content limits
+ */
+async function fetchWebpageContent(url: string, maxChars: number = 30000, useBrowserless: boolean = false): Promise<string> {
+  try {
+    console.log(`Fetching webpage: ${url}${useBrowserless ? ' (with Browserless)' : ''}`)
+
+    let html: string
+
+    if (useBrowserless) {
+      // Use Browserless for JavaScript-heavy pages
+      html = await fetchWithBrowserless(url)
+
+      if (!html) {
+        console.warn('Browserless failed, falling back to regular fetch')
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; VersionVault/1.0; +https://versionvault.dev)',
+          },
+        })
+        html = await response.text()
+      }
+    } else {
+      // Regular fetch for static pages
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; VersionVault/1.0; +https://versionvault.dev)',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      html = await response.text()
+    }
     const doc = new DOMParser().parseFromString(html, 'text/html')
 
     if (!doc) {
@@ -321,18 +381,37 @@ serve(async (req) => {
     console.log(`Version URL: ${versionUrl}`)
     console.log(`Main Website: ${website}`)
 
-    // Fetch content from both URLs in parallel
-    const [versionContent, mainWebsiteContent] = await Promise.all([
-      fetchWebpageContent(versionUrl, 30000),
+    // Fetch content from both URLs in parallel (try regular fetch first)
+    let [versionContent, mainWebsiteContent] = await Promise.all([
+      fetchWebpageContent(versionUrl, 30000, false), // Regular fetch first
       // Only fetch main website if it's different from version URL
       versionUrl.toLowerCase() !== website.toLowerCase()
-        ? fetchWebpageContent(website, 20000)
+        ? fetchWebpageContent(website, 20000, false)
         : Promise.resolve('')
     ])
 
-    console.log(`\n=== CONTENT LENGTHS ===`)
+    console.log(`\n=== INITIAL CONTENT LENGTHS ===`)
     console.log(`Version content length: ${versionContent.length}`)
     console.log(`Main website content length: ${mainWebsiteContent.length}`)
+
+    // Detect if this is likely a JavaScript-rendered page
+    const isLikelyJavaScriptPage = versionContent.length < 2000
+    const hasVeryLowContent = versionContent.length < 500
+
+    if (isLikelyJavaScriptPage) {
+      console.log(`⚠️ WARNING: Low content detected (${versionContent.length} chars) - likely JavaScript-rendered page`)
+      console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
+
+      // Retry with Browserless for JavaScript pages
+      versionContent = await fetchWebpageContent(versionUrl, 30000, true)
+
+      console.log(`\n=== AFTER BROWSERLESS ===`)
+      console.log(`Version content length: ${versionContent.length}`)
+
+      if (versionContent.length > 2000) {
+        console.log(`✅ SUCCESS: Browserless extracted much more content!`)
+      }
+    }
 
     // Log what we're actually sending to the AI
     console.log(`\n=== VERSION CONTENT BEING SENT TO AI (first 1000 chars) ===`)
@@ -341,13 +420,8 @@ serve(async (req) => {
     console.log(mainWebsiteContent.substring(0, 1000))
     console.log(`\n=== END CONTENT PREVIEW ===`)
 
-    // Detect if this is likely a JavaScript-rendered page
-    const isLikelyJavaScriptPage = versionContent.length < 2000
-    const hasVeryLowContent = versionContent.length < 500
-
-    if (isLikelyJavaScriptPage) {
-      console.log(`⚠️ WARNING: Low content detected (${versionContent.length} chars) - likely JavaScript-rendered page`)
-    }
+    // Re-check if still low content after Browserless
+    const stillLowContent = versionContent.length < 2000
 
     // Try AI extraction
     let extracted: ExtractedInfo
@@ -367,12 +441,10 @@ serve(async (req) => {
       extracted = extractFromDomain(website)
     }
 
-    // Add JavaScript page detection flag and warning
-    if (isLikelyJavaScriptPage) {
+    // Add JavaScript page detection flag and warning (only if Browserless also failed)
+    if (stillLowContent) {
       extracted.isJavaScriptPage = true
-      extracted.lowContentWarning = hasVeryLowContent
-        ? `This page appears to load content with JavaScript (only ${versionContent.length} characters found). Please visit the page manually to check the version.`
-        : `Limited content found (${versionContent.length} characters). The version may not be accurate. Consider checking manually.`
+      extracted.lowContentWarning = `This page uses JavaScript rendering and couldn't be fully loaded (${versionContent.length} characters extracted). Please verify the version manually by visiting the page.`
     }
 
     return new Response(
