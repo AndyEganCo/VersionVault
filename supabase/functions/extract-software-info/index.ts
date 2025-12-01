@@ -13,6 +13,7 @@ interface ExtractRequest {
   website: string
   versionUrl: string
   description?: string
+  content?: string  // Optional raw text content (e.g., from PDF parsing)
 }
 
 interface ExtractedInfo {
@@ -428,11 +429,11 @@ serve(async (req) => {
   }
 
   try {
-    const { name, website, versionUrl, description } = await req.json() as ExtractRequest
+    const { name, website, versionUrl, description, content } = await req.json() as ExtractRequest
 
-    if (!name || !website || !versionUrl) {
+    if (!name || !website) {
       return new Response(
-        JSON.stringify({ error: 'name, website, and versionUrl are required' }),
+        JSON.stringify({ error: 'name and website are required' }),
         {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -443,36 +444,61 @@ serve(async (req) => {
     console.log(`Processing extraction for: ${name}`)
     console.log(`Version URL: ${versionUrl}`)
     console.log(`Main Website: ${website}`)
+    console.log(`Has provided content: ${!!content}`)
 
-    // Fetch content from both URLs in parallel (try regular fetch first)
-    let [versionContent, mainWebsiteContent] = await Promise.all([
-      fetchWebpageContent(versionUrl, 30000, false), // Regular fetch first
-      // Only fetch main website if it's different from version URL
-      versionUrl.toLowerCase() !== website.toLowerCase()
-        ? fetchWebpageContent(website, 20000, false)
-        : Promise.resolve('')
-    ])
+    let versionContent = ''
+    let mainWebsiteContent = ''
 
-    console.log(`\n=== INITIAL CONTENT LENGTHS ===`)
-    console.log(`Version content length: ${versionContent.length}`)
-    console.log(`Main website content length: ${mainWebsiteContent.length}`)
+    // If content is provided directly (e.g., from PDF parsing), use it
+    if (content && content.length > 100) {
+      console.log(`Using provided content (${content.length} characters)`)
+      versionContent = content
+      // Still fetch main website for manufacturer/category info if URL is different
+      if (versionUrl && versionUrl.toLowerCase() !== website.toLowerCase()) {
+        mainWebsiteContent = await fetchWebpageContent(website, 20000, false)
+      }
+    } else if (versionUrl) {
+      // Otherwise fetch content from URLs
+      // Check if versionUrl is a PDF
+      const isPDF = versionUrl.toLowerCase().endsWith('.pdf')
 
-    // Detect if this is likely a JavaScript-rendered page
-    const isLikelyJavaScriptPage = versionContent.length < 2000
-    const hasVeryLowContent = versionContent.length < 500
+      if (isPDF) {
+        console.log(`Detected PDF URL: ${versionUrl}`)
+        console.log(`⚠️ PDF parsing not yet implemented in edge function. Please parse PDF client-side and send content.`)
+        // TODO: Add PDF parsing support using a Deno PDF library
+        // For now, we'll just return an error or skip
+      }
 
-    if (isLikelyJavaScriptPage) {
-      console.log(`⚠️ WARNING: Low content detected (${versionContent.length} chars) - likely JavaScript-rendered page`)
-      console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
+      // Fetch content from both URLs in parallel (try regular fetch first)
+      [versionContent, mainWebsiteContent] = await Promise.all([
+        isPDF ? Promise.resolve('') : fetchWebpageContent(versionUrl, 30000, false), // Skip if PDF
+        // Only fetch main website if it's different from version URL
+        versionUrl.toLowerCase() !== website.toLowerCase()
+          ? fetchWebpageContent(website, 20000, false)
+          : Promise.resolve('')
+      ])
 
-      // Retry with Browserless for JavaScript pages
-      versionContent = await fetchWebpageContent(versionUrl, 30000, true)
-
-      console.log(`\n=== AFTER BROWSERLESS ===`)
+      console.log(`\n=== INITIAL CONTENT LENGTHS ===`)
       console.log(`Version content length: ${versionContent.length}`)
+      console.log(`Main website content length: ${mainWebsiteContent.length}`)
 
-      if (versionContent.length > 2000) {
-        console.log(`✅ SUCCESS: Browserless extracted much more content!`)
+      // Detect if this is likely a JavaScript-rendered page
+      const isLikelyJavaScriptPage = versionContent.length < 2000
+      const hasVeryLowContent = versionContent.length < 500
+
+      if (isLikelyJavaScriptPage && !isPDF) {
+        console.log(`⚠️ WARNING: Low content detected (${versionContent.length} chars) - likely JavaScript-rendered page`)
+        console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
+
+        // Retry with Browserless for JavaScript pages
+        versionContent = await fetchWebpageContent(versionUrl, 30000, true)
+
+        console.log(`\n=== AFTER BROWSERLESS ===`)
+        console.log(`Version content length: ${versionContent.length}`)
+
+        if (versionContent.length > 2000) {
+          console.log(`✅ SUCCESS: Browserless extracted much more content!`)
+        }
       }
     }
 
