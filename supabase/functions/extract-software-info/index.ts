@@ -46,10 +46,8 @@ async function fetchWithBrowserless(url: string): Promise<string> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: url,
-        gotoOptions: {
-          waitUntil: 'networkidle2'  // Wait for network to be idle
-        }
+        url: url
+        // /content endpoint automatically waits for JS to execute
       })
     })
 
