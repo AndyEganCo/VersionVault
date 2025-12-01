@@ -25,6 +25,8 @@ interface CheckSummary {
 }
 
 serve(async (req) => {
+  console.log(`📥 Received ${req.method} request to trigger-version-check`)
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -35,22 +37,37 @@ serve(async (req) => {
     const authHeader = req.headers.get('Authorization')
     const cronSecret = Deno.env.get('CRON_SECRET')
 
-    if (!authHeader || !cronSecret) {
+    console.log('🔐 Checking authorization...')
+    console.log(`   Auth header present: ${!!authHeader}`)
+    console.log(`   CRON_SECRET set: ${!!cronSecret}`)
+
+    if (!authHeader) {
+      console.error('❌ No Authorization header provided')
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'No Authorization header provided' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!cronSecret) {
+      console.error('❌ CRON_SECRET not configured in environment')
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error: CRON_SECRET not set' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
     // Check if the secret matches
     const providedSecret = authHeader.replace('Bearer ', '')
     if (providedSecret !== cronSecret) {
+      console.error('❌ Invalid CRON_SECRET provided')
       return new Response(
         JSON.stringify({ error: 'Invalid credentials' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
+    console.log('✅ Authorization successful')
     console.log('🔄 Starting automated version check...')
 
     // Initialize Supabase client
@@ -81,6 +98,9 @@ serve(async (req) => {
       try {
         // Call extract-software-info edge function
         const extractUrl = `${supabaseUrl}/functions/v1/extract-software-info`
+        console.log(`  📡 Calling extract-software-info for ${software.name}`)
+        console.log(`     URL: ${software.version_website}`)
+
         const response = await fetch(extractUrl, {
           method: 'POST',
           headers: {
@@ -95,11 +115,20 @@ serve(async (req) => {
           })
         })
 
+        console.log(`  📊 Extract response status: ${response.status}`)
+
         if (!response.ok) {
-          throw new Error(`Extract function returned ${response.status}`)
+          const errorText = await response.text()
+          console.error(`  ❌ Extract function error: ${errorText}`)
+          throw new Error(`Extract function returned ${response.status}: ${errorText}`)
         }
 
         const extracted = await response.json()
+        console.log(`  📦 Extracted data:`, {
+          currentVersion: extracted.currentVersion,
+          versionsCount: extracted.versions?.length || 0,
+          hasReleaseDate: !!extracted.releaseDate
+        })
 
         // Update software with latest version
         if (extracted.currentVersion) {
