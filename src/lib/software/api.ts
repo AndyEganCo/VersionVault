@@ -193,3 +193,25 @@ export async function getVersionHistory(softwareId: string) {
     return data || [];
   });
 }
+
+/**
+ * Deletes a version history entry
+ */
+export async function deleteVersionHistory(versionId: string): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('software_version_history')
+      .delete()
+      .eq('id', versionId);
+
+    if (error) {
+      console.error('Error deleting version history:', error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Error deleting version history:', error);
+    return false;
+  }
+}
