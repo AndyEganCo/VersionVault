@@ -318,8 +318,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                     variant="ghost"
                     size="icon"
                     onClick={() => setAddingNotesTo(software)}
-                    disabled={!software.current_version}
-                    title="Add release notes"
+                    title="Add or edit release notes"
                   >
                     <FileText className="h-4 w-4" />
                   </Button>

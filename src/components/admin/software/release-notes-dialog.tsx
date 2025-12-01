@@ -453,8 +453,8 @@ export function ReleaseNotesDialog({
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  {/* Show delete button only for non-current versions */}
-                  {selectedVersion !== 'current' && selectedVersion !== 'new' && (
+                  {/* Show delete button for all existing versions */}
+                  {selectedVersion !== 'new' && (
                     <Button
                       type="button"
                       variant="destructive"
