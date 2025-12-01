@@ -141,18 +141,26 @@ serve(async (req) => {
           hasReleaseDate: !!extracted.releaseDate
         })
 
-        // Update software with latest version
-        if (extracted.currentVersion) {
-          await supabase
-            .from('software')
-            .update({
-              current_version: extracted.currentVersion,
-              release_date: extracted.releaseDate || null,
-              last_checked: new Date().toISOString()
-            })
-            .eq('id', software.id)
+        // Always update last_checked timestamp, regardless of version found
+        const updateData: any = {
+          last_checked: new Date().toISOString()
+        }
 
+        // Update with new version if found
+        if (extracted.currentVersion) {
+          updateData.current_version = extracted.currentVersion
+          updateData.release_date = extracted.releaseDate || null
+        }
+
+        await supabase
+          .from('software')
+          .update(updateData)
+          .eq('id', software.id)
+
+        if (extracted.currentVersion) {
           console.log(`  ✅ Updated to version ${extracted.currentVersion}`)
+        } else {
+          console.log(`  ⏭️  No new version found, updated last_checked`)
         }
 
         // Save all versions to database

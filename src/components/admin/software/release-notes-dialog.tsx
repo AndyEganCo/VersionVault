@@ -209,8 +209,14 @@ export function ReleaseNotesDialog({
   };
 
   const handleDeleteVersion = async () => {
+    // Determine the actual version to delete (convert 'current' to actual version number)
+    let versionToDelete = selectedVersion;
+    if (selectedVersion === 'current') {
+      versionToDelete = software.current_version || '';
+    }
+
     // Find the version entry to delete
-    const versionEntry = versionHistory.find(v => v.version === selectedVersion);
+    const versionEntry = versionHistory.find(v => v.version === versionToDelete);
 
     if (!versionEntry) {
       toast.error('Version not found');
@@ -218,7 +224,7 @@ export function ReleaseNotesDialog({
     }
 
     // Confirm deletion
-    if (!confirm(`Are you sure you want to delete version ${selectedVersion}? This cannot be undone.`)) {
+    if (!confirm(`Are you sure you want to delete version ${versionToDelete}? This cannot be undone.`)) {
       return;
     }
 
@@ -227,14 +233,25 @@ export function ReleaseNotesDialog({
       const success = await deleteVersionHistory(versionEntry.id);
 
       if (success) {
-        toast.success(`Version ${selectedVersion} deleted successfully`);
+        toast.success(`Version ${versionToDelete} deleted successfully`);
 
         // Reload version history
         const history = await getVersionHistory(software.id);
         setVersionHistory(history);
 
-        // Reset to current version
-        setSelectedVersion('current');
+        // If we deleted the current version, select the next available version
+        // Otherwise, reset to current version
+        if (selectedVersion === 'current') {
+          // Find the next available version (first one in remaining history)
+          if (history.length > 0) {
+            setSelectedVersion(history[0].version);
+          } else {
+            setSelectedVersion('new');
+          }
+        } else {
+          // If we deleted a past version, stay on current
+          setSelectedVersion('current');
+        }
 
         await onSuccess();
       } else {
@@ -453,8 +470,8 @@ export function ReleaseNotesDialog({
                       </SelectItem>
                     </SelectContent>
                   </Select>
-                  {/* Show delete button only for non-current versions */}
-                  {selectedVersion !== 'current' && selectedVersion !== 'new' && (
+                  {/* Show delete button for all existing versions */}
+                  {selectedVersion !== 'new' && (
                     <Button
                       type="button"
                       variant="destructive"

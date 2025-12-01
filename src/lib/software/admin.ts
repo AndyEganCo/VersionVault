@@ -32,10 +32,34 @@ export async function updateSoftware(id: string, data: Partial<Software>): Promi
 }
 
 export async function deleteSoftware(id: string): Promise<void> {
+  // First, delete all version history for this software to avoid foreign key constraint
+  const { error: versionError } = await supabase
+    .from('software_version_history')
+    .delete()
+    .eq('software_id', id);
+
+  if (versionError) {
+    console.error('Error deleting version history:', {
+      message: versionError.message,
+      code: versionError.code,
+      details: versionError.details,
+    });
+    throw versionError;
+  }
+
+  // Then delete the software itself
   const { error } = await supabase
     .from('software')
     .delete()
     .eq('id', id);
 
-  if (error) throw error;
+  if (error) {
+    console.error('Delete software error details:', {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    throw error;
+  }
 }
