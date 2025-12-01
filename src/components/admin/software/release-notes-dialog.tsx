@@ -209,8 +209,14 @@ export function ReleaseNotesDialog({
   };
 
   const handleDeleteVersion = async () => {
+    // Determine the actual version to delete (convert 'current' to actual version number)
+    let versionToDelete = selectedVersion;
+    if (selectedVersion === 'current') {
+      versionToDelete = software.current_version || '';
+    }
+
     // Find the version entry to delete
-    const versionEntry = versionHistory.find(v => v.version === selectedVersion);
+    const versionEntry = versionHistory.find(v => v.version === versionToDelete);
 
     if (!versionEntry) {
       toast.error('Version not found');
@@ -218,7 +224,7 @@ export function ReleaseNotesDialog({
     }
 
     // Confirm deletion
-    if (!confirm(`Are you sure you want to delete version ${selectedVersion}? This cannot be undone.`)) {
+    if (!confirm(`Are you sure you want to delete version ${versionToDelete}? This cannot be undone.`)) {
       return;
     }
 
