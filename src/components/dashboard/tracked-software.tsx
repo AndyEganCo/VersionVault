@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { formatDate } from '@/lib/date';
 import { toast } from 'sonner';
 import { Software } from '@/lib/software/types';
+import { breakPhonePattern } from '@/lib/utils/version-display';
 
 interface TrackedSoftwareProps {
   refreshTracking: () => Promise<void>;
@@ -102,7 +103,7 @@ export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftware
 
               {softwareItem.current_version && (
                 <div className="flex items-center justify-between text-xs gap-2">
-                  <span className="text-muted-foreground">v{softwareItem.current_version}</span>
+                  <span className="text-muted-foreground">v{breakPhonePattern(softwareItem.current_version)}</span>
                 </div>
               )}
 

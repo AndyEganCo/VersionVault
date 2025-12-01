@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { breakPhonePattern } from '@/lib/utils/version-display';
 
 interface ReleaseNotesDialogProps {
   software: Software;
@@ -428,7 +429,7 @@ export function ReleaseNotesDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="current">
-                        {software.current_version || 'Current Version'} (Current)
+                        {breakPhonePattern(software.current_version || 'Current Version')} (Current)
                       </SelectItem>
                       {versionHistory
                         .filter(v => v.version !== software.current_version)
@@ -441,17 +442,7 @@ export function ReleaseNotesDialog({
                             key={`version-${index}-${version.id}`}
                             value={version.version}
                           >
-                            <span
-                              className="select-none pointer-events-none"
-                              data-no-phone="true"
-                              style={{
-                                WebkitTextSizeAdjust: '100%',
-                                MozTextSizeAdjust: '100%',
-                                msTextSizeAdjust: '100%'
-                              }}
-                            >
-                              {version.version}
-                            </span>
+                            {breakPhonePattern(version.version)}
                           </SelectItem>
                         ))}
                       <SelectItem value="new">
@@ -650,14 +641,14 @@ export function ReleaseNotesDialog({
                             >
                               <div className="flex-1">
                                 <div className="flex items-center gap-2 mb-1">
-                                  <span className="font-semibold">{version.version}</span>
+                                  <span className="font-semibold">{breakPhonePattern(version.version)}</span>
                                   <Badge variant="secondary">{version.type}</Badge>
                                   <span className="text-sm text-muted-foreground">
                                     {version.releaseDate}
                                   </span>
                                   {version.buildNumber && (
                                     <span className="text-xs text-muted-foreground">
-                                      Build: {version.buildNumber}
+                                      Build: {breakPhonePattern(version.buildNumber)}
                                     </span>
                                   )}
                                 </div>

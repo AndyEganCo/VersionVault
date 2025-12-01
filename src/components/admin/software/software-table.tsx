@@ -20,6 +20,7 @@ import { formatDate } from '@/lib/date';
 import { ReleaseNotesDialog } from './release-notes-dialog';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
 import { versionCheckLimiter } from '@/lib/utils/rate-limiter';
+import { breakPhonePattern } from '@/lib/utils/version-display';
 
 type SoftwareTableProps = {
   data: Software[];
@@ -268,7 +269,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                 </TableCell>
                 <TableCell>{software.manufacturer}</TableCell>
                 <TableCell>
-                  {software.current_version || 'N/A'}
+                  {software.current_version ? breakPhonePattern(software.current_version) : 'N/A'}
                 </TableCell>
                 <TableCell>
                   {software.release_date ? formatDate(software.release_date) : 'N/A'}

@@ -4,6 +4,7 @@ import { useRecentUpdates } from '@/lib/software/hooks';
 import { formatRelativeDate } from '@/lib/date';
 import { ReleaseNotesDialog } from '@/components/software/release-notes/dialog';
 import type { Software } from '@/lib/software/types';
+import { breakPhonePattern } from '@/lib/utils/version-display';
 
 export function RecentUpdates() {
   const { updates, loading } = useRecentUpdates();
@@ -32,7 +33,7 @@ export function RecentUpdates() {
                     {software.name}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Version {software.current_version}
+                    Version {breakPhonePattern(software.current_version)}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     Updated {formatRelativeDate(software.last_checked || '')}
