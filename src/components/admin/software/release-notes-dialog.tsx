@@ -138,7 +138,7 @@ export function ReleaseNotesDialog({
         setType(currentVersionEntry.type as 'major' | 'minor' | 'patch');
         const noteText = Array.isArray(currentVersionEntry.notes)
           ? currentVersionEntry.notes.join('\n')
-          : currentVersionEntry.notes;
+          : (currentVersionEntry.notes || '');
         setNotes(noteText);
         if (currentVersionEntry.release_date) {
           setReleaseDate(formatDateForInput(currentVersionEntry.release_date));
@@ -154,7 +154,7 @@ export function ReleaseNotesDialog({
         setType(selectedVersionEntry.type as 'major' | 'minor' | 'patch');
         const noteText = Array.isArray(selectedVersionEntry.notes)
           ? selectedVersionEntry.notes.join('\n')
-          : selectedVersionEntry.notes;
+          : (selectedVersionEntry.notes || '');
         setNotes(noteText);
         if (selectedVersionEntry.release_date) {
           setReleaseDate(formatDateForInput(selectedVersionEntry.release_date));
