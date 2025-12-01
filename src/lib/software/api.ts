@@ -134,26 +134,36 @@ export async function addVersionHistory(softwareId: string, data: {
       : (Array.isArray(data.notes) ? data.notes : []);
 
     if (existing) {
-      // Update existing version
+      // Update existing version - only update release_date if it's not null
+      const updateData: any = {
+        notes: notesArray,
+        type: data.type
+      };
+
+      // Only update release_date if a valid date is provided
+      if (data.release_date && data.release_date !== 'null') {
+        updateData.release_date = data.release_date;
+      }
+
       const { error } = await supabase
         .from('software_version_history')
-        .update({
-          release_date: data.release_date,
-          notes: notesArray,
-          type: data.type
-        })
+        .update(updateData)
         .eq('id', existing.id);
 
       if (error) throw error;
     } else {
-      // Insert new version
+      // Insert new version - use provided date or current date if null
+      const releaseDate = (data.release_date && data.release_date !== 'null')
+        ? data.release_date
+        : new Date().toISOString();
+
       const { error } = await supabase
         .from('software_version_history')
         .insert({
           id: crypto.randomUUID(),
           software_id: data.software_id,
           version: data.version,
-          release_date: data.release_date,
+          release_date: releaseDate,
           notes: notesArray,
           type: data.type,
           created_at: new Date().toISOString()
@@ -163,13 +173,19 @@ export async function addVersionHistory(softwareId: string, data: {
     }
 
     // Update the software table with the new version info and last_checked
+    const softwareUpdateData: any = {
+      current_version: data.version,
+      last_checked: new Date().toISOString()
+    };
+
+    // Only update release_date if a valid date is provided
+    if (data.release_date && data.release_date !== 'null') {
+      softwareUpdateData.release_date = data.release_date;
+    }
+
     const { error: softwareError } = await supabase
       .from('software')
-      .update({
-        current_version: data.version,
-        release_date: data.release_date,
-        last_checked: new Date().toISOString()
-      })
+      .update(softwareUpdateData)
       .eq('id', softwareId);
 
     if (softwareError) throw softwareError;
