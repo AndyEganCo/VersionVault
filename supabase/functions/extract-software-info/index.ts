@@ -47,16 +47,34 @@ async function fetchWebpageContent(url: string, maxChars: number = 30000): Promi
     }
 
     // Try to find main content areas first (more intelligent extraction)
+    // Added wiki-specific selectors and documentation page patterns
     const selectors = [
+      // Wiki-specific selectors
+      '.wiki-content',
+      '#wiki-content',
+      '.mw-parser-output',
+      '#mw-content-text',
+      '.page-content',
+      '#page-content',
+      '.markdown-body',
+      '.md-content',
+
+      // Release notes / changelog specific
+      '.release-notes',
+      '.changelog',
+      '.version-info',
+      '#release-notes',
+      '#changelog',
+
+      // Generic semantic selectors
       'main',
       'article',
       '[role="main"]',
       '.content',
       '.main-content',
       '#content',
-      '.release-notes',
-      '.changelog',
-      '.version-info'
+      '.post-content',
+      '.entry-content'
     ]
 
     let content = ''
@@ -64,17 +82,17 @@ async function fetchWebpageContent(url: string, maxChars: number = 30000): Promi
     // Try to extract from semantic elements first
     for (const selector of selectors) {
       const element = doc.querySelector(selector)
-      if (element?.textContent) {
+      if (element?.textContent && element.textContent.trim().length > 200) {
         content = element.textContent
-        console.log(`Found content in ${selector}`)
+        console.log(`Found content in ${selector} (${content.length} chars)`)
         break
       }
     }
 
     // Fallback to body if no semantic elements found
-    if (!content) {
+    if (!content || content.trim().length < 200) {
       content = doc.body?.textContent || ''
-      console.log('Using full body content')
+      console.log(`Using full body content (${content.length} chars)`)
     }
 
     // Clean up whitespace
@@ -86,6 +104,11 @@ async function fetchWebpageContent(url: string, maxChars: number = 30000): Promi
     // Limit to specified character count
     const limitedContent = content.substring(0, maxChars)
     console.log(`Extracted ${limitedContent.length} characters from ${url}`)
+
+    // Log first 500 chars for debugging
+    console.log('--- CONTENT PREVIEW ---')
+    console.log(limitedContent.substring(0, 500))
+    console.log('--- END PREVIEW ---')
 
     return limitedContent
   } catch (error) {
@@ -149,20 +172,28 @@ TASK: Extract the following information:
    - Network & Control
    - Project Management
 
-3. **Current Version**: The latest version number (e.g., "2.1.3", "2024.1")
-   - Look in the version page content first
-   - If not found there, check the main website content
-   - If still not found, use null
+3. **Current Version**: The latest version number (e.g., "2.1.3", "2024.1", "v5.3", "r32.1")
+   - THOROUGHLY search ALL provided content
+   - Look for version patterns ANYWHERE in the text (beginning, middle, end)
+   - Common patterns: "Version X.X.X", "vX.X.X", "Release X.X", "Build XXXX", "X.X.X released"
+   - May appear in headers, lists, tables, or plain text
+   - If multiple versions found, pick the LATEST/NEWEST one
+   - ONLY use null if you truly cannot find ANY version number after thorough search
 
 4. **Release Date**: The date the current version was released (format: YYYY-MM-DD)
-   - Look for dates associated with the latest version
-   - If not found or uncertain, use null
+   - Look for dates near version numbers
+   - Convert various formats: "Nov 29, 2024" → "2024-11-29", "29/11/2024" → "2024-11-29"
+   - If multiple dates found, pick the one for the latest version
+   - ONLY use null if genuinely not found
 
-IMPORTANT INSTRUCTIONS:
-- Search BOTH the version page AND main website content for version information
-- Look for patterns like "Version 1.2.3", "v1.2.3", "Release 1.2.3", "1.2.3 released", etc.
-- Release dates might be formatted various ways (convert to YYYY-MM-DD)
-- If you cannot find version/date in the provided content, return null (not an empty string)
+CRITICAL INSTRUCTIONS:
+- BE VERY THOROUGH - search the ENTIRE content for version patterns
+- Look for version numbers in: headers, bullet points, tables, release notes, changelogs
+- Version formats vary: "1.2.3", "v5.4", "r32", "2024.1", "8.5.2 build 12345", etc.
+- Don't give up easily - scan ALL the text before returning null
+- If you see ANY version-like number pattern near the software name, extract it
+- For wiki/documentation pages, versions often appear in section headers or first paragraphs
+- Search BOTH the version page AND main website content
 - For category, choose the EXACT category name from the list (case-sensitive)
 
 Respond in JSON format:
@@ -186,7 +217,7 @@ Respond in JSON format:
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful assistant that extracts software information and returns only valid JSON. Be thorough in searching all provided content for version information.'
+          content: 'You are an expert software version detective. Your job is to THOROUGHLY scan ALL provided content to find version numbers and release dates. Be exhaustive - check every line, every header, every paragraph. Do not give up easily. Even if the content is messy or has lots of navigation text, find the version information. Return only valid JSON.'
         },
         {
           role: 'user',
@@ -205,6 +236,10 @@ Respond in JSON format:
 
   const data = await response.json()
   const result = data.choices[0].message.content
+
+  console.log('=== AI RESPONSE ===')
+  console.log(result)
+  console.log('===================')
 
   if (!result) {
     throw new Error('No response from OpenAI')
