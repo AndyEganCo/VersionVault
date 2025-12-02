@@ -286,13 +286,14 @@ async function fetchPDFContent(url: string): Promise<string> {
 /**
  * Fetches webpage content and extracts text, with intelligent content limits
  * Phase 3: Now supports interactive scraping strategies
+ * Returns: { content: string, method: string }
  */
 async function fetchWebpageContent(
   url: string,
   maxChars: number = 30000,
   useBrowserless: boolean = false,
   strategy?: ScrapingStrategy
-): Promise<string> {
+): Promise<{ content: string; method: string }> {
   try {
     console.log(`Fetching webpage: ${url}`)
     if (strategy) {
@@ -302,23 +303,27 @@ async function fetchWebpageContent(
     }
 
     let html: string
+    let method: string = 'static'
 
     // Priority 1: Interactive scraping with strategy (Phase 3)
     if (strategy && (strategy.releaseNotesSelectors || strategy.expandSelectors || strategy.customScript)) {
       console.log('🎯 Attempting interactive scraping...')
       html = await fetchWithInteraction(url, strategy)
 
-      // If interactive scraping returned content, use it
-      if (html && html.length > 100) {
+      // If interactive scraping returned good content, use it
+      if (html && html.length > 2000) {
         console.log(`✅ Interactive scraping successful: ${html.length} chars`)
+        method = 'interactive'
       } else {
-        console.log('⚠️ Interactive scraping returned little/no content, trying Browserless...')
+        console.log(`⚠️ Interactive scraping returned little content (${html?.length || 0} chars), trying Browserless...`)
         html = await fetchWithBrowserless(url)
+        method = html && html.length > 100 ? 'browserless' : 'static'
       }
     }
     // Priority 2: Browserless for JavaScript pages
     else if (useBrowserless) {
       html = await fetchWithBrowserless(url)
+      method = 'browserless'
 
       if (!html) {
         console.warn('Browserless failed, falling back to regular fetch')
@@ -328,6 +333,7 @@ async function fetchWebpageContent(
           },
         })
         html = await response.text()
+        method = 'static'
       }
     }
     // Priority 3: Static fetch
@@ -344,6 +350,7 @@ async function fetchWebpageContent(
       }
 
       html = await response.text()
+      method = 'static'
     }
     const doc = new DOMParser().parseFromString(html, 'text/html')
 
@@ -415,10 +422,10 @@ async function fetchWebpageContent(
     console.log(limitedContent.substring(0, 500))
     console.log('--- END PREVIEW ---')
 
-    return limitedContent
+    return { content: limitedContent, method }
   } catch (error) {
     console.error(`Error fetching ${url}:`, error)
-    return ''
+    return { content: '', method: 'error' }
   }
 }
 
@@ -967,14 +974,17 @@ serve(async (req) => {
 
     let versionContent = ''
     let mainWebsiteContent = ''
+    let fetchMethod = 'static' // Track which method was used for version content
 
     // If content is provided directly (e.g., from PDF parsing), use it
     if (content && content.length > 100) {
       console.log(`Using provided content (${content.length} characters)`)
       versionContent = content
+      fetchMethod = 'provided'
       // Still fetch main website for manufacturer/category info if URL is different
       if (versionUrl && versionUrl.toLowerCase() !== website.toLowerCase()) {
-        mainWebsiteContent = await fetchWebpageContent(website, 20000, false)
+        const mainResult = await fetchWebpageContent(website, 20000, false)
+        mainWebsiteContent = mainResult.content
       }
     } else if (versionUrl) {
       // Otherwise fetch content from URLs
@@ -987,45 +997,57 @@ serve(async (req) => {
         // Fetch and parse PDF content
         try {
           versionContent = await fetchPDFContent(versionUrl)
+          fetchMethod = 'pdf'
         } catch (pdfError) {
           console.error('PDF parsing failed:', pdfError)
           // Continue with empty content, will return error later
           versionContent = ''
+          fetchMethod = 'error'
         }
 
         // Still fetch main website for manufacturer/category info
         if (versionUrl.toLowerCase() !== website.toLowerCase()) {
-          mainWebsiteContent = await fetchWebpageContent(website, 20000, false)
+          const mainResult = await fetchWebpageContent(website, 20000, false)
+          mainWebsiteContent = mainResult.content
         }
       } else {
         // Fetch content from both URLs in parallel (try regular fetch first)
         // Phase 3: Pass scraping strategy if provided
-        [versionContent, mainWebsiteContent] = await Promise.all([
+        const [versionResult, mainResult] = await Promise.all([
           fetchWebpageContent(versionUrl, 30000, false, scrapingStrategy),
           // Only fetch main website if it's different from version URL
           versionUrl.toLowerCase() !== website.toLowerCase()
             ? fetchWebpageContent(website, 20000, false)
-            : Promise.resolve('')
+            : Promise.resolve({ content: '', method: 'skipped' })
         ])
+
+        versionContent = versionResult.content
+        mainWebsiteContent = mainResult.content
+        fetchMethod = versionResult.method
       }
 
       console.log(`\n=== INITIAL CONTENT LENGTHS ===`)
       console.log(`Version content length: ${versionContent.length}`)
       console.log(`Main website content length: ${mainWebsiteContent.length}`)
+      console.log(`Fetch method: ${fetchMethod}`)
 
       // Detect if this is likely a JavaScript-rendered page
       const isLikelyJavaScriptPage = versionContent.length < 2000
       const hasVeryLowContent = versionContent.length < 500
 
-      if (isLikelyJavaScriptPage && !isPDF && !scrapingStrategy) {
+      // Retry with Browserless if content is low AND we haven't already tried interactive/browserless
+      if (isLikelyJavaScriptPage && !isPDF && fetchMethod === 'static') {
         console.log(`⚠️ WARNING: Low content detected (${versionContent.length} chars) - likely JavaScript-rendered page`)
         console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
 
         // Retry with Browserless for JavaScript pages
-        versionContent = await fetchWebpageContent(versionUrl, 30000, true, scrapingStrategy)
+        const retryResult = await fetchWebpageContent(versionUrl, 30000, true, scrapingStrategy)
+        versionContent = retryResult.content
+        fetchMethod = retryResult.method
 
         console.log(`\n=== AFTER BROWSERLESS ===`)
         console.log(`Version content length: ${versionContent.length}`)
+        console.log(`Fetch method: ${fetchMethod}`)
 
         if (versionContent.length > 2000) {
           console.log(`✅ SUCCESS: Browserless extracted much more content!`)
@@ -1077,6 +1099,23 @@ serve(async (req) => {
       console.log('Using fallback domain extraction')
       extracted = extractFromDomain(website)
       extracted.extractionMethod = 'fallback'
+    }
+
+    // Set extraction method based on fetch method (Phase 3 tracking)
+    // Priority: interactive > pdf > browserless > static
+    if (fetchMethod === 'interactive') {
+      extracted.extractionMethod = 'interactive'
+      console.log('✅ Extraction method: INTERACTIVE (Phase 3)')
+    } else if (fetchMethod === 'pdf') {
+      extracted.extractionMethod = 'pdf'
+    } else if (fetchMethod === 'browserless') {
+      extracted.extractionMethod = extracted.extractionMethod || 'browserless'
+    } else if (!extracted.extractionMethod || extracted.extractionMethod === 'legacy') {
+      // Keep 'enhanced_ai', 'legacy', or 'fallback' if already set by AI extraction
+      // Only override if it's not set or if it's legacy
+      if (USE_ENHANCED_EXTRACTION && extracted.extractionMethod !== 'fallback') {
+        extracted.extractionMethod = 'enhanced_ai'
+      }
     }
 
     // Add JavaScript page detection flag and warning (only if Browserless also failed)
