@@ -8,6 +8,7 @@ import { Plus } from 'lucide-react';
 import { SoftwareTable } from '@/components/admin/software/software-table';
 import { SoftwareFilters } from '@/components/admin/software/software-filters';
 import { AddSoftwareDialog } from '@/components/admin/software/add-software-dialog';
+import { VersionReviewWidget } from '@/components/admin/version-review-widget';
 import { useSoftwareList } from '@/lib/software/hooks';
 
 export function AdminSoftware() {
@@ -41,7 +42,9 @@ export function AdminSoftware() {
         title="Software Management"
         description="Add and manage software entries"
       />
-      
+
+      <VersionReviewWidget />
+
       <div className="flex justify-end gap-2 mb-6">
         <Button onClick={() => setShowAddDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
