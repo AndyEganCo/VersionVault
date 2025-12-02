@@ -78,12 +78,17 @@ export function RequestSoftwareModal({ onSuccess }: RequestSoftwareModalProps): 
     }
   };
 
+  const handleCancel = () => {
+    setFormData(initialFormData); // Clear form when canceling
+    setIsOpen(false);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button variant="outline">Request New Software</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px]" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Request Software Tracking</DialogTitle>
           <DialogDescription>
@@ -147,7 +152,7 @@ export function RequestSoftwareModal({ onSuccess }: RequestSoftwareModalProps): 
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsOpen(false)}
+              onClick={handleCancel}
               disabled={isLoading}
             >
               Cancel

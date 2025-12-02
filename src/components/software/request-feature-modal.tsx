@@ -81,12 +81,17 @@ export function RequestFeatureModal({ onSuccess }: RequestFeatureModalProps): JS
     }
   };
 
+  const handleCancel = () => {
+    setFormData(initialFormData); // Clear form when canceling
+    setIsOpen(false);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button variant="outline">Request New Feature</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[425px]" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Request a Feature</DialogTitle>
           <DialogDescription>
@@ -145,7 +150,7 @@ export function RequestFeatureModal({ onSuccess }: RequestFeatureModalProps): JS
             <Button
               type="button"
               variant="outline"
-              onClick={() => setIsOpen(false)}
+              onClick={handleCancel}
               disabled={isLoading}
             >
               Cancel
