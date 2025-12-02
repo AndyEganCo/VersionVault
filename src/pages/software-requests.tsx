@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { useSoftwareRequests } from '@/lib/software/requests-hooks';
+import { useFeatureRequests } from '@/lib/software/feature-requests-hooks';
 import { useAuth } from '@/contexts/auth-context';
 import { LoadingPage } from '@/components/loading';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, X, Trash2, ExternalLink, Loader2 } from 'lucide-react';
+import { Check, X, Trash2, ExternalLink, Loader2, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
@@ -24,6 +25,12 @@ import { RequestFeatureModal } from '@/components/software/request-feature-modal
 export function SoftwareRequests() {
   const { isAdmin } = useAuth();
   const { requests, loading, updateRequestStatus, deleteRequest } = useSoftwareRequests();
+  const {
+    requests: featureRequests,
+    loading: featureLoading,
+    updateRequestStatus: updateFeatureStatus,
+    deleteRequest: deleteFeatureRequest
+  } = useFeatureRequests();
   const [processingId, setProcessingId] = useState<string | null>(null);
 
   const handleApprove = async (id: string) => {
@@ -127,7 +134,46 @@ export function SoftwareRequests() {
     }
   };
 
-  if (loading) {
+  // Feature request handlers
+  const handleFeatureApprove = async (id: string) => {
+    const success = await updateFeatureStatus(id, 'approved');
+    if (success) {
+      toast.success('Feature request approved');
+    } else {
+      toast.error('Failed to approve feature request');
+    }
+  };
+
+  const handleFeatureReject = async (id: string) => {
+    const success = await updateFeatureStatus(id, 'rejected');
+    if (success) {
+      toast.success('Feature request rejected');
+    } else {
+      toast.error('Failed to reject feature request');
+    }
+  };
+
+  const handleFeatureComplete = async (id: string) => {
+    const success = await updateFeatureStatus(id, 'completed');
+    if (success) {
+      toast.success('Feature request marked as completed');
+    } else {
+      toast.error('Failed to update feature request');
+    }
+  };
+
+  const handleFeatureDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this feature request?')) {
+      const success = await deleteFeatureRequest(id);
+      if (success) {
+        toast.success('Feature request deleted');
+      } else {
+        toast.error('Failed to delete feature request');
+      }
+    }
+  };
+
+  if (loading || featureLoading) {
     return <LoadingPage />;
   }
 
@@ -137,6 +183,8 @@ export function SoftwareRequests() {
         return <Badge className="bg-green-500">Approved</Badge>;
       case 'rejected':
         return <Badge variant="destructive">Rejected</Badge>;
+      case 'completed':
+        return <Badge className="bg-blue-500">Completed</Badge>;
       default:
         return <Badge variant="secondary">Pending</Badge>;
     }
@@ -291,57 +339,112 @@ export function SoftwareRequests() {
             <RequestFeatureModal />
           </div>
 
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12 space-y-4">
-              <p className="text-muted-foreground text-center">
-                Feature requests functionality coming soon!
-              </p>
-              <p className="text-sm text-muted-foreground text-center max-w-md">
-                The database table for feature requests needs to be created.
-                Please run the following SQL to set up the feature_requests table:
-              </p>
-              <div className="bg-muted p-4 rounded-md text-xs font-mono max-w-2xl overflow-x-auto">
-                <pre>{`CREATE TABLE feature_requests (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  title TEXT NOT NULL,
-  description TEXT NOT NULL,
-  category TEXT,
-  status TEXT DEFAULT 'pending',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+          <div className="space-y-4">
+            {featureRequests.length === 0 ? (
+              <Card>
+                <CardContent className="flex items-center justify-center py-12">
+                  <p className="text-muted-foreground">
+                    {isAdmin
+                      ? "No feature requests found"
+                      : "You haven't submitted any feature requests yet"
+                    }
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              featureRequests.map((request) => (
+                <Card key={request.id}>
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1 flex-1">
+                        <CardTitle>{request.title}</CardTitle>
+                        <CardDescription>
+                          Submitted {new Date(request.created_at).toLocaleDateString()}
+                          {request.category && ` • ${request.category}`}
+                        </CardDescription>
+                      </div>
+                      {getStatusBadge(request.status)}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="space-y-1">
+                        <span className="text-sm font-medium">Description:</span>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {request.description}
+                        </p>
+                      </div>
+                    </div>
 
--- Enable RLS
-ALTER TABLE feature_requests ENABLE ROW LEVEL SECURITY;
+                    {isAdmin && request.status === 'pending' && (
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleFeatureApprove(request.id)}
+                          className="flex items-center gap-1"
+                        >
+                          <Check className="h-4 w-4" />
+                          Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleFeatureReject(request.id)}
+                          className="flex items-center gap-1"
+                        >
+                          <X className="h-4 w-4" />
+                          Reject
+                        </Button>
+                      </div>
+                    )}
 
--- Users can view their own requests
-CREATE POLICY "Users can view own feature requests"
-  ON feature_requests FOR SELECT
-  USING (auth.uid() = user_id);
+                    {isAdmin && request.status === 'approved' && (
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleFeatureComplete(request.id)}
+                          className="flex items-center gap-1 bg-blue-500 hover:bg-blue-600"
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                          Mark as Completed
+                        </Button>
+                      </div>
+                    )}
 
--- Users can insert their own requests
-CREATE POLICY "Users can insert own feature requests"
-  ON feature_requests FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+                    {request.status === 'approved' && (
+                      <div className="border-t pt-4 mt-4 bg-green-50 dark:bg-green-950 p-3 rounded">
+                        <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                          ✅ Approved - This feature is planned for development
+                        </p>
+                      </div>
+                    )}
 
--- Admins can view all requests
-CREATE POLICY "Admins can view all feature requests"
-  ON feature_requests FOR SELECT
-  USING (auth.jwt() ->> 'role' = 'admin');
+                    {request.status === 'completed' && (
+                      <div className="border-t pt-4 mt-4 bg-blue-50 dark:bg-blue-950 p-3 rounded">
+                        <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                          🎉 Completed - This feature has been implemented
+                        </p>
+                      </div>
+                    )}
 
--- Admins can update all requests
-CREATE POLICY "Admins can update all feature requests"
-  ON feature_requests FOR UPDATE
-  USING (auth.jwt() ->> 'role' = 'admin');
-
--- Admins can delete all requests
-CREATE POLICY "Admins can delete all feature requests"
-  ON feature_requests FOR DELETE
-  USING (auth.jwt() ->> 'role' = 'admin');`}</pre>
-              </div>
-            </CardContent>
-          </Card>
+                    {(isAdmin || request.status !== 'pending') && (
+                      <div className="flex justify-end pt-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleFeatureDelete(request.id)}
+                          className="flex items-center gap-1 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     </PageLayout>
