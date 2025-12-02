@@ -1023,7 +1023,7 @@ serve(async (req) => {
     // Apply smart content extraction (Phase 4: Smart Windowing)
     // Instead of sending first 30K chars, find where product is mentioned
     // and send only relevant chunks
-    if (versionContent.length > 30000 && name) {
+    if (versionContent.length >= 10000 && name) {
       console.log('\n🎯 Applying smart content extraction...')
       const smartResult = extractSmartContent(versionContent, name, 30000)
 
