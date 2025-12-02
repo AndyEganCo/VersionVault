@@ -14,6 +14,7 @@ import { Signup } from '@/pages/signup';
 import { AdminSoftware } from '@/pages/admin/software';
 import { AdminUsers } from '@/pages/admin/users';
 import { AdminExtractionTest } from '@/pages/admin/extraction-test';
+import { AdminVersionReview } from '@/pages/admin/version-review';
 
 export function Routes() {
   return (
@@ -42,6 +43,7 @@ export function Routes() {
           <Route path="software" element={<AdminSoftware />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="extraction-test" element={<AdminExtractionTest />} />
+          <Route path="version-review" element={<AdminVersionReview />} />
         </Route>
       </Route>
 
