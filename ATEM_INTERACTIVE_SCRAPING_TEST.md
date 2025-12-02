@@ -6,9 +6,24 @@
 
 ---
 
+## ⚡ Important: Deploy First!
+
+Before testing, you **must** deploy the latest function code:
+
+```bash
+supabase functions deploy extract-software-info
+```
+
+**Latest fix (commit 59ce400):** Changed from clicking FIRST button to clicking ALL buttons - critical for ATEM page with multiple versions!
+
+---
+
 ## Background
 
 The ATEM support page has "read more" buttons for each version that expand to show full release notes. This is exactly what Phase 3 interactive scraping was designed to handle.
+
+**Previous issue:** Original implementation only clicked the FIRST "Read More" button
+**Fix applied:** Now clicks ALL matching buttons (one per version) to get complete release notes
 
 ---
 
