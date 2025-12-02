@@ -1,6 +1,6 @@
 /**
  * Smart Content Extraction Utilities
- * Intelligently extracts relevant portions of page content based on product name
+ * Intelligently extracts relevant portions of page content based on product name and version patterns
  */
 
 export interface ContentWindow {
@@ -8,6 +8,53 @@ export interface ContentWindow {
   startPosition: number;
   endPosition: number;
   matchedTerm: string;
+  matchType?: 'version' | 'product' | 'both';
+}
+
+/**
+ * Find version number patterns in content
+ * Looks for patterns like: "Version 27.1", "v27.1.0", "27.1", etc.
+ */
+export function findVersionPatterns(
+  content: string
+): Array<{ position: number; matchedTerm: string }> {
+  const matches: Array<{ position: number; matchedTerm: string }> = [];
+
+  // Version patterns to search for
+  const versionRegexes = [
+    // "Version 27.1" or "version 27.1"
+    /\bversion\s+(\d+\.[\d.]+)/gi,
+    // "v27.1" or "V27.1"
+    /\bv(\d+\.[\d.]+)/gi,
+    // "(Version 27.1)" - often in headings
+    /\(version\s+(\d+\.[\d.]+)\)/gi,
+    // Standalone version numbers in headings (e.g., "27.1" or "27.1.0")
+    // Must be followed by release notes context
+    /\b(\d{1,3}\.\d{1,3}(?:\.\d{1,3})?)\b(?=\s*(?:release|update|changelog|notes|fixes|features|improvements))/gi,
+    // Month Year (Version X.Y) - Adobe style
+    /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}\s*\(version\s+(\d+\.[\d.]+)\)/gi,
+  ];
+
+  for (const regex of versionRegexes) {
+    let match: RegExpExecArray | null;
+    const regexCopy = new RegExp(regex.source, regex.flags);
+
+    while ((match = regexCopy.exec(content)) !== null) {
+      matches.push({
+        position: match.index,
+        matchedTerm: match[0],
+      });
+    }
+  }
+
+  // Sort by position and remove duplicates (same or very close positions)
+  return matches
+    .sort((a, b) => a.position - b.position)
+    .filter((match, index, arr) => {
+      if (index === 0) return true;
+      // Remove if within 50 chars of previous match (likely same version)
+      return match.position - arr[index - 1].position > 50;
+    });
 }
 
 /**
@@ -154,8 +201,50 @@ export function createOptimizedContent(
 }
 
 /**
- * Smart content extraction - finds product mentions and extracts relevant chunks
- * Returns optimized content for AI analysis
+ * Extract windows around version patterns
+ * Similar to extractContentWindows but focuses on version numbers
+ */
+export function extractVersionWindows(
+  content: string,
+  windowSize: number = 5000,
+  maxWindows: number = 5
+): ContentWindow[] {
+  const versionMatches = findVersionPatterns(content);
+
+  if (versionMatches.length === 0) {
+    return [];
+  }
+
+  console.log(`✅ Found ${versionMatches.length} version patterns`);
+
+  const windows: ContentWindow[] = [];
+
+  for (let i = 0; i < Math.min(versionMatches.length, maxWindows); i++) {
+    const match = versionMatches[i];
+    const halfWindow = Math.floor(windowSize / 2);
+
+    const startPosition = Math.max(0, match.position - halfWindow);
+    const endPosition = Math.min(content.length, match.position + halfWindow);
+
+    windows.push({
+      content: content.substring(startPosition, endPosition),
+      startPosition,
+      endPosition,
+      matchedTerm: match.matchedTerm,
+      matchType: 'version',
+    });
+
+    console.log(`  Window ${i + 1}: chars ${startPosition}-${endPosition} (version: "${match.matchedTerm}")`);
+  }
+
+  return windows;
+}
+
+/**
+ * Smart content extraction - VERSION-FIRST STRATEGY
+ * 1. First tries to find version patterns (e.g., "Version 27.1")
+ * 2. Falls back to product name mentions if no versions found
+ * 3. Returns optimized content for AI analysis
  */
 export function extractSmartContent(
   fullContent: string,
@@ -164,27 +253,42 @@ export function extractSmartContent(
 ): { content: string; foundProduct: boolean; method: string } {
   console.log(`\n🔍 Smart extraction for "${productName}" (${fullContent.length} total chars)`);
 
-  // Find windows around product mentions
-  const windows = extractContentWindows(fullContent, productName, 5000, 5);
+  // STRATEGY 1: Look for version patterns first (best for release notes pages)
+  console.log('📍 Strategy 1: Searching for version patterns...');
+  const versionWindows = extractVersionWindows(fullContent, 5000, 5);
 
-  if (windows.length === 0) {
-    // Product not found - return first chunk as fallback
-    console.log('⚠️ Falling back to first chunk (product not found)');
+  if (versionWindows.length > 0) {
+    // Found versions! Use those windows
+    const optimized = createOptimizedContent(versionWindows, maxChars);
+    console.log(`✅ Version-first extraction: ${optimized.length} chars from ${versionWindows.length} windows`);
+
     return {
-      content: fullContent.substring(0, maxChars),
-      foundProduct: false,
-      method: 'fallback_first_chunk',
+      content: optimized,
+      foundProduct: true, // Assume product is in version windows
+      method: 'version_first',
     };
   }
 
-  // Create optimized content from windows
-  const optimized = createOptimizedContent(windows, maxChars);
+  // STRATEGY 2: Look for product name mentions (fallback)
+  console.log('📍 Strategy 2: Searching for product mentions...');
+  const productWindows = extractContentWindows(fullContent, productName, 5000, 5);
 
-  console.log(`✅ Smart extraction: ${optimized.length} chars from ${windows.length} windows`);
+  if (productWindows.length > 0) {
+    const optimized = createOptimizedContent(productWindows, maxChars);
+    console.log(`✅ Product-based extraction: ${optimized.length} chars from ${productWindows.length} windows`);
 
+    return {
+      content: optimized,
+      foundProduct: true,
+      method: 'product_mentions',
+    };
+  }
+
+  // STRATEGY 3: Return first chunk (no versions or product mentions found)
+  console.log('⚠️ Falling back to first chunk (no versions or product mentions found)');
   return {
-    content: optimized,
-    foundProduct: true,
-    method: 'smart_windowing',
+    content: fullContent.substring(0, maxChars),
+    foundProduct: false,
+    method: 'fallback_first_chunk',
   };
 }
