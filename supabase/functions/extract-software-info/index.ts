@@ -5,10 +5,28 @@ import { DOMParser } from 'https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts
 // @deno-types="npm:@types/pdfjs-dist"
 import * as pdfjsLib from 'npm:pdfjs-dist@4.0.379/legacy/build/pdf.mjs'
 
+// Import validation utilities for intelligent version detection
+import {
+  validateExtraction,
+  calculateConfidenceScore,
+  detectVersionAnomaly,
+  type ValidationResult
+} from '../_shared/validation.ts'
+
+import {
+  getPatternForProduct,
+  extractVersionWithPattern,
+  createProductIdentifier
+} from '../_shared/version-patterns.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
+
+// Feature flag: Set to 'true' to enable enhanced extraction with validation
+// This allows running both old and new systems in parallel for testing
+const USE_ENHANCED_EXTRACTION = Deno.env.get('USE_ENHANCED_EXTRACTION') === 'true'
 
 interface ExtractRequest {
   name: string
@@ -16,6 +34,8 @@ interface ExtractRequest {
   versionUrl: string
   description?: string
   content?: string  // Optional raw text content (e.g., from PDF parsing)
+  manufacturer?: string  // Manufacturer name (Phase 2 enhancement)
+  productIdentifier?: string  // Product identifier for pattern matching (Phase 2)
 }
 
 interface ExtractedInfo {
@@ -31,6 +51,12 @@ interface ExtractedInfo {
     notes: string
     type: 'major' | 'minor' | 'patch'
   }>
+  // New fields for enhanced validation (Phase 2)
+  confidence?: number          // AI confidence score (0-100)
+  productNameFound?: boolean   // Whether product name was found on page
+  validationNotes?: string     // Human-readable validation explanation
+  validationResult?: ValidationResult  // Full validation result
+  extractionMethod?: string    // 'enhanced_ai' or 'legacy'
 }
 
 /**
@@ -448,6 +474,281 @@ function compareVersions(v1: string, v2: string): number {
 }
 
 /**
+ * Enhanced AI extraction with strict product validation (Phase 2)
+ * This version includes product name validation to prevent mixing up
+ * software from the same manufacturer
+ */
+async function extractWithAIEnhanced(
+  name: string,
+  manufacturer: string,
+  website: string,
+  versionUrl: string,
+  versionContent: string,
+  mainWebsiteContent: string,
+  productIdentifier?: string,
+  description?: string
+): Promise<ExtractedInfo> {
+  const apiKey = Deno.env.get('OPENAI_API_KEY')
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+
+  const hasVersionContent = versionContent.length > 100
+  const hasMainContent = mainWebsiteContent.length > 100
+
+  console.log('=== ENHANCED AI EXTRACTION (Phase 2) ===')
+  console.log(`Product: ${name}`)
+  console.log(`Manufacturer: ${manufacturer}`)
+  console.log(`Product Identifier: ${productIdentifier || 'none'}`)
+
+  // Enhanced prompt with strict product validation
+  const prompt = `You are a software version detective with strict validation rules.
+
+**TARGET PRODUCT INFORMATION:**
+- Product Name: "${name}"
+- Manufacturer: "${manufacturer}"
+${productIdentifier ? `- Product Identifier: "${productIdentifier}"` : ''}
+- Version URL: ${versionUrl}
+${description ? `- Description: ${description}` : ''}
+
+**CRITICAL VALIDATION RULES:**
+
+1. ⚠️ You are extracting version info for ONLY "${name}" - NOT any other product
+2. ⚠️ If this page contains multiple products from ${manufacturer}, you MUST:
+   - Identify which content belongs specifically to "${name}"
+   - ONLY extract version numbers that appear near/with "${name}"
+   - COMPLETELY IGNORE version numbers for other products
+   - Return null if you cannot confidently identify which version belongs to "${name}"
+
+3. **VALIDATION REQUIREMENTS:**
+   - The version number MUST appear in the same section/paragraph as "${name}"
+   - If you see other product names with version numbers, IGNORE them completely
+   - If you cannot find "${name}" mentioned on the page, return null for version
+   - Provide a confidence score (0-100) for your extraction
+   - Mark productNameFound as true only if "${name}" appears on page
+
+**EXAMPLES OF CORRECT BEHAVIOR:**
+
+✅ CORRECT Example 1:
+Page: "DaVinci Resolve 19.1.3 released Dec 1. Fusion Studio 19.1.3 also available."
+Target: "DaVinci Resolve"
+Response: { version: "19.1.3", releaseDate: "2024-12-01", confidence: 95, productNameFound: true }
+
+❌ WRONG Example 1:
+Page: "DaVinci Resolve 19.1.3 released Dec 1. Fusion Studio 19.1.3 also available."
+Target: "DaVinci Resolve"
+Response: { version: "19.1.3", confidence: 50, productNameFound: false }  ← WRONG! Product name WAS found
+
+✅ CORRECT Example 2:
+Page: "ATEM Mini 9.6.1 is now available"
+Target: "DaVinci Resolve"
+Response: { version: null, confidence: 0, productNameFound: false, validationNotes: "Target product not found on page" }
+
+❌ WRONG Example 2:
+Page: "ATEM Mini 9.6.1 is now available"
+Target: "DaVinci Resolve"
+Response: { version: "9.6.1", confidence: 95 }  ← WRONG! This is ATEM's version, not DaVinci's
+
+✅ CORRECT Example 3:
+Page: "Version 2.5.0 released today"
+Target: "QLab"
+Response: { version: "2.5.0", confidence: 40, productNameFound: false, validationNotes: "Version found but product name not mentioned" }
+
+${hasVersionContent ? `
+VERSION PAGE CONTENT (from ${versionUrl}):
+${versionContent}
+` : ''}
+
+${hasMainContent ? `
+MAIN WEBSITE CONTENT (from ${website}):
+${mainWebsiteContent}
+` : ''}
+
+${!hasVersionContent && !hasMainContent ? `
+Note: Unable to fetch content from either URL. Please use your knowledge about this software to provide accurate information.
+` : ''}
+
+**EXTRACTION TASK:**
+
+Extract the following information:
+
+1. **Manufacturer/Company Name**: The company that makes this software
+
+2. **Category**: Choose EXACTLY ONE from this list:
+   - Audio Production
+   - Video Production
+   - Presentation & Playback
+   - Lighting Control
+   - Show Control
+   - Design & Planning
+   - Network & Control
+   - Project Management
+
+3. **Current Version**: The latest version number for "${name}" ONLY
+   - Search ALL provided content thoroughly
+   - ONLY extract if you find "${name}" mentioned near the version
+   - Return null if product name not found or version ambiguous
+   - Common patterns: "Version X.X.X", "vX.X.X", "Release X.X", "Build XXXX"
+   - If multiple versions found, pick the LATEST one for THIS product
+
+4. **Release Date**: Format YYYY-MM-DD
+   - USE NULL if not found - DO NOT guess or make up dates
+   - Only use dates explicitly stated in content
+   - Convert formats: "Nov 29, 2024" → "2024-11-29"
+
+5. **All Versions**: Extract EVERY version for "${name}" found in content
+   - For EACH version: { version, releaseDate (or null), notes, type }
+   - ONLY include versions clearly associated with "${name}"
+   - Exclude versions for other products
+   - Include full release notes in markdown format
+
+6. **Validation Fields** (REQUIRED):
+   - **confidence**: 0-100 score for how confident you are this is correct
+     - 90-100: Very confident, product name found, version nearby
+     - 70-89: Confident, product name found, version present
+     - 50-69: Moderate, product name found OR version present
+     - 30-49: Low, unclear which product
+     - 0-29: Very low, likely wrong product
+   - **productNameFound**: true/false - was "${name}" found on page?
+   - **validationNotes**: Brief explanation of confidence level
+
+**CRITICAL INSTRUCTIONS:**
+- **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data
+- If content is provided, ONLY extract from that content
+- BE THOROUGH - search ENTIRE content for version patterns
+- DO NOT make up or guess release dates - use null if not found
+- BE HONEST about confidence - low confidence is better than wrong data
+- Better to return null with explanation than wrong product's version
+
+**RESPOND IN JSON FORMAT:**
+{
+  "manufacturer": "Company Name",
+  "category": "Exact Category Name",
+  "currentVersion": "X.X.X or null",
+  "releaseDate": "YYYY-MM-DD or null",
+  "confidence": 0-100,
+  "productNameFound": true/false,
+  "validationNotes": "Brief explanation of why confident or uncertain",
+  "versions": [
+    {
+      "version": "1.5.0",
+      "releaseDate": "2024-11-29 or null",
+      "notes": "Full release notes in markdown",
+      "type": "major|minor|patch"
+    }
+  ]
+}`
+
+  console.log(`Prompt length: ~${prompt.length} chars`)
+  console.log(`Has version content: ${hasVersionContent} (${versionContent.length} chars)`)
+  console.log(`Has main content: ${hasMainContent} (${mainWebsiteContent.length} chars)`)
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an expert software version detective with strict validation rules.
+
+CRITICAL RULES:
+1. ONLY extract information for the specific product requested - NOT other products
+2. If multiple products appear on the page, distinguish between them carefully
+3. DO NOT make up or guess release dates - use null if not found
+4. Provide HONEST confidence scores - use low confidence if uncertain
+5. Mark productNameFound=true ONLY if the exact product name appears on page
+6. ONLY use information from provided webpage content, NOT your training data
+7. Return only valid JSON
+
+Remember: It's better to return null with low confidence than to extract the wrong product's version.
+Better to be honest about uncertainty than to provide incorrect data.`
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.3,
+      response_format: { type: 'json_object' }
+    })
+  })
+
+  if (!response.ok) {
+    const error = await response.text()
+    throw new Error(`OpenAI API error: ${response.status} - ${error}`)
+  }
+
+  const data = await response.json()
+  const result = data.choices[0].message.content
+
+  console.log('=== ENHANCED AI RESPONSE ===')
+  console.log(result)
+  console.log('============================')
+
+  const extracted = JSON.parse(result) as ExtractedInfo
+
+  // Validate required fields
+  if (!extracted.manufacturer || !extracted.category) {
+    throw new Error('Invalid AI response - missing required fields')
+  }
+
+  // Mark extraction method
+  extracted.extractionMethod = 'enhanced_ai'
+
+  // Sort versions array by version number (highest first)
+  if (extracted.versions && extracted.versions.length > 0) {
+    extracted.versions.sort((a, b) => compareVersions(b.version, a.version))
+
+    // Set currentVersion to the highest version number
+    extracted.currentVersion = extracted.versions[0].version
+    extracted.releaseDate = extracted.versions[0].releaseDate
+
+    console.log(`Sorted ${extracted.versions.length} versions. Latest: ${extracted.currentVersion}`)
+  }
+
+  // Clean up null values
+  if (extracted.currentVersion === null || extracted.currentVersion === 'null') {
+    delete extracted.currentVersion
+  }
+  if (extracted.releaseDate === null || extracted.releaseDate === 'null') {
+    delete extracted.releaseDate
+  }
+
+  // Run post-extraction validation
+  console.log('\n=== RUNNING POST-EXTRACTION VALIDATION ===')
+  const validation = validateExtraction(
+    { name, manufacturer, product_identifier: productIdentifier },
+    extracted,
+    versionContent + ' ' + mainWebsiteContent
+  )
+
+  console.log(`Validation result: ${validation.valid ? '✅ VALID' : '⚠️ INVALID'}`)
+  console.log(`Confidence: ${validation.confidence}%`)
+  console.log(`Reason: ${validation.reason}`)
+  if (validation.warnings.length > 0) {
+    console.log(`Warnings: ${validation.warnings.join(', ')}`)
+  }
+
+  // Store validation result
+  extracted.validationResult = validation
+  extracted.confidence = validation.confidence
+
+  // Add validation notes if there are warnings or low confidence
+  if (!validation.valid || validation.confidence < 70 || validation.warnings.length > 0) {
+    extracted.validationNotes = validation.reason
+    if (validation.warnings.length > 0) {
+      extracted.validationNotes += ' | Warnings: ' + validation.warnings.join('; ')
+    }
+  }
+
+  console.log('Enhanced extraction complete')
+  return extracted
+}
+
+/**
  * Fallback extraction from domain name
  */
 function extractFromDomain(website: string): ExtractedInfo {
@@ -478,7 +779,7 @@ serve(async (req) => {
   }
 
   try {
-    const { name, website, versionUrl, description, content } = await req.json() as ExtractRequest
+    const { name, website, versionUrl, description, content, manufacturer, productIdentifier } = await req.json() as ExtractRequest
 
     if (!name || !website) {
       return new Response(
@@ -490,10 +791,15 @@ serve(async (req) => {
       )
     }
 
+    console.log(`\n${'='.repeat(60)}`)
     console.log(`Processing extraction for: ${name}`)
     console.log(`Version URL: ${versionUrl}`)
     console.log(`Main Website: ${website}`)
+    console.log(`Manufacturer: ${manufacturer || 'unknown'}`)
+    console.log(`Product Identifier: ${productIdentifier || 'none'}`)
+    console.log(`Extraction Mode: ${USE_ENHANCED_EXTRACTION ? '🧠 ENHANCED (Phase 2)' : '📊 LEGACY (Original)'}`)
     console.log(`Has provided content: ${!!content}`)
+    console.log('='.repeat(60))
 
     let versionContent = ''
     let mainWebsiteContent = ''
@@ -572,22 +878,40 @@ serve(async (req) => {
     // Re-check if still low content after Browserless
     const stillLowContent = versionContent.length < 2000
 
-    // Try AI extraction
+    // Try AI extraction (choose between enhanced or legacy based on feature flag)
     let extracted: ExtractedInfo
     try {
-      extracted = await extractWithAI(
-        name,
-        website,
-        versionUrl,
-        versionContent,
-        mainWebsiteContent,
-        description
-      )
+      if (USE_ENHANCED_EXTRACTION) {
+        console.log('\n🧠 Using ENHANCED extraction with product validation (Phase 2)')
+        extracted = await extractWithAIEnhanced(
+          name,
+          manufacturer || 'Unknown',
+          website,
+          versionUrl,
+          versionContent,
+          mainWebsiteContent,
+          productIdentifier,
+          description
+        )
+      } else {
+        console.log('\n📊 Using LEGACY extraction (original system)')
+        extracted = await extractWithAI(
+          name,
+          website,
+          versionUrl,
+          versionContent,
+          mainWebsiteContent,
+          description
+        )
+        // Mark as legacy extraction
+        extracted.extractionMethod = 'legacy'
+      }
     } catch (aiError) {
-      console.error('AI extraction failed:', aiError)
+      console.error(`AI extraction failed (${USE_ENHANCED_EXTRACTION ? 'enhanced' : 'legacy'}):`, aiError)
       // Fallback to domain extraction
       console.log('Using fallback domain extraction')
       extracted = extractFromDomain(website)
+      extracted.extractionMethod = 'fallback'
     }
 
     // Add JavaScript page detection flag and warning (only if Browserless also failed)
