@@ -19,6 +19,11 @@ import {
   createProductIdentifier
 } from '../_shared/version-patterns.ts'
 
+import {
+  extractSmartContent,
+  findProductMentions
+} from '../_shared/content-extraction.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -1012,6 +1017,22 @@ serve(async (req) => {
         if (versionContent.length > 2000) {
           console.log(`✅ SUCCESS: Browserless extracted much more content!`)
         }
+      }
+    }
+
+    // Apply smart content extraction (Phase 4: Smart Windowing)
+    // Instead of sending first 30K chars, find where product is mentioned
+    // and send only relevant chunks
+    if (versionContent.length > 30000 && name) {
+      console.log('\n🎯 Applying smart content extraction...')
+      const smartResult = extractSmartContent(versionContent, name, 30000)
+
+      if (smartResult.foundProduct) {
+        console.log(`✅ Smart extraction successful (${smartResult.method})`)
+        versionContent = smartResult.content
+      } else {
+        console.log(`⚠️ Product not found in content, using fallback (${smartResult.method})`)
+        versionContent = smartResult.content
       }
     }
 
