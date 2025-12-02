@@ -140,21 +140,30 @@ async function fetchWithInteraction(url: string, strategy: ScrapingStrategy): Pr
         console.log('Page loaded');
 
         ${strategy.releaseNotesSelectors && strategy.releaseNotesSelectors.length > 0 ? `
-        // Try to click release notes buttons
+        // Try to click ALL release notes buttons (for pages with multiple versions)
         const releaseNotesSelectors = ${JSON.stringify(strategy.releaseNotesSelectors)};
+        let clickedAny = false;
         for (const selector of releaseNotesSelectors) {
           try {
-            const element = await page.$(selector);
-            if (element) {
-              console.log('Found release notes button:', selector);
-              await element.click();
-              await page.waitForTimeout(${strategy.waitTime || 2000});
-              console.log('Clicked and waited');
-              break; // Found and clicked, stop trying others
+            const elements = await page.$$(selector);
+            if (elements.length > 0) {
+              console.log('Found', elements.length, 'release notes button(s) for:', selector);
+              for (const element of elements) {
+                await element.click();
+                await page.waitForTimeout(${Math.floor((strategy.waitTime || 2000) / 2)});
+                console.log('Clicked a release notes button');
+                clickedAny = true;
+              }
+              break; // Found matching selector, stop trying other selectors
             }
           } catch (e) {
             console.log('Selector not found or failed:', selector, e.message);
           }
+        }
+        if (clickedAny) {
+          // Wait a bit longer after clicking all buttons
+          await page.waitForTimeout(${strategy.waitTime || 2000});
+          console.log('Finished clicking all release notes buttons');
         }
         ` : ''}
 
