@@ -378,16 +378,16 @@ async function fetchWebpageContent(
       .replace(/\n+/g, '\n')
       .trim()
 
-    // Limit to specified character count
-    const limitedContent = content.substring(0, maxChars)
-    console.log(`Extracted ${limitedContent.length} characters from ${url}`)
+    // Don't limit here - let smart windowing handle it later
+    // We need the FULL content to search for product mentions
+    console.log(`Extracted ${content.length} characters from ${url}`)
 
     // Log first 500 chars for debugging
     console.log('--- CONTENT PREVIEW ---')
-    console.log(limitedContent.substring(0, 500))
+    console.log(content.substring(0, 500))
     console.log('--- END PREVIEW ---')
 
-    return { content: limitedContent, method }
+    return { content, method }
   } catch (error) {
     console.error(`Error fetching ${url}:`, error)
     return { content: '', method: 'error' }
@@ -1021,19 +1021,23 @@ serve(async (req) => {
     }
 
     // Apply smart content extraction (Phase 4: Smart Windowing)
-    // Instead of sending first 30K chars, find where product is mentioned
-    // and send only relevant chunks
-    if (versionContent.length >= 10000 && name) {
+    // Search the FULL content for product mentions, extract windows around them
+    // This ensures we find the product even if buried deep in the page
+    if (versionContent.length > 1000 && name) {
       console.log('\n🎯 Applying smart content extraction...')
       const smartResult = extractSmartContent(versionContent, name, 30000)
 
       if (smartResult.foundProduct) {
-        console.log(`✅ Smart extraction successful (${smartResult.method})`)
+        console.log(`✅ Smart extraction successful - found product! (${smartResult.method})`)
         versionContent = smartResult.content
       } else {
-        console.log(`⚠️ Product not found in content, using fallback (${smartResult.method})`)
+        console.log(`⚠️ Product not found in ${versionContent.length} chars, using first chunk (${smartResult.method})`)
         versionContent = smartResult.content
       }
+    } else if (versionContent.length > 30000) {
+      // If no product name provided, just truncate to reasonable size
+      console.log(`⚠️ No product name for smart extraction, truncating to 30K`)
+      versionContent = versionContent.substring(0, 30000)
     }
 
     // Log what we're actually sending to the AI
