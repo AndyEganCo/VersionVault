@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/auth-context';
 import { Link } from 'react-router-dom';
-import { User, Bell, LogOut } from 'lucide-react';
+import { User, Bell, LogOut, FileText } from 'lucide-react';
 
 export function UserNav() {
   const { user, signOut } = useAuth();
@@ -47,6 +47,12 @@ export function UserNav() {
             <Link to="/user/notifications" className="flex items-center cursor-pointer">
               <Bell className="mr-2 h-4 w-4" />
               Notifications
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/requests" className="flex items-center cursor-pointer">
+              <FileText className="mr-2 h-4 w-4" />
+              Requests
             </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>

@@ -13,10 +13,13 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Check, X, Trash2, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
+import { RequestSoftwareModal } from '@/components/software/request-software-modal';
+import { RequestFeatureModal } from '@/components/software/request-feature-modal';
 
 export function SoftwareRequests() {
   const { isAdmin } = useAuth();
@@ -142,11 +145,22 @@ export function SoftwareRequests() {
   return (
     <PageLayout>
       <PageHeader
-        title="Software Requests"
-        description={isAdmin ? "Manage software tracking requests" : "View your software tracking requests"}
+        title="Requests"
+        description={isAdmin ? "Manage user requests" : "View and submit your requests"}
       />
 
-      <div className="space-y-4">
+      <Tabs defaultValue="software" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="software">Software Requests</TabsTrigger>
+          <TabsTrigger value="features">Feature Requests</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="software" className="space-y-4">
+          <div className="flex justify-end">
+            <RequestSoftwareModal />
+          </div>
+
+          <div className="space-y-4">
         {requests.length === 0 ? (
           <Card>
             <CardContent className="flex items-center justify-center py-12">
@@ -269,7 +283,67 @@ export function SoftwareRequests() {
             </Card>
           ))
         )}
-      </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="features" className="space-y-4">
+          <div className="flex justify-end">
+            <RequestFeatureModal />
+          </div>
+
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 space-y-4">
+              <p className="text-muted-foreground text-center">
+                Feature requests functionality coming soon!
+              </p>
+              <p className="text-sm text-muted-foreground text-center max-w-md">
+                The database table for feature requests needs to be created.
+                Please run the following SQL to set up the feature_requests table:
+              </p>
+              <div className="bg-muted p-4 rounded-md text-xs font-mono max-w-2xl overflow-x-auto">
+                <pre>{`CREATE TABLE feature_requests (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  category TEXT,
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE feature_requests ENABLE ROW LEVEL SECURITY;
+
+-- Users can view their own requests
+CREATE POLICY "Users can view own feature requests"
+  ON feature_requests FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Users can insert their own requests
+CREATE POLICY "Users can insert own feature requests"
+  ON feature_requests FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Admins can view all requests
+CREATE POLICY "Admins can view all feature requests"
+  ON feature_requests FOR SELECT
+  USING (auth.jwt() ->> 'role' = 'admin');
+
+-- Admins can update all requests
+CREATE POLICY "Admins can update all feature requests"
+  ON feature_requests FOR UPDATE
+  USING (auth.jwt() ->> 'role' = 'admin');
+
+-- Admins can delete all requests
+CREATE POLICY "Admins can delete all feature requests"
+  ON feature_requests FOR DELETE
+  USING (auth.jwt() ->> 'role' = 'admin');`}</pre>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </PageLayout>
   );
 }
