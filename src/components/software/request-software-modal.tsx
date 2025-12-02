@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +33,13 @@ export function RequestSoftwareModal({ onSuccess }: RequestSoftwareModalProps): 
   };
 
   const [formData, setFormData] = useState<SoftwareRequestFormData>(initialFormData);
+
+  // Clear form whenever modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData(initialFormData);
+    }
+  }, [isOpen]);
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
