@@ -17,11 +17,15 @@ export interface FeatureRequest {
 export function useFeatureRequests() {
   const [requests, setRequests] = useState<FeatureRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const { user, isAdmin } = useAuth();
 
   const fetchRequests = async () => {
     try {
-      setLoading(true);
+      // Only show loading state on initial load, not on refetches
+      if (isInitialLoad) {
+        setLoading(true);
+      }
 
       let query = supabase
         .from('feature_requests')
@@ -42,7 +46,10 @@ export function useFeatureRequests() {
       console.error('Error fetching feature requests:', error);
       toast.error('Failed to load feature requests');
     } finally {
-      setLoading(false);
+      if (isInitialLoad) {
+        setLoading(false);
+        setIsInitialLoad(false);
+      }
     }
   };
 
