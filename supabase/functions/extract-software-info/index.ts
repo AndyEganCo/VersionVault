@@ -322,21 +322,31 @@ async function fetchWebpageContent(
     ]
 
     let content = ''
+    let bestContent = ''
+    let bestLength = 0
+    let bestSelector = ''
 
-    // Try to extract from semantic elements first
+    // Try to extract from semantic elements first - find the LARGEST content area
     for (const selector of selectors) {
       const element = doc.querySelector(selector)
-      if (element?.textContent && element.textContent.trim().length > 200) {
-        content = element.textContent
-        console.log(`Found content in ${selector} (${content.length} chars)`)
-        break
+      if (element?.textContent) {
+        const len = element.textContent.trim().length
+        if (len > bestLength) {
+          bestContent = element.textContent
+          bestLength = len
+          bestSelector = selector
+        }
       }
     }
 
-    // Fallback to body if no semantic elements found
-    if (!content || content.trim().length < 200) {
+    // Use the best content found if it's substantial (>1000 chars)
+    // Otherwise fall back to body to get everything
+    if (bestLength > 1000) {
+      content = bestContent
+      console.log(`Found content in ${bestSelector} (${content.length} chars)`)
+    } else {
       content = doc.body?.textContent || ''
-      console.log(`Using full body content (${content.length} chars)`)
+      console.log(`Using full body content (${content.length} chars) - semantic selectors too small (best was ${bestLength} chars)`)
     }
 
     // Clean up whitespace
