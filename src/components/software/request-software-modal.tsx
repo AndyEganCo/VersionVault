@@ -16,7 +16,11 @@ import { toast } from 'sonner';
 import { SoftwareRequestFormData } from '@/types/software';
 import { supabase } from '@/lib/supabase';
 
-export function RequestSoftwareModal(): JSX.Element {
+interface RequestSoftwareModalProps {
+  onSuccess?: () => void;
+}
+
+export function RequestSoftwareModal({ onSuccess }: RequestSoftwareModalProps): JSX.Element {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { user } = useAuth();
@@ -59,8 +63,13 @@ export function RequestSoftwareModal(): JSX.Element {
       if (error) throw error;
 
       toast.success('Software request submitted successfully');
+      setFormData(initialFormData); // Clear form only on success
       setIsOpen(false);
-      setFormData(initialFormData);
+
+      // Refresh the list
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error) {
       toast.error('Failed to submit software request');
       console.error('Error submitting software request:', error);

@@ -21,7 +21,11 @@ interface FeatureRequestFormData {
   category?: string;
 }
 
-export function RequestFeatureModal(): JSX.Element {
+interface RequestFeatureModalProps {
+  onSuccess?: () => void;
+}
+
+export function RequestFeatureModal({ onSuccess }: RequestFeatureModalProps): JSX.Element {
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { user } = useAuth();
@@ -62,8 +66,13 @@ export function RequestFeatureModal(): JSX.Element {
       if (error) throw error;
 
       toast.success('Feature request submitted successfully');
+      setFormData(initialFormData); // Clear form only on success
       setIsOpen(false);
-      setFormData(initialFormData);
+
+      // Refresh the list
+      if (onSuccess) {
+        onSuccess();
+      }
     } catch (error) {
       toast.error('Failed to submit feature request');
       console.error('Error submitting feature request:', error);

@@ -24,12 +24,13 @@ import { RequestFeatureModal } from '@/components/software/request-feature-modal
 
 export function SoftwareRequests() {
   const { isAdmin } = useAuth();
-  const { requests, loading, updateRequestStatus, deleteRequest } = useSoftwareRequests();
+  const { requests, loading, updateRequestStatus, deleteRequest, refreshRequests } = useSoftwareRequests();
   const {
     requests: featureRequests,
     loading: featureLoading,
     updateRequestStatus: updateFeatureStatus,
-    deleteRequest: deleteFeatureRequest
+    deleteRequest: deleteFeatureRequest,
+    refetch: refetchFeatures
   } = useFeatureRequests();
   const [processingId, setProcessingId] = useState<string | null>(null);
 
@@ -205,7 +206,7 @@ export function SoftwareRequests() {
 
         <TabsContent value="software" className="space-y-4">
           <div className="flex justify-end">
-            <RequestSoftwareModal />
+            <RequestSoftwareModal onSuccess={refreshRequests} />
           </div>
 
           <div className="space-y-4">
@@ -336,7 +337,7 @@ export function SoftwareRequests() {
 
         <TabsContent value="features" className="space-y-4">
           <div className="flex justify-end">
-            <RequestFeatureModal />
+            <RequestFeatureModal onSuccess={refetchFeatures} />
           </div>
 
           <div className="space-y-4">
