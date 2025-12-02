@@ -91,7 +91,7 @@ export function RequestFeatureModal({ onSuccess }: RequestFeatureModalProps): JS
       <DialogTrigger asChild>
         <Button variant="outline">Request New Feature</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]" onInteractOutside={(e) => e.preventDefault()}>
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Request a Feature</DialogTitle>
           <DialogDescription>

@@ -88,7 +88,7 @@ export function RequestSoftwareModal({ onSuccess }: RequestSoftwareModalProps): 
       <DialogTrigger asChild>
         <Button variant="outline">Request New Software</Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]" onInteractOutside={(e) => e.preventDefault()}>
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Request Software Tracking</DialogTitle>
           <DialogDescription>
