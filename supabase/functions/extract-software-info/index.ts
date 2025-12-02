@@ -36,6 +36,7 @@ interface ExtractRequest {
   content?: string  // Optional raw text content (e.g., from PDF parsing)
   manufacturer?: string  // Manufacturer name (Phase 2 enhancement)
   productIdentifier?: string  // Product identifier for pattern matching (Phase 2)
+  scrapingStrategy?: ScrapingStrategy  // Interactive scraping strategy (Phase 3)
 }
 
 interface ExtractedInfo {
@@ -60,7 +61,19 @@ interface ExtractedInfo {
 }
 
 /**
+ * Scraping strategy for interactive content extraction
+ */
+interface ScrapingStrategy {
+  releaseNotesSelectors?: string[]  // Buttons/links to click
+  expandSelectors?: string[]        // Accordions to expand
+  waitForSelector?: string          // Wait for element to appear
+  waitTime?: number                 // Time to wait in ms (default 2000)
+  customScript?: string             // Custom JavaScript to execute
+}
+
+/**
  * Fetches webpage content using Browserless (headless Chrome) for JavaScript rendering
+ * Basic version - just renders the page without interaction
  */
 async function fetchWithBrowserless(url: string): Promise<string> {
   const apiKey = Deno.env.get('BROWSERLESS_API_KEY')
@@ -98,6 +111,121 @@ async function fetchWithBrowserless(url: string): Promise<string> {
   } catch (error) {
     console.error(`❌ Browserless fetch failed for ${url}:`, error)
     return ''
+  }
+}
+
+/**
+ * Fetches webpage with INTERACTIVE scraping (Phase 3)
+ * Can click buttons, open modals, and execute custom scripts
+ */
+async function fetchWithInteraction(url: string, strategy: ScrapingStrategy): Promise<string> {
+  const apiKey = Deno.env.get('BROWSERLESS_API_KEY')
+
+  if (!apiKey) {
+    console.warn('BROWSERLESS_API_KEY not set, skipping interactive scraping')
+    return await fetchWithBrowserless(url) // Fallback to basic rendering
+  }
+
+  try {
+    console.log(`🎭 INTERACTIVE SCRAPING (Phase 3): ${url}`)
+    console.log(`Strategy:`, JSON.stringify(strategy, null, 2))
+
+    const browserlessUrl = `https://chrome.browserless.io/function?token=${apiKey}`
+
+    // Build the custom script that will run in the browser
+    const interactionScript = `
+      module.exports = async ({ page }) => {
+        // Navigate to the page
+        await page.goto('${url}', { waitUntil: 'networkidle0', timeout: 30000 });
+        console.log('Page loaded');
+
+        ${strategy.releaseNotesSelectors && strategy.releaseNotesSelectors.length > 0 ? `
+        // Try to click release notes buttons
+        const releaseNotesSelectors = ${JSON.stringify(strategy.releaseNotesSelectors)};
+        for (const selector of releaseNotesSelectors) {
+          try {
+            const element = await page.$(selector);
+            if (element) {
+              console.log('Found release notes button:', selector);
+              await element.click();
+              await page.waitForTimeout(${strategy.waitTime || 2000});
+              console.log('Clicked and waited');
+              break; // Found and clicked, stop trying others
+            }
+          } catch (e) {
+            console.log('Selector not found or failed:', selector, e.message);
+          }
+        }
+        ` : ''}
+
+        ${strategy.expandSelectors && strategy.expandSelectors.length > 0 ? `
+        // Try to expand accordions/collapsibles
+        const expandSelectors = ${JSON.stringify(strategy.expandSelectors)};
+        for (const selector of expandSelectors) {
+          try {
+            const elements = await page.$$(selector);
+            console.log('Found', elements.length, 'elements for:', selector);
+            for (const element of elements) {
+              await element.click();
+              await page.waitForTimeout(500);
+            }
+          } catch (e) {
+            console.log('Expand selector failed:', selector, e.message);
+          }
+        }
+        ` : ''}
+
+        ${strategy.waitForSelector ? `
+        // Wait for specific element to appear
+        try {
+          await page.waitForSelector('${strategy.waitForSelector}', { timeout: 5000 });
+          console.log('Target selector appeared');
+        } catch (e) {
+          console.log('Timeout waiting for selector:', e.message);
+        }
+        ` : ''}
+
+        ${strategy.customScript ? `
+        // Execute custom script
+        try {
+          ${strategy.customScript}
+        } catch (e) {
+          console.log('Custom script error:', e.message);
+        }
+        ` : ''}
+
+        // Get the final page content
+        const content = await page.content();
+        console.log('Final content length:', content.length);
+
+        return content;
+      };
+    `
+
+    const response = await fetch(browserlessUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/javascript',
+      },
+      body: interactionScript
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      throw new Error(`Browserless interactive error: ${response.status} - ${error}`)
+    }
+
+    const html = await response.text()
+    console.log(`✅ Interactive scraping complete: ${html.length} characters`)
+    console.log(`   Clicked buttons: ${strategy.releaseNotesSelectors?.length || 0}`)
+    console.log(`   Expanded elements: ${strategy.expandSelectors?.length || 0}`)
+
+    return html
+
+  } catch (error) {
+    console.error(`❌ Interactive scraping failed for ${url}:`, error)
+    console.log('Falling back to basic Browserless rendering...')
+    return await fetchWithBrowserless(url) // Fallback
   }
 }
 
@@ -148,15 +276,39 @@ async function fetchPDFContent(url: string): Promise<string> {
 
 /**
  * Fetches webpage content and extracts text, with intelligent content limits
+ * Phase 3: Now supports interactive scraping strategies
  */
-async function fetchWebpageContent(url: string, maxChars: number = 30000, useBrowserless: boolean = false): Promise<string> {
+async function fetchWebpageContent(
+  url: string,
+  maxChars: number = 30000,
+  useBrowserless: boolean = false,
+  strategy?: ScrapingStrategy
+): Promise<string> {
   try {
-    console.log(`Fetching webpage: ${url}${useBrowserless ? ' (with Browserless)' : ''}`)
+    console.log(`Fetching webpage: ${url}`)
+    if (strategy) {
+      console.log(`🎭 Using INTERACTIVE SCRAPING strategy`)
+    } else if (useBrowserless) {
+      console.log(`🌐 Using Browserless (passive rendering)`)
+    }
 
     let html: string
 
-    if (useBrowserless) {
-      // Use Browserless for JavaScript-heavy pages
+    // Priority 1: Interactive scraping with strategy (Phase 3)
+    if (strategy && (strategy.releaseNotesSelectors || strategy.expandSelectors || strategy.customScript)) {
+      console.log('🎯 Attempting interactive scraping...')
+      html = await fetchWithInteraction(url, strategy)
+
+      // If interactive scraping returned content, use it
+      if (html && html.length > 100) {
+        console.log(`✅ Interactive scraping successful: ${html.length} chars`)
+      } else {
+        console.log('⚠️ Interactive scraping returned little/no content, trying Browserless...')
+        html = await fetchWithBrowserless(url)
+      }
+    }
+    // Priority 2: Browserless for JavaScript pages
+    else if (useBrowserless) {
       html = await fetchWithBrowserless(url)
 
       if (!html) {
@@ -168,7 +320,9 @@ async function fetchWebpageContent(url: string, maxChars: number = 30000, useBro
         })
         html = await response.text()
       }
-    } else {
+    }
+    // Priority 3: Static fetch
+    else {
       // Regular fetch for static pages
       const response = await fetch(url, {
         headers: {
@@ -779,7 +933,7 @@ serve(async (req) => {
   }
 
   try {
-    const { name, website, versionUrl, description, content, manufacturer, productIdentifier } = await req.json() as ExtractRequest
+    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy } = await req.json() as ExtractRequest
 
     if (!name || !website) {
       return new Response(
@@ -798,6 +952,7 @@ serve(async (req) => {
     console.log(`Manufacturer: ${manufacturer || 'unknown'}`)
     console.log(`Product Identifier: ${productIdentifier || 'none'}`)
     console.log(`Extraction Mode: ${USE_ENHANCED_EXTRACTION ? '🧠 ENHANCED (Phase 2)' : '📊 LEGACY (Original)'}`)
+    console.log(`Interactive Scraping: ${scrapingStrategy ? '🎭 YES (Phase 3)' : '❌ NO'}`)
     console.log(`Has provided content: ${!!content}`)
     console.log('='.repeat(60))
 
@@ -835,8 +990,9 @@ serve(async (req) => {
         }
       } else {
         // Fetch content from both URLs in parallel (try regular fetch first)
+        // Phase 3: Pass scraping strategy if provided
         [versionContent, mainWebsiteContent] = await Promise.all([
-          fetchWebpageContent(versionUrl, 30000, false),
+          fetchWebpageContent(versionUrl, 30000, false, scrapingStrategy),
           // Only fetch main website if it's different from version URL
           versionUrl.toLowerCase() !== website.toLowerCase()
             ? fetchWebpageContent(website, 20000, false)
@@ -852,12 +1008,12 @@ serve(async (req) => {
       const isLikelyJavaScriptPage = versionContent.length < 2000
       const hasVeryLowContent = versionContent.length < 500
 
-      if (isLikelyJavaScriptPage && !isPDF) {
+      if (isLikelyJavaScriptPage && !isPDF && !scrapingStrategy) {
         console.log(`⚠️ WARNING: Low content detected (${versionContent.length} chars) - likely JavaScript-rendered page`)
         console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
 
         // Retry with Browserless for JavaScript pages
-        versionContent = await fetchWebpageContent(versionUrl, 30000, true)
+        versionContent = await fetchWebpageContent(versionUrl, 30000, true, scrapingStrategy)
 
         console.log(`\n=== AFTER BROWSERLESS ===`)
         console.log(`Version content length: ${versionContent.length}`)
