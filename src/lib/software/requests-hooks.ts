@@ -17,6 +17,7 @@ export function useSoftwareRequests() {
   const { user, isAdmin } = useAuth();
   const [requests, setRequests] = useState<SoftwareRequestWithId[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const fetchRequests = useCallback(async () => {
     if (!user) {
@@ -26,7 +27,10 @@ export function useSoftwareRequests() {
     }
 
     try {
-      setLoading(true);
+      // Only show loading state on initial load, not on refetches
+      if (isInitialLoad) {
+        setLoading(true);
+      }
       let query = supabase
         .from('software_requests')
         .select('*');
@@ -45,9 +49,12 @@ export function useSoftwareRequests() {
       console.error('Error fetching software requests:', error);
       setRequests([]);
     } finally {
-      setLoading(false);
+      if (isInitialLoad) {
+        setLoading(false);
+        setIsInitialLoad(false);
+      }
     }
-  }, [user, isAdmin]);
+  }, [user, isAdmin, isInitialLoad]);
 
   useEffect(() => {
     fetchRequests();

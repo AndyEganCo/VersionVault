@@ -10,19 +10,24 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/auth-context';
 import { Link } from 'react-router-dom';
-import { User, Bell, LogOut } from 'lucide-react';
+import { User, Bell, LogOut, FileText } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-export function UserNav() {
+interface UserNavProps {
+  className?: string;
+}
+
+export function UserNav({ className }: UserNavProps) {
   const { user, signOut } = useAuth();
-  
+
   if (!user) return null;
 
   const userInitial = user.email?.[0]?.toUpperCase() || 'U';
-  
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+        <Button variant="ghost" className={cn("relative h-8 w-8 rounded-full", className)}>
           {userInitial}
         </Button>
       </DropdownMenuTrigger>
@@ -47,6 +52,12 @@ export function UserNav() {
             <Link to="/user/notifications" className="flex items-center cursor-pointer">
               <Bell className="mr-2 h-4 w-4" />
               Notifications
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/requests" className="flex items-center cursor-pointer">
+              <FileText className="mr-2 h-4 w-4" />
+              Requests
             </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>

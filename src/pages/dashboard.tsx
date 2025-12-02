@@ -27,7 +27,6 @@ export function Dashboard() {
       <Metrics
         trackedCount={trackedCount}
         thisWeeksUpdates={thisWeeksUpdates}
-        majorUpdates={updates.filter(s => s.release_notes?.[0]?.type === 'major').length}
       />
       <div className="space-y-12">
         <TrackedSoftware refreshTracking={refreshTracking} trackedIds={trackedIds} />
