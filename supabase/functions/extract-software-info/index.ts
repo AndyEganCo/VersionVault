@@ -91,7 +91,7 @@ async function fetchWithBrowserless(url: string): Promise<string> {
   try {
     console.log(`🌐 Fetching with Browserless (headless Chrome): ${url}`)
 
-    const browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}`
+    const browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}&stealth=true`
 
     const response = await fetch(browserlessUrl, {
       method: 'POST',
@@ -99,7 +99,12 @@ async function fetchWithBrowserless(url: string): Promise<string> {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: url
+        url: url,
+        // Add headers to help evade bot detection
+        setExtraHTTPHeaders: {
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
         // /content endpoint automatically waits for JS to execute
       })
     })
@@ -115,6 +120,13 @@ async function fetchWithBrowserless(url: string): Promise<string> {
 
   } catch (error) {
     console.error(`❌ Browserless fetch failed for ${url}:`, error)
+
+    // Detect specific error types
+    const errorMsg = error?.message || String(error)
+    if (errorMsg.includes('ERR_HTTP2_PROTOCOL_ERROR') || errorMsg.includes('ERR_CONNECTION')) {
+      console.warn('⚠️ Site may be blocking automated browsers (HTTP2/connection errors)')
+    }
+
     return ''
   }
 }
@@ -135,7 +147,7 @@ async function fetchWithInteraction(url: string, strategy: ScrapingStrategy): Pr
     console.log(`🎭 INTERACTIVE SCRAPING (Phase 3): ${url}`)
     console.log(`Strategy:`, JSON.stringify(strategy, null, 2))
 
-    const browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}&bestAttempt=true`
+    const browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}&bestAttempt=true&stealth=true`
 
     // Just fetch the rendered page with JavaScript enabled
     // We'll let Browserless handle the rendering
@@ -149,6 +161,11 @@ async function fetchWithInteraction(url: string, strategy: ScrapingStrategy): Pr
         gotoOptions: {
           waitUntil: 'networkidle2',
           timeout: 30000
+        },
+        // Add headers to help evade bot detection
+        setExtraHTTPHeaders: {
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
         }
       })
     })
@@ -1049,6 +1066,23 @@ serve(async (req) => {
 
     // Re-check if still low content after Browserless
     const stillLowContent = versionContent.length < 2000
+    const noContentAtAll = versionContent.length === 0
+
+    // Detect if site is completely blocking us (0 chars even after all retries)
+    if (noContentAtAll && versionUrl) {
+      console.error('❌ SITE BLOCKED: No content extracted after all attempts')
+      console.error('This site may be blocking automated access with:')
+      console.error('  - Bot detection (Cloudflare, Akamai, etc.)')
+      console.error('  - HTTP2 protocol restrictions')
+      console.error('  - Aggressive anti-scraping measures')
+
+      // Check if it's a known problematic domain
+      const url = new URL(versionUrl)
+      if (url.hostname.includes('adobe.com') || url.hostname.includes('helpx.adobe')) {
+        console.error('⚠️ Adobe domains are known to block automated browsers')
+        console.error('Recommendation: Use manual content input or Adobe\'s official API')
+      }
+    }
 
     // Try AI extraction (choose between enhanced or legacy based on feature flag)
     let extracted: ExtractedInfo
@@ -1106,7 +1140,16 @@ serve(async (req) => {
     // Add JavaScript page detection flag and warning (only if Browserless also failed)
     if (stillLowContent) {
       extracted.isJavaScriptPage = true
-      extracted.lowContentWarning = `This page uses JavaScript rendering and couldn't be fully loaded (${versionContent.length} characters extracted). Please verify the version manually by visiting the page.`
+
+      // Provide specific warning based on situation
+      if (noContentAtAll) {
+        // Site is completely blocking us
+        const hostname = versionUrl ? new URL(versionUrl).hostname : 'this site'
+        extracted.lowContentWarning = `⚠️ Could not extract any content from ${hostname}. This site is blocking automated access. Please manually copy the version information or use an alternative source.`
+      } else {
+        // Low content but not zero - likely JavaScript rendering issue
+        extracted.lowContentWarning = `This page uses JavaScript rendering and couldn't be fully loaded (${versionContent.length} characters extracted). Please verify the version manually by visiting the page.`
+      }
     }
 
     return new Response(
