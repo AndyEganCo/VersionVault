@@ -141,7 +141,6 @@ async function fetchWithInteraction(url: string, strategy: ScrapingStrategy): Pr
       },
       body: JSON.stringify({
         url: url,
-        waitFor: strategy.waitTime || 5000,
         gotoOptions: {
           waitUntil: 'networkidle2',
           timeout: 30000
@@ -280,11 +279,16 @@ async function fetchWebpageContent(
       html = await response.text()
       method = 'static'
     }
+
+    console.log(`📄 Raw HTML fetched: ${html.length} characters`)
+
     const doc = new DOMParser().parseFromString(html, 'text/html')
 
     if (!doc) {
       throw new Error('Failed to parse HTML')
     }
+
+    console.log(`✅ HTML parsed successfully, extracting content...`)
 
     // Try to find main content areas first (more intelligent extraction)
     // Added wiki-specific selectors and documentation page patterns
