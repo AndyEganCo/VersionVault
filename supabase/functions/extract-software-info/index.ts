@@ -116,7 +116,7 @@ async function fetchWithBrowserless(url: string): Promise<string> {
 
 /**
  * Fetches webpage with INTERACTIVE scraping (Phase 3)
- * Can click buttons, open modals, and execute custom scripts
+ * Uses Browserless /content API with bestAttempt for reliability
  */
 async function fetchWithInteraction(url: string, strategy: ScrapingStrategy): Promise<string> {
   const apiKey = Deno.env.get('BROWSERLESS_API_KEY')
@@ -130,104 +130,32 @@ async function fetchWithInteraction(url: string, strategy: ScrapingStrategy): Pr
     console.log(`🎭 INTERACTIVE SCRAPING (Phase 3): ${url}`)
     console.log(`Strategy:`, JSON.stringify(strategy, null, 2))
 
-    const browserlessUrl = `https://chrome.browserless.io/function?token=${apiKey}`
+    const browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}&bestAttempt=true`
 
-    // Build the custom script that will run in the browser
-    const interactionScript = `
-      module.exports = async ({ page }) => {
-        // Navigate to the page
-        await page.goto('${url}', { waitUntil: 'networkidle0', timeout: 30000 });
-        console.log('Page loaded');
-
-        ${strategy.releaseNotesSelectors && strategy.releaseNotesSelectors.length > 0 ? `
-        // Try to click ALL release notes buttons (for pages with multiple versions)
-        const releaseNotesSelectors = ${JSON.stringify(strategy.releaseNotesSelectors)};
-        let clickedAny = false;
-        for (const selector of releaseNotesSelectors) {
-          try {
-            const elements = await page.$$(selector);
-            if (elements.length > 0) {
-              console.log('Found', elements.length, 'release notes button(s) for:', selector);
-              for (const element of elements) {
-                await element.click();
-                await page.waitForTimeout(${Math.floor((strategy.waitTime || 2000) / 2)});
-                console.log('Clicked a release notes button');
-                clickedAny = true;
-              }
-              break; // Found matching selector, stop trying other selectors
-            }
-          } catch (e) {
-            console.log('Selector not found or failed:', selector, e.message);
-          }
-        }
-        if (clickedAny) {
-          // Wait a bit longer after clicking all buttons
-          await page.waitForTimeout(${strategy.waitTime || 2000});
-          console.log('Finished clicking all release notes buttons');
-        }
-        ` : ''}
-
-        ${strategy.expandSelectors && strategy.expandSelectors.length > 0 ? `
-        // Try to expand accordions/collapsibles
-        const expandSelectors = ${JSON.stringify(strategy.expandSelectors)};
-        for (const selector of expandSelectors) {
-          try {
-            const elements = await page.$$(selector);
-            console.log('Found', elements.length, 'elements for:', selector);
-            for (const element of elements) {
-              await element.click();
-              await page.waitForTimeout(500);
-            }
-          } catch (e) {
-            console.log('Expand selector failed:', selector, e.message);
-          }
-        }
-        ` : ''}
-
-        ${strategy.waitForSelector ? `
-        // Wait for specific element to appear
-        try {
-          await page.waitForSelector('${strategy.waitForSelector}', { timeout: 5000 });
-          console.log('Target selector appeared');
-        } catch (e) {
-          console.log('Timeout waiting for selector:', e.message);
-        }
-        ` : ''}
-
-        ${strategy.customScript ? `
-        // Execute custom script
-        try {
-          ${strategy.customScript}
-        } catch (e) {
-          console.log('Custom script error:', e.message);
-        }
-        ` : ''}
-
-        // Get the final page content
-        const content = await page.content();
-        console.log('Final content length:', content.length);
-
-        return content;
-      };
-    `
-
+    // Just fetch the rendered page with JavaScript enabled
+    // We'll let Browserless handle the rendering
     const response = await fetch(browserlessUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/javascript',
+        'Content-Type': 'application/json',
       },
-      body: interactionScript
+      body: JSON.stringify({
+        url: url,
+        waitFor: strategy.waitTime || 5000,
+        gotoOptions: {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        }
+      })
     })
 
     if (!response.ok) {
       const error = await response.text()
-      throw new Error(`Browserless interactive error: ${response.status} - ${error}`)
+      throw new Error(`Browserless content error: ${response.status} - ${error}`)
     }
 
     const html = await response.text()
     console.log(`✅ Interactive scraping complete: ${html.length} characters`)
-    console.log(`   Clicked buttons: ${strategy.releaseNotesSelectors?.length || 0}`)
-    console.log(`   Expanded elements: ${strategy.expandSelectors?.length || 0}`)
 
     return html
 
