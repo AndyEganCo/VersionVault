@@ -293,6 +293,13 @@ async function fetchWebpageContent(
     // Try to find main content areas first (more intelligent extraction)
     // Added wiki-specific selectors and documentation page patterns
     const selectors = [
+      // Blackmagic Design specific
+      '.support-downloads',
+      '.downloads-list',
+      '.product-downloads',
+      '#downloads',
+      '.latest-downloads',
+
       // Wiki-specific selectors
       '.wiki-content',
       '#wiki-content',
@@ -325,12 +332,14 @@ async function fetchWebpageContent(
     let bestContent = ''
     let bestLength = 0
     let bestSelector = ''
+    const selectorSizes: Array<{selector: string, size: number}> = []
 
     // Try to extract from semantic elements first - find the LARGEST content area
     for (const selector of selectors) {
       const element = doc.querySelector(selector)
       if (element?.textContent) {
         const len = element.textContent.trim().length
+        selectorSizes.push({ selector, size: len })
         if (len > bestLength) {
           bestContent = element.textContent
           bestLength = len
@@ -339,14 +348,23 @@ async function fetchWebpageContent(
       }
     }
 
+    // Log all selectors found (top 5)
+    if (selectorSizes.length > 0) {
+      console.log('Top 5 selectors by size:')
+      selectorSizes
+        .sort((a, b) => b.size - a.size)
+        .slice(0, 5)
+        .forEach(s => console.log(`  ${s.selector}: ${s.size} chars`))
+    }
+
     // Use the best content found if it's substantial (>1000 chars)
     // Otherwise fall back to body to get everything
     if (bestLength > 1000) {
       content = bestContent
-      console.log(`Found content in ${bestSelector} (${content.length} chars)`)
+      console.log(`✅ Using content from ${bestSelector} (${content.length} chars)`)
     } else {
       content = doc.body?.textContent || ''
-      console.log(`Using full body content (${content.length} chars) - semantic selectors too small (best was ${bestLength} chars)`)
+      console.log(`⚠️ Using full body content (${content.length} chars) - semantic selectors too small (best was ${bestLength} chars from ${bestSelector})`)
     }
 
     // Clean up whitespace
