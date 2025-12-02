@@ -181,7 +181,7 @@ export function Software() {
           sortBy={sortBy}
           onSortChange={(value: SortOption) => setSortBy(value)}
         />
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 auto-rows-fr">
           {sortedSoftware.map((s) => (
             <SoftwareCard
               key={s.id}
