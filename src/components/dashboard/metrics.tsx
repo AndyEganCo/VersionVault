@@ -1,4 +1,4 @@
-import { MetricCard } from "@/components/ui/metric-card";
+import { MetricCard } from "./metric-card";
 import { useAuth } from "@/contexts/auth-context";
 
 interface MetricsProps {
