@@ -65,8 +65,8 @@ CREATE INDEX IF NOT EXISTS idx_version_history_confidence
 -- Store successful scraping strategies learned from past extractions
 
 CREATE TABLE IF NOT EXISTS scraping_patterns (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  software_id UUID REFERENCES software(id) ON DELETE CASCADE,
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  software_id TEXT REFERENCES software(id) ON DELETE CASCADE,
   domain TEXT NOT NULL,
   success_rate DECIMAL(5,2) DEFAULT 0 CHECK (success_rate >= 0 AND success_rate <= 100),
   last_successful_at TIMESTAMP WITH TIME ZONE,
