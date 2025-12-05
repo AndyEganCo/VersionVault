@@ -25,6 +25,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let subscription: any;
 
+    // Simple admin check function
+    const checkAdmin = async (userId: string | undefined) => {
+      if (!userId) {
+        console.log('[Auth] 5a. No userId, setting isAdmin = false');
+        setIsAdmin(false);
+        return;
+      }
+
+      try {
+        console.log('[Auth] 5b. Checking admin status...');
+        const { data } = await supabase
+          .from('admin_users')
+          .select('user_id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        console.log('[Auth] 5c. Admin check complete:', !!data);
+        setIsAdmin(!!data);
+      } catch (err) {
+        console.log('[Auth] 5d. Admin check error:', err);
+        setIsAdmin(false);
+      }
+    };
+
     // Initialize auth
     const initAuth = async () => {
       try {
@@ -44,7 +68,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         console.log('[Auth] 5. Setting user state');
         setUser(data.session?.user ?? null);
-        setIsAdmin(false); // TEMPORARY
+
+        await checkAdmin(data.session?.user?.id);
 
         console.log('[Auth] 6. Setting loading = false');
         setLoading(false);
@@ -57,10 +82,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Set up listener
     console.log('[Auth] 8. Setting up onAuthStateChange');
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
       console.log('[Auth] State changed:', _event);
       setUser(session?.user ?? null);
-      setIsAdmin(false); // TEMPORARY
+
+      // Check admin on auth state changes too
+      if (session?.user?.id) {
+        await checkAdmin(session.user.id);
+      } else {
+        setIsAdmin(false);
+      }
     });
     subscription = data.subscription;
 
