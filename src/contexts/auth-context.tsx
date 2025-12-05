@@ -82,13 +82,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Set up listener
     console.log('[Auth] 8. Setting up onAuthStateChange');
-    const { data } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log('[Auth] State changed:', _event);
       setUser(session?.user ?? null);
 
-      // Check admin on auth state changes too
+      // Check admin on auth state changes (don't await - let it run in background)
       if (session?.user?.id) {
-        await checkAdmin(session.user.id);
+        checkAdmin(session.user.id);
       } else {
         setIsAdmin(false);
       }
