@@ -35,9 +35,11 @@ serve(async (req) => {
     const customSecretHeader = req.headers.get('X-Cron-Secret')
     const cronSecret = Deno.env.get('CRON_SECRET')
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-    if (!cronSecret || !resendApiKey) {
-      console.error('❌ Missing required secrets')
+    if (!resendApiKey) {
+      console.error('❌ Missing RESEND_API_KEY')
       return new Response(
         JSON.stringify({ error: 'Server configuration error' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -45,8 +47,35 @@ serve(async (req) => {
     }
 
     let isAuthorized = false
-    if (customSecretHeader === cronSecret) isAuthorized = true
-    if (authHeader?.replace('Bearer ', '') === cronSecret) isAuthorized = true
+
+    // Check cron secret
+    if (cronSecret) {
+      if (customSecretHeader === cronSecret) isAuthorized = true
+      if (authHeader?.replace('Bearer ', '') === cronSecret) isAuthorized = true
+    }
+
+    // Check if user is an admin via JWT
+    if (!isAuthorized && authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.replace('Bearer ', '')
+      const supabaseAuth = createClient(supabaseUrl, supabaseServiceKey)
+
+      // Verify the JWT and get user
+      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token)
+
+      if (!authError && user) {
+        // Check if user is admin
+        const { data: adminData } = await supabaseAuth
+          .from('admin_users')
+          .select('user_id')
+          .eq('user_id', user.id)
+          .single()
+
+        if (adminData) {
+          isAuthorized = true
+          console.log(`✅ Admin user ${user.id} authorized`)
+        }
+      }
+    }
 
     if (!isAuthorized) {
       return new Response(
@@ -59,8 +88,6 @@ serve(async (req) => {
     console.log('📤 Starting newsletter queue processing...')
 
     // Initialize clients
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const resend = new Resend(resendApiKey)
 
