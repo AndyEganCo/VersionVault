@@ -166,12 +166,12 @@ export function AdminNewsletter() {
 
   useEffect(() => {
     if (user && isAdmin) {
-      loadData();
+      loadData(true);
     }
   }, [user, isAdmin]);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
       // Load queue summary
       const { data: queueData } = await supabase
@@ -279,7 +279,7 @@ export function AdminNewsletter() {
       console.error('Error loading newsletter data:', error);
       toast.error('Failed to load newsletter data');
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
