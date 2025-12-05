@@ -59,17 +59,6 @@ export function MainNav({
           >
             Manage Users
           </NavLink>
-          <NavLink
-            to="/admin/extraction-test"
-            className={({ isActive }) =>
-              cn(
-                'text-sm font-medium transition-colors hover:text-primary',
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              )
-            }
-          >
-            Extraction Test
-          </NavLink>
         </>
       )}
     </nav>

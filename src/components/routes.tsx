@@ -13,7 +13,6 @@ import { UserNotifications } from '@/pages/user/notifications';
 import { Signup } from '@/pages/signup';
 import { AdminSoftware } from '@/pages/admin/software';
 import { AdminUsers } from '@/pages/admin/users';
-import { AdminExtractionTest } from '@/pages/admin/extraction-test';
 
 export function Routes() {
   return (
@@ -41,7 +40,6 @@ export function Routes() {
           <Route index element={<Navigate to="software" replace />} />
           <Route path="software" element={<AdminSoftware />} />
           <Route path="users" element={<AdminUsers />} />
-          <Route path="extraction-test" element={<AdminExtractionTest />} />
         </Route>
       </Route>
 

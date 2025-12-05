@@ -24,6 +24,22 @@ import {
   findProductMentions
 } from '../_shared/content-extraction.ts'
 
+import {
+  learnFromSuccess,
+  storePattern,
+  loadPatterns,
+  findBestPattern,
+  type LearnedPattern,
+  type ExtractionAttempt
+} from '../_shared/pattern-learning.ts'
+
+import {
+  detectAnomalies,
+  requiresManualReview,
+  formatAnomalies,
+  type Anomaly
+} from '../_shared/anomaly-detection.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -1149,6 +1165,66 @@ serve(async (req) => {
       } else {
         // Low content but not zero - likely JavaScript rendering issue
         extracted.lowContentWarning = `This page uses JavaScript rendering and couldn't be fully loaded (${versionContent.length} characters extracted). Please verify the version manually by visiting the page.`
+      }
+    }
+
+    // Phase 6: Advanced Features - Pattern Learning & Anomaly Detection
+    console.log('\n🔬 Running advanced analysis...')
+
+    // 1. Learn from this extraction (if successful)
+    if (extracted.confidence && extracted.confidence >= 70) {
+      try {
+        const attempt: ExtractionAttempt = {
+          domain: versionUrl,
+          productName: name,
+          success: true,
+          confidence: extracted.confidence,
+          method: extracted.extractionMethod || 'unknown',
+          strategy: scrapingStrategy,
+          timestamp: new Date().toISOString()
+        }
+
+        const learnedPattern = learnFromSuccess(attempt)
+        if (learnedPattern) {
+          console.log(`📚 Learned new pattern for ${learnedPattern.domain}`)
+          // Note: Actual storage would need Supabase client
+          // storePattern(learnedPattern, supabase, software_id)
+        }
+      } catch (error) {
+        console.error('Error in pattern learning:', error)
+      }
+    }
+
+    // 2. Detect anomalies (if we have version data)
+    if (extracted.currentVersion) {
+      try {
+        // For now, just detect basic anomalies without previous data
+        // In production, we'd fetch the previous check from database
+        const currentData = {
+          version: extracted.currentVersion,
+          releaseDate: extracted.releaseDate,
+          confidence: extracted.confidence || 50,
+          extractionMethod: extracted.extractionMethod || 'unknown'
+        }
+
+        const anomalies = detectAnomalies(currentData)
+
+        if (anomalies.length > 0) {
+          console.log(`⚠️ Detected ${anomalies.length} anomalies:`)
+          console.log(formatAnomalies(anomalies))
+
+          // Flag for manual review if needed
+          const needsReview = requiresManualReview(anomalies)
+          if (needsReview) {
+            console.log('🚨 Anomalies require manual review')
+            extracted.validationNotes = (extracted.validationNotes || '') + '\n' + formatAnomalies(anomalies)
+            // Note: Would set requires_manual_review in database
+          }
+        } else {
+          console.log('✅ No anomalies detected')
+        }
+      } catch (error) {
+        console.error('Error in anomaly detection:', error)
       }
     }
 
