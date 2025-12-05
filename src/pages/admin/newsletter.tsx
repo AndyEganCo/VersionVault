@@ -524,63 +524,48 @@ export function AdminNewsletter() {
 
     setTestEmailLoading(true);
     try {
-      // Get version updates detected in the last 7 days
+      // Get software with release_date or updated_at in the last 7 days
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      // Query version_history for versions detected in last 7 days
-      let { data: recentVersions } = await supabase
-        .from('software_version_history')
-        .select('software_id, version, previous_version, type, notes, release_date, detected_at')
-        .gte('detected_at', sevenDaysAgo.toISOString())
-        .order('detected_at', { ascending: false })
-        .limit(50);
+      // Query software table for recent releases
+      let { data: recentSoftware } = await supabase
+        .from('software')
+        .select('id, name, manufacturer, category, current_version, release_date, updated_at')
+        .or(`release_date.gte.${sevenDaysAgo.toISOString()},and(release_date.is.null,updated_at.gte.${sevenDaysAgo.toISOString()})`)
+        .order('release_date', { ascending: false, nullsFirst: false })
+        .limit(10);
 
-      console.log('📊 Recent version detections found:', recentVersions?.length || 0);
+      console.log('📊 Recent software releases found:', recentSoftware?.length || 0);
 
       let sampleUpdates: any[] = [];
 
-      if (recentVersions && recentVersions.length > 0) {
-        // Deduplicate by software_id, keeping only the most recent detection for each
-        const uniqueSoftwareMap = new Map();
-        for (const version of recentVersions) {
-          if (!uniqueSoftwareMap.has(version.software_id)) {
-            uniqueSoftwareMap.set(version.software_id, version);
-          }
+      if (recentSoftware && recentSoftware.length > 0) {
+        // For each software, get version history for previous_version and notes
+        for (const software of recentSoftware.slice(0, 5)) {
+          const { data: versionHistory } = await supabase
+            .from('software_version_history')
+            .select('previous_version, type, notes')
+            .eq('software_id', software.id)
+            .eq('version', software.current_version)
+            .order('detected_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          sampleUpdates.push({
+            software_id: software.id,
+            name: software.name,
+            manufacturer: software.manufacturer,
+            category: software.category,
+            old_version: versionHistory?.previous_version || 'N/A',
+            new_version: software.current_version,
+            release_date: software.release_date || software.updated_at,
+            release_notes: versionHistory?.notes || [],
+            update_type: versionHistory?.type || 'minor',
+          });
         }
 
-        const uniqueVersions = Array.from(uniqueSoftwareMap.values()).slice(0, 10);
-        const softwareIds = uniqueVersions.map(v => v.software_id);
-
-        // Get software details for these versions
-        const { data: softwareData } = await supabase
-          .from('software')
-          .select('id, name, manufacturer, category, current_version')
-          .in('id', softwareIds);
-
-        if (softwareData) {
-          const softwareMap = new Map(softwareData.map(s => [s.id, s]));
-
-          // Build updates array, limited to 5 for email
-          for (const version of uniqueVersions.slice(0, 5)) {
-            const software = softwareMap.get(version.software_id);
-            if (software) {
-              sampleUpdates.push({
-                software_id: software.id,
-                name: software.name,
-                manufacturer: software.manufacturer,
-                category: software.category,
-                old_version: version.previous_version || 'N/A',
-                new_version: software.current_version,
-                release_date: version.release_date || version.detected_at,
-                release_notes: version.notes || [],
-                update_type: version.type || 'minor',
-              });
-            }
-          }
-
-          console.log(`📧 Updates: ${uniqueVersions.length} unique detections -> ${sampleUpdates.length} in email`);
-        }
+        console.log(`📧 Updates: ${recentSoftware.length} software -> ${sampleUpdates.length} in email`);
       }
 
       // Only use fallback if truly no data in database
