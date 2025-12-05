@@ -72,10 +72,12 @@ export async function generateUserDigest(
   const softwareIds = trackedSoftware.map(t => t.software_id);
 
   // Get version history for tracked software since cutoff
+  // Only include versions that have been approved for newsletter
   const { data: versionHistory, error: historyError } = await supabase
-    .from('software_version_history')
-    .select('software_id, version, release_date, detected_at, notes, type')
+    .from('version_history')
+    .select('software_id, version, release_date, detected_at, notes, type, newsletter_approved')
     .in('software_id', softwareIds)
+    .eq('newsletter_approved', true)
     .gte('detected_at', sinceDate.toISOString())
     .order('detected_at', { ascending: false });
 
