@@ -22,16 +22,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     console.log('[Auth] Initializing auth context...');
+    let initialized = false;
+
+    // Timeout fallback in case getSession hangs
+    const timeout = setTimeout(() => {
+      if (!initialized) {
+        console.log('[Auth] getSession timeout, setting loading to false');
+        setLoading(false);
+      }
+    }, 3000);
 
     // Check active session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       console.log('[Auth] Session retrieved:', session ? 'User logged in' : 'No session');
+      initialized = true;
+      clearTimeout(timeout);
       setUser(session?.user ?? null);
       await checkAdminStatus(session?.user?.id);
       console.log('[Auth] Auth initialization complete, setting loading to false');
       setLoading(false);
     }).catch((error) => {
       console.error('[Auth] Auth init error:', error);
+      initialized = true;
+      clearTimeout(timeout);
       setLoading(false);
     });
 
@@ -40,9 +53,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('[Auth] Auth state changed:', _event, session ? 'User logged in' : 'No session');
       setUser(session?.user ?? null);
       await checkAdminStatus(session?.user?.id);
+
+      // If this fires before getSession completes, we can stop loading
+      if (!initialized) {
+        console.log('[Auth] Auth ready from state change, setting loading to false');
+        initialized = true;
+        clearTimeout(timeout);
+        setLoading(false);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function checkAdminStatus(userId: string | undefined) {
