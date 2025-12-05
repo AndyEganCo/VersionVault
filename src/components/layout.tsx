@@ -10,11 +10,17 @@ import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useTheme } from '@/components/theme-provider';
+import { LoadingScreen } from '@/components/ui/loading-screen';
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, signOut, loading } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { theme, setTheme } = useTheme();
+
+  // Show loading screen while auth state is being determined
+  if (loading) {
+    return <LoadingScreen />;
+  }
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
