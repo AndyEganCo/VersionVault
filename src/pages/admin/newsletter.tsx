@@ -35,7 +35,6 @@ import {
 } from '@/components/ui/dialog';
 import {
   Mail,
-  Send,
   Pause,
   Play,
   RefreshCw,
@@ -141,7 +140,6 @@ export function AdminNewsletter() {
   });
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
-  const [autoSendEnabled, setAutoSendEnabled] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
   // Sponsor modal state
@@ -230,17 +228,6 @@ export function AdminNewsletter() {
 
       if (sponsorsData) {
         setSponsors(sponsorsData);
-      }
-
-      // Load auto-send setting
-      const { data: settingData } = await supabase
-        .from('newsletter_settings')
-        .select('setting_value')
-        .eq('setting_key', 'auto_send_enabled')
-        .single();
-
-      if (settingData) {
-        setAutoSendEnabled(settingData.setting_value === 'true');
       }
 
       // Load unverified versions
@@ -337,36 +324,6 @@ export function AdminNewsletter() {
     }
   };
 
-  const handleQueueDigest = async (frequency: 'daily' | 'weekly' | 'monthly') => {
-    setActionLoading(true);
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/queue-weekly-digest`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          },
-          body: JSON.stringify({ frequency }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to queue digest');
-      }
-
-      const result = await response.json();
-      toast.success(`Queued ${result.queued} ${frequency} digest emails`);
-      loadData();
-    } catch (error) {
-      console.error('Error queuing digest:', error);
-      toast.error('Failed to queue digest');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const handleProcessQueue = async () => {
     setActionLoading(true);
     try {
@@ -419,25 +376,6 @@ export function AdminNewsletter() {
       toast.error('Failed to cancel queue');
     } finally {
       setActionLoading(false);
-    }
-  };
-
-  const handleToggleAutoSend = async (enabled: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('newsletter_settings')
-        .upsert({
-          setting_key: 'auto_send_enabled',
-          setting_value: enabled.toString(),
-        });
-
-      if (error) throw error;
-
-      setAutoSendEnabled(enabled);
-      toast.success(`Auto-send ${enabled ? 'enabled' : 'disabled'}`);
-    } catch (error) {
-      console.error('Error updating auto-send setting:', error);
-      toast.error('Failed to update setting');
     }
   };
 
@@ -586,48 +524,63 @@ export function AdminNewsletter() {
 
     setTestEmailLoading(true);
     try {
-      // Get user's tracked software for a realistic test
-      const { data: trackedSoftware } = await supabase
-        .from('tracked_software')
-        .select('software_id')
-        .eq('user_id', user.id)
-        .limit(5);
+      // Get software with release_date or updated_at in the last 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      // Get software details separately to avoid join issues
+      // Query software table for recent releases (no limit - show all)
+      let { data: recentSoftware } = await supabase
+        .from('software')
+        .select('id, name, manufacturer, category, current_version, release_date, updated_at')
+        .or(`release_date.gte.${sevenDaysAgo.toISOString()},and(release_date.is.null,updated_at.gte.${sevenDaysAgo.toISOString()})`)
+        .order('release_date', { ascending: false, nullsFirst: false });
+
+      console.log('📊 Recent software releases found:', recentSoftware?.length || 0);
+
       let sampleUpdates: any[] = [];
-      if (trackedSoftware && trackedSoftware.length > 0) {
-        const softwareIds = trackedSoftware.map(t => t.software_id);
-        const { data: softwareData } = await supabase
-          .from('software')
-          .select('id, name, manufacturer, category, current_version')
-          .in('id', softwareIds)
-          .limit(3);
 
-        sampleUpdates = (softwareData || []).map((s: any) => ({
-          software_id: s.id,
-          name: s.name || 'Test Software',
-          manufacturer: s.manufacturer || 'Test Co',
-          category: s.category || 'Test',
-          old_version: '1.0.0',
-          new_version: s.current_version || '2.0.0',
-          release_date: new Date().toISOString(),
-          release_notes: ['New feature added', 'Bug fixes', 'Performance improvements'],
-          update_type: 'minor',
-        }));
+      if (recentSoftware && recentSoftware.length > 0) {
+        // For each software, get version history for previous_version and notes
+        for (const software of recentSoftware) {
+          const { data: versionHistory } = await supabase
+            .from('software_version_history')
+            .select('previous_version, type, notes')
+            .eq('software_id', software.id)
+            .eq('version', software.current_version)
+            .order('detected_at', { ascending: false })
+            .limit(1);
+
+          // Handle the array response (first item or undefined)
+          const historyEntry = versionHistory?.[0];
+
+          sampleUpdates.push({
+            software_id: software.id,
+            name: software.name,
+            manufacturer: software.manufacturer,
+            category: software.category,
+            old_version: historyEntry?.previous_version || 'N/A',
+            new_version: software.current_version,
+            release_date: software.release_date || software.updated_at,
+            release_notes: historyEntry?.notes || [],
+            update_type: historyEntry?.type || 'minor',
+          });
+        }
+
+        console.log(`📧 Updates: ${recentSoftware.length} software -> ${sampleUpdates.length} in email`);
       }
 
-      // Default sample if no tracked software
+      // Only use fallback if truly no data in database
       if (sampleUpdates.length === 0) {
         sampleUpdates = [
           {
-            software_id: 'test-1',
+            software_id: 'sample-1',
             name: 'Sample App',
-            manufacturer: 'Test Company',
+            manufacturer: 'Sample Company',
             category: 'Productivity',
             old_version: '2.4.0',
             new_version: '2.5.0',
             release_date: new Date().toISOString(),
-            release_notes: ['New dark mode', 'Performance improvements'],
+            release_notes: ['No version updates found in database', 'This is sample data for testing'],
             update_type: 'minor',
           },
         ];
@@ -912,26 +865,7 @@ export function AdminNewsletter() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between mb-4 p-3 bg-muted rounded-lg">
-              <div className="flex items-center gap-2">
-                <Label>Auto-send</Label>
-                <span className="text-xs text-muted-foreground">(8am user time)</span>
-              </div>
-              <Switch
-                checked={autoSendEnabled}
-                onCheckedChange={handleToggleAutoSend}
-              />
-            </div>
-
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                onClick={() => handleQueueDigest('weekly')}
-                disabled={actionLoading}
-              >
-                <Send className="h-4 w-4 mr-1" />
-                Queue Weekly
-              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -1272,7 +1206,7 @@ function generatePreviewHtml(
       <div style="font-size: 12px; color: #525252; margin-top: 4px;">Released ${u.release_date}</div>
       ${u.release_notes && u.release_notes.length > 0 ? `
         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #262626;">
-          ${u.release_notes.slice(0, 2).map((note: string) => `<div style="font-size: 12px; color: #a3a3a3; margin-bottom: 4px;">• ${note}</div>`).join('')}
+          ${u.release_notes.map((note: string) => `<div style="font-size: 12px; color: #a3a3a3; margin-bottom: 4px;">• ${note}</div>`).join('')}
         </div>
       ` : ''}
     </div>
