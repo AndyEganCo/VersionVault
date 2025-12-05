@@ -528,13 +528,12 @@ export function AdminNewsletter() {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      // Query software table for recent releases
+      // Query software table for recent releases (no limit - show all)
       let { data: recentSoftware } = await supabase
         .from('software')
         .select('id, name, manufacturer, category, current_version, release_date, updated_at')
         .or(`release_date.gte.${sevenDaysAgo.toISOString()},and(release_date.is.null,updated_at.gte.${sevenDaysAgo.toISOString()})`)
-        .order('release_date', { ascending: false, nullsFirst: false })
-        .limit(10);
+        .order('release_date', { ascending: false, nullsFirst: false });
 
       console.log('📊 Recent software releases found:', recentSoftware?.length || 0);
 
@@ -542,26 +541,28 @@ export function AdminNewsletter() {
 
       if (recentSoftware && recentSoftware.length > 0) {
         // For each software, get version history for previous_version and notes
-        for (const software of recentSoftware.slice(0, 5)) {
+        for (const software of recentSoftware) {
           const { data: versionHistory } = await supabase
             .from('software_version_history')
             .select('previous_version, type, notes')
             .eq('software_id', software.id)
             .eq('version', software.current_version)
             .order('detected_at', { ascending: false })
-            .limit(1)
-            .single();
+            .limit(1);
+
+          // Handle the array response (first item or undefined)
+          const historyEntry = versionHistory?.[0];
 
           sampleUpdates.push({
             software_id: software.id,
             name: software.name,
             manufacturer: software.manufacturer,
             category: software.category,
-            old_version: versionHistory?.previous_version || 'N/A',
+            old_version: historyEntry?.previous_version || 'N/A',
             new_version: software.current_version,
             release_date: software.release_date || software.updated_at,
-            release_notes: versionHistory?.notes || [],
-            update_type: versionHistory?.type || 'minor',
+            release_notes: historyEntry?.notes || [],
+            update_type: historyEntry?.type || 'minor',
           });
         }
 
@@ -1205,7 +1206,7 @@ function generatePreviewHtml(
       <div style="font-size: 12px; color: #525252; margin-top: 4px;">Released ${u.release_date}</div>
       ${u.release_notes && u.release_notes.length > 0 ? `
         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #262626;">
-          ${u.release_notes.slice(0, 2).map((note: string) => `<div style="font-size: 12px; color: #a3a3a3; margin-bottom: 4px;">• ${note}</div>`).join('')}
+          ${u.release_notes.map((note: string) => `<div style="font-size: 12px; color: #a3a3a3; margin-bottom: 4px;">• ${note}</div>`).join('')}
         </div>
       ` : ''}
     </div>
