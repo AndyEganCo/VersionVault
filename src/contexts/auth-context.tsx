@@ -35,7 +35,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('[Auth] Session retrieved:', session ? 'User logged in' : 'No session');
       setUser(session?.user ?? null);
-      await checkAdminStatus(session?.user?.id);
+      // TEMPORARY: Admin checking disabled for debugging
+      setIsAdmin(false);
       console.log('[Auth] Auth initialization complete, setting loading to false');
       setLoading(false);
     }).catch((error) => {
@@ -51,7 +52,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       console.log('[Auth] Auth state changed:', _event);
       setUser(session?.user ?? null);
-      await checkAdminStatus(session?.user?.id);
+      // TEMPORARY: Admin checking disabled for debugging
+      setIsAdmin(false);
     });
 
     return () => {
@@ -60,39 +62,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
-
-  async function checkAdminStatus(userId: string | undefined) {
-    if (!userId) {
-      console.log('[Auth] No user ID, setting isAdmin to false');
-      setIsAdmin(false);
-      return;
-    }
-
-    console.log('[Auth] Checking admin status for user:', userId);
-
-    try {
-      // Use maybeSingle() instead of single() - returns null if no rows found (non-admin)
-      // instead of throwing an error
-      const { data, error } = await supabase
-        .from('admin_users')
-        .select('*')
-        .eq('user_id', userId)
-        .maybeSingle();
-
-      if (error) {
-        console.log('[Auth] Admin check error:', error.message, error.code, error);
-        setIsAdmin(false);
-        return;
-      }
-
-      // data will be null for non-admins, which is expected
-      console.log('[Auth] Admin status:', !!data);
-      setIsAdmin(!!data);
-    } catch (err) {
-      console.error('[Auth] Admin check failed:', err);
-      setIsAdmin(false);
-    }
-  }
 
   return (
     <AuthContext.Provider value={{
