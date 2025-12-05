@@ -71,17 +71,6 @@ export function MainNav({
             Newsletter
           </NavLink>
           <NavLink
-            to="/admin/newsletter"
-            className={({ isActive }) =>
-              cn(
-                'text-sm font-medium transition-colors hover:text-primary',
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              )
-            }
-          >
-            Newsletter
-          </NavLink>
-          <NavLink
             to="/admin/extraction-test"
             className={({ isActive }) =>
               cn(
