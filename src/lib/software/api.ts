@@ -152,21 +152,31 @@ export async function addVersionHistory(softwareId: string, data: {
 
       if (error) throw error;
     } else {
+      // Get the current version from the software table to use as previous_version
+      const { data: softwareData } = await supabase
+        .from('software')
+        .select('current_version')
+        .eq('id', softwareId)
+        .single();
+
       // Insert new version - use provided date or current date if null
       const releaseDate = (data.release_date && data.release_date !== 'null')
         ? data.release_date
         : new Date().toISOString();
 
+      const now = new Date().toISOString();
       const { error } = await supabase
         .from('software_version_history')
         .insert({
           id: crypto.randomUUID(),
           software_id: data.software_id,
           version: data.version,
+          previous_version: softwareData?.current_version || null,
           release_date: releaseDate,
           notes: notesArray,
           type: data.type,
-          created_at: new Date().toISOString()
+          detected_at: now,
+          created_at: now
         });
 
       if (error) throw error;
