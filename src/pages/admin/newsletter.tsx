@@ -247,7 +247,7 @@ export function AdminNewsletter() {
 
       // Load unverified versions
       const { data: versionsData } = await supabase
-        .from('version_history')
+        .from('software_version_history')
         .select('id, software_id, version, detected_at, type, notes, release_date')
         .eq('newsletter_verified', false)
         .order('detected_at', { ascending: false })
@@ -288,7 +288,7 @@ export function AdminNewsletter() {
     setVerifyingVersions(prev => new Set(prev).add(versionId));
     try {
       const { error } = await supabase
-        .from('version_history')
+        .from('software_version_history')
         .update({
           newsletter_verified: true,
           verified_at: new Date().toISOString(),
@@ -319,7 +319,7 @@ export function AdminNewsletter() {
     setActionLoading(true);
     try {
       const { error } = await supabase
-        .from('version_history')
+        .from('software_version_history')
         .update({
           newsletter_verified: true,
           verified_at: new Date().toISOString(),

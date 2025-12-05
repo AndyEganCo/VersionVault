@@ -75,7 +75,7 @@ export async function generateUserDigest(
   // Only include verified versions (admin has confirmed data quality)
   // The isNewerVersion check below also filters out old versions found during backfill
   const { data: versionHistory, error: historyError } = await supabase
-    .from('version_history')
+    .from('software_version_history')
     .select('software_id, version, release_date, detected_at, notes, type')
     .in('software_id', softwareIds)
     .eq('newsletter_verified', true)
