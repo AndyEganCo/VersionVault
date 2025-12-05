@@ -52,12 +52,8 @@ export function AdminExtractionTest() {
   const [results, setResults] = useState<ExtractionResult[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Wait for auth to load before checking admin status
-  if (authLoading) {
-    return null;
-  }
-
-  if (!user || !isAdmin) {
+  // Only redirect once we KNOW user is not admin (after auth loads)
+  if (!authLoading && (!user || !isAdmin)) {
     return <Navigate to="/" replace />;
   }
 

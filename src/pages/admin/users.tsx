@@ -27,12 +27,8 @@ export function AdminUsers() {
   const { user, isAdmin, loading: authLoading } = useAuth();
   const { users, loading, toggleAdmin } = useUsers();
 
-  // Wait for auth to load before checking admin status
-  if (authLoading) {
-    return null;
-  }
-
-  if (!user || !isAdmin) {
+  // Only redirect once we KNOW user is not admin (after auth loads)
+  if (!authLoading && (!user || !isAdmin)) {
     return <Navigate to="/" replace />;
   }
 
