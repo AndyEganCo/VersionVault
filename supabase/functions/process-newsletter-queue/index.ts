@@ -224,10 +224,18 @@ serve(async (req) => {
 
         // Increment sponsor impressions if present
         if (item.payload.sponsor) {
-          await supabase
+          const { data: sponsorData } = await supabase
             .from('newsletter_sponsors')
-            .update({ impression_count: supabase.sql`impression_count + 1` })
+            .select('impression_count')
             .eq('is_active', true)
+            .single()
+
+          if (sponsorData) {
+            await supabase
+              .from('newsletter_sponsors')
+              .update({ impression_count: (sponsorData.impression_count || 0) + 1 })
+              .eq('is_active', true)
+          }
         }
 
         result.sent++
