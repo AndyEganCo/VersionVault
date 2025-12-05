@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Navigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
+import { LoadingPage } from '@/components/loading';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import { SoftwareTable } from '@/components/admin/software/software-table';
@@ -23,7 +24,7 @@ export function AdminSoftware() {
 
   // Wait for auth to load before checking admin status
   if (authLoading) {
-    return null;
+    return <LoadingPage />;
   }
 
   if (!user || !isAdmin) {
