@@ -524,48 +524,63 @@ export function AdminNewsletter() {
 
     setTestEmailLoading(true);
     try {
-      // Get user's tracked software for a realistic test
-      const { data: trackedSoftware } = await supabase
-        .from('tracked_software')
-        .select('software_id')
-        .eq('user_id', user.id)
-        .limit(5);
+      // Get recent version updates from the last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Get software details separately to avoid join issues
+      const { data: recentVersions } = await supabase
+        .from('software_version_history')
+        .select('software_id, version, detected_at, type, notes, release_date, previous_version')
+        .gte('detected_at', thirtyDaysAgo.toISOString())
+        .order('detected_at', { ascending: false })
+        .limit(10);
+
       let sampleUpdates: any[] = [];
-      if (trackedSoftware && trackedSoftware.length > 0) {
-        const softwareIds = trackedSoftware.map(t => t.software_id);
+
+      if (recentVersions && recentVersions.length > 0) {
+        // Get software details for these versions
+        const softwareIds = [...new Set(recentVersions.map(v => v.software_id))];
         const { data: softwareData } = await supabase
           .from('software')
-          .select('id, name, manufacturer, category, current_version')
-          .in('id', softwareIds)
-          .limit(3);
+          .select('id, name, manufacturer, category')
+          .in('id', softwareIds);
 
-        sampleUpdates = (softwareData || []).map((s: any) => ({
-          software_id: s.id,
-          name: s.name || 'Test Software',
-          manufacturer: s.manufacturer || 'Test Co',
-          category: s.category || 'Test',
-          old_version: '1.0.0',
-          new_version: s.current_version || '2.0.0',
-          release_date: new Date().toISOString(),
-          release_notes: ['New feature added', 'Bug fixes', 'Performance improvements'],
-          update_type: 'minor',
-        }));
+        const softwareMap = new Map(
+          (softwareData || []).map(s => [s.id, s])
+        );
+
+        // Build updates array with real data
+        sampleUpdates = recentVersions
+          .filter(v => softwareMap.has(v.software_id))
+          .slice(0, 5)
+          .map((v: any) => {
+            const software = softwareMap.get(v.software_id);
+            return {
+              software_id: v.software_id,
+              name: software.name,
+              manufacturer: software.manufacturer,
+              category: software.category,
+              old_version: v.previous_version || 'N/A',
+              new_version: v.version,
+              release_date: v.release_date || v.detected_at,
+              release_notes: v.notes || [],
+              update_type: v.type || 'minor',
+            };
+          });
       }
 
-      // Default sample if no tracked software
+      // Fallback to sample data if no recent versions found
       if (sampleUpdates.length === 0) {
         sampleUpdates = [
           {
-            software_id: 'test-1',
+            software_id: 'sample-1',
             name: 'Sample App',
-            manufacturer: 'Test Company',
+            manufacturer: 'Sample Company',
             category: 'Productivity',
             old_version: '2.4.0',
             new_version: '2.5.0',
             release_date: new Date().toISOString(),
-            release_notes: ['New dark mode', 'Performance improvements'],
+            release_notes: ['No recent version updates found in the last 30 days', 'This is sample data for testing'],
             update_type: 'minor',
           },
         ];
