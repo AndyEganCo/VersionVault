@@ -5,14 +5,16 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/auth-context';
 import { NotificationFrequency } from '@/lib/settings';
 import { FrequencyOptions } from './frequency-options';
+import { TimezoneSelector } from './timezone-selector';
 
 type EmailPreferencesProps = {
   preferences: {
     emailNotifications: boolean;
     notificationFrequency: NotificationFrequency;
     appUpdateNotifications: boolean;
+    timezone: string;
   };
-  onPreferenceChange: (key: string, value: boolean | NotificationFrequency) => void;
+  onPreferenceChange: (key: string, value: boolean | NotificationFrequency | string) => void;
   loading: boolean;
 };
 
@@ -67,6 +69,14 @@ export function EmailPreferences({ preferences, onPreferenceChange, loading }: E
                 <Switch
                   checked={preferences.appUpdateNotifications}
                   onCheckedChange={(checked) => onPreferenceChange('appUpdateNotifications', checked)}
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="pt-4">
+                <TimezoneSelector
+                  value={preferences.timezone}
+                  onChange={(value) => onPreferenceChange('timezone', value)}
                   disabled={loading}
                 />
               </div>

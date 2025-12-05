@@ -8,8 +8,9 @@ export function UserNotifications() {
   const [loading, setLoading] = useState(true);
   const [preferences, setPreferences] = useState<UserSettings>({
     emailNotifications: true,
-    notificationFrequency: 'daily',
-    appUpdateNotifications: true
+    notificationFrequency: 'weekly',
+    appUpdateNotifications: true,
+    timezone: 'America/New_York',
   });
 
   useEffect(() => {
@@ -23,7 +24,7 @@ export function UserNotifications() {
     loadPreferences();
   }, [user]);
 
-  const handlePreferenceChange = async (key: string, value: boolean | NotificationFrequency): Promise<void> => {
+  const handlePreferenceChange = async (key: string, value: boolean | NotificationFrequency | string): Promise<void> => {
     if (!user) return;
 
     setLoading(true);
