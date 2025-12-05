@@ -533,7 +533,7 @@ export function AdminNewsletter() {
         .select('software_id, version, detected_at, type, notes, release_date, previous_version')
         .gte('detected_at', sevenDaysAgo.toISOString())
         .order('detected_at', { ascending: false })
-        .limit(10);
+        .limit(50); // Get more initially so we can dedupe
 
       // If no updates in the last 7 days, get the most recent updates regardless of date
       if (!recentVersions || recentVersions.length === 0) {
@@ -541,18 +541,28 @@ export function AdminNewsletter() {
           .from('software_version_history')
           .select('software_id, version, detected_at, type, notes, release_date, previous_version')
           .order('detected_at', { ascending: false })
-          .limit(10);
+          .limit(50);
 
         recentVersions = result.data;
       }
 
+      // Deduplicate by software_id - keep only the most recent version for each software
+      const seenSoftware = new Set<string>();
+      const uniqueVersions = (recentVersions || []).filter(v => {
+        if (seenSoftware.has(v.software_id)) {
+          return false;
+        }
+        seenSoftware.add(v.software_id);
+        return true;
+      }).slice(0, 10); // Take top 10 unique software
+
       let sampleUpdates: any[] = [];
 
-      console.log('📊 Recent versions found:', recentVersions?.length || 0);
+      console.log('📊 Recent versions found:', uniqueVersions?.length || 0);
 
-      if (recentVersions && recentVersions.length > 0) {
+      if (uniqueVersions && uniqueVersions.length > 0) {
         // Get software details for these versions
-        const softwareIds = [...new Set(recentVersions.map(v => v.software_id))];
+        const softwareIds = [...new Set(uniqueVersions.map(v => v.software_id))];
         console.log('🔍 Looking up software IDs:', softwareIds);
 
         const { data: softwareData } = await supabase
@@ -567,8 +577,8 @@ export function AdminNewsletter() {
         );
 
         // Build updates array with real data
-        const beforeFilter = recentVersions.length;
-        sampleUpdates = recentVersions
+        const beforeFilter = uniqueVersions.length;
+        sampleUpdates = uniqueVersions
           .filter(v => softwareMap.has(v.software_id))
           .slice(0, 5)
           .map((v: any) => {
