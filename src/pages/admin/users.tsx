@@ -3,7 +3,6 @@ import { Navigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { useUsers } from '@/lib/users/hooks';
-import { LoadingPage } from '@/components/loading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -30,7 +29,7 @@ export function AdminUsers() {
 
   // Wait for auth to load before checking admin status
   if (authLoading) {
-    return <LoadingPage />;
+    return null;
   }
 
   if (!user || !isAdmin) {

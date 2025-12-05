@@ -740,8 +740,8 @@ export function AdminNewsletter() {
   };
 
   // Wait for auth to load before checking admin status
-  if (authLoading || loading) {
-    return <LoadingPage />;
+  if (authLoading) {
+    return null;
   }
 
   if (!user || !isAdmin) {
