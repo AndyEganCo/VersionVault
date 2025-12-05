@@ -524,79 +524,58 @@ export function AdminNewsletter() {
 
     setTestEmailLoading(true);
     try {
-      // For weekly digest, get updates from the last 7 days
+      // Get recently updated software (last 7 days)
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      let { data: recentVersions } = await supabase
-        .from('software_version_history')
-        .select('software_id, version, detected_at, type, notes, release_date, previous_version')
-        .gte('detected_at', sevenDaysAgo.toISOString())
-        .order('detected_at', { ascending: false })
-        .limit(50); // Get more initially so we can dedupe
+      let { data: recentSoftware } = await supabase
+        .from('software')
+        .select('id, name, manufacturer, category, current_version, last_checked')
+        .gte('last_checked', sevenDaysAgo.toISOString())
+        .order('last_checked', { ascending: false })
+        .limit(10);
 
-      // If no updates in the last 7 days, get the most recent updates regardless of date
-      if (!recentVersions || recentVersions.length === 0) {
+      // If no updates in last 7 days, get the most recently checked software
+      if (!recentSoftware || recentSoftware.length === 0) {
         const result = await supabase
-          .from('software_version_history')
-          .select('software_id, version, detected_at, type, notes, release_date, previous_version')
-          .order('detected_at', { ascending: false })
-          .limit(50);
+          .from('software')
+          .select('id, name, manufacturer, category, current_version, last_checked')
+          .order('last_checked', { ascending: false })
+          .limit(10);
 
-        recentVersions = result.data;
+        recentSoftware = result.data;
       }
-
-      // Deduplicate by software_id - keep only the most recent version for each software
-      const seenSoftware = new Set<string>();
-      const uniqueVersions = (recentVersions || []).filter(v => {
-        if (seenSoftware.has(v.software_id)) {
-          return false;
-        }
-        seenSoftware.add(v.software_id);
-        return true;
-      }).slice(0, 10); // Take top 10 unique software
 
       let sampleUpdates: any[] = [];
 
-      console.log('📊 Recent versions found:', uniqueVersions?.length || 0);
+      console.log('📊 Recent software updates found:', recentSoftware?.length || 0);
 
-      if (uniqueVersions && uniqueVersions.length > 0) {
-        // Get software details for these versions
-        const softwareIds = [...new Set(uniqueVersions.map(v => v.software_id))];
-        console.log('🔍 Looking up software IDs:', softwareIds);
+      if (recentSoftware && recentSoftware.length > 0) {
+        // For each software, get the most recent version history to find previous version and release notes
+        for (const software of recentSoftware.slice(0, 5)) {
+          const { data: versionHistory } = await supabase
+            .from('software_version_history')
+            .select('version, previous_version, type, notes, release_date, detected_at')
+            .eq('software_id', software.id)
+            .eq('version', software.current_version)
+            .order('detected_at', { ascending: false })
+            .limit(1)
+            .single();
 
-        const { data: softwareData } = await supabase
-          .from('software')
-          .select('id, name, manufacturer, category')
-          .in('id', softwareIds);
-
-        console.log('✅ Software data found:', softwareData?.length || 0);
-
-        const softwareMap = new Map(
-          (softwareData || []).map(s => [s.id, s])
-        );
-
-        // Build updates array with real data
-        const beforeFilter = uniqueVersions.length;
-        sampleUpdates = uniqueVersions
-          .filter(v => softwareMap.has(v.software_id))
-          .slice(0, 5)
-          .map((v: any) => {
-            const software = softwareMap.get(v.software_id);
-            return {
-              software_id: v.software_id,
-              name: software.name,
-              manufacturer: software.manufacturer,
-              category: software.category,
-              old_version: v.previous_version || 'N/A',
-              new_version: v.version,
-              release_date: v.release_date || v.detected_at,
-              release_notes: v.notes || [],
-              update_type: v.type || 'minor',
-            };
+          sampleUpdates.push({
+            software_id: software.id,
+            name: software.name,
+            manufacturer: software.manufacturer,
+            category: software.category,
+            old_version: versionHistory?.previous_version || 'N/A',
+            new_version: software.current_version,
+            release_date: versionHistory?.release_date || versionHistory?.detected_at || software.last_checked,
+            release_notes: versionHistory?.notes || [],
+            update_type: versionHistory?.type || 'minor',
           });
+        }
 
-        console.log(`📧 Updates: ${beforeFilter} versions -> ${sampleUpdates.length} after filtering`);
+        console.log(`📧 Updates: ${recentSoftware.length} software -> ${sampleUpdates.length} in email`);
       }
 
       // Only use fallback if truly no data in database
