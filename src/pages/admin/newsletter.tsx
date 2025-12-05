@@ -367,11 +367,16 @@ export function AdminNewsletter() {
     setSponsorSaving(true);
     try {
       // If setting this sponsor as active, deactivate others first
-      if (sponsorForm.is_active) {
+      if (sponsorForm.is_active && editingSponsor?.id) {
         await supabase
           .from('newsletter_sponsors')
           .update({ is_active: false })
-          .neq('id', editingSponsor?.id || '');
+          .neq('id', editingSponsor.id);
+      } else if (sponsorForm.is_active) {
+        // New sponsor being set as active - deactivate all
+        await supabase
+          .from('newsletter_sponsors')
+          .update({ is_active: false });
       }
 
       if (editingSponsor) {
