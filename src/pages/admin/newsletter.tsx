@@ -52,8 +52,6 @@ import {
   Trash2,
   TestTube,
   FileText,
-  Check,
-  Package,
 } from 'lucide-react';
 
 interface QueueSummary {
@@ -95,17 +93,6 @@ interface Sponsor {
   click_count: number;
   start_date: string | null;
   end_date: string | null;
-}
-
-interface PendingVersion {
-  id: string;
-  software_id: string;
-  version: string;
-  detected_at: string;
-  type: 'major' | 'minor' | 'patch';
-  notes: string[];
-  software_name: string;
-  software_manufacturer: string;
 }
 
 type SponsorFormData = Omit<Sponsor, 'id' | 'impression_count' | 'click_count'>;
@@ -157,10 +144,6 @@ export function AdminNewsletter() {
 
   // Test email state
   const [testEmailLoading, setTestEmailLoading] = useState(false);
-
-  // Pending versions for approval
-  const [pendingVersions, setPendingVersions] = useState<PendingVersion[]>([]);
-  const [approvingVersions, setApprovingVersions] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user && isAdmin) {
@@ -242,99 +225,11 @@ export function AdminNewsletter() {
       if (settingData) {
         setAutoSendEnabled(settingData.setting_value === 'true');
       }
-
-      // Load pending versions (unapproved)
-      const { data: versionsData } = await supabase
-        .from('version_history')
-        .select('id, software_id, version, detected_at, type, notes')
-        .eq('newsletter_approved', false)
-        .order('detected_at', { ascending: false })
-        .limit(20);
-
-      if (versionsData && versionsData.length > 0) {
-        // Get software names for the versions
-        const softwareIds = [...new Set(versionsData.map(v => v.software_id))];
-        const { data: softwareData } = await supabase
-          .from('software')
-          .select('id, name, manufacturer')
-          .in('id', softwareIds);
-
-        const softwareMap = new Map(
-          (softwareData || []).map(s => [s.id, { name: s.name, manufacturer: s.manufacturer }])
-        );
-
-        setPendingVersions(
-          versionsData.map(v => ({
-            ...v,
-            notes: v.notes || [],
-            software_name: softwareMap.get(v.software_id)?.name || 'Unknown',
-            software_manufacturer: softwareMap.get(v.software_id)?.manufacturer || 'Unknown',
-          }))
-        );
-      } else {
-        setPendingVersions([]);
-      }
     } catch (error) {
       console.error('Error loading newsletter data:', error);
       toast.error('Failed to load newsletter data');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Approve a version for newsletter
-  const handleApproveVersion = async (versionId: string) => {
-    setApprovingVersions(prev => new Set(prev).add(versionId));
-    try {
-      const { error } = await supabase
-        .from('version_history')
-        .update({
-          newsletter_approved: true,
-          approved_at: new Date().toISOString(),
-          approved_by: user?.id,
-        })
-        .eq('id', versionId);
-
-      if (error) throw error;
-
-      toast.success('Version approved for newsletter');
-      setPendingVersions(prev => prev.filter(v => v.id !== versionId));
-    } catch (error) {
-      console.error('Error approving version:', error);
-      toast.error('Failed to approve version');
-    } finally {
-      setApprovingVersions(prev => {
-        const next = new Set(prev);
-        next.delete(versionId);
-        return next;
-      });
-    }
-  };
-
-  // Approve all pending versions
-  const handleApproveAll = async () => {
-    if (pendingVersions.length === 0) return;
-
-    setActionLoading(true);
-    try {
-      const { error } = await supabase
-        .from('version_history')
-        .update({
-          newsletter_approved: true,
-          approved_at: new Date().toISOString(),
-          approved_by: user?.id,
-        })
-        .eq('newsletter_approved', false);
-
-      if (error) throw error;
-
-      toast.success(`Approved ${pendingVersions.length} versions`);
-      setPendingVersions([]);
-    } catch (error) {
-      console.error('Error approving all versions:', error);
-      toast.error('Failed to approve versions');
-    } finally {
-      setActionLoading(false);
     }
   };
 
@@ -1047,91 +942,6 @@ export function AdminNewsletter() {
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
-
-      {/* Pending Version Approvals */}
-      <Card className="mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                Version Approvals
-              </CardTitle>
-              <CardDescription>
-                Approve versions before they're included in newsletter digests
-              </CardDescription>
-            </div>
-            {pendingVersions.length > 0 && (
-              <Button
-                size="sm"
-                onClick={handleApproveAll}
-                disabled={actionLoading}
-              >
-                <Check className="h-4 w-4 mr-1" />
-                Approve All ({pendingVersions.length})
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {pendingVersions.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
-              <p>All versions approved</p>
-              <p className="text-sm mt-1">New versions will appear here for review</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Software</TableHead>
-                  <TableHead>Version</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Detected</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingVersions.map((version) => (
-                  <TableRow key={version.id}>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{version.software_name}</p>
-                        <p className="text-xs text-muted-foreground">{version.software_manufacturer}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono">{version.version}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          version.type === 'major' ? 'default' :
-                          version.type === 'minor' ? 'secondary' : 'outline'
-                        }
-                      >
-                        {version.type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {new Date(version.detected_at).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-green-500 hover:text-green-600 hover:bg-green-500/10"
-                        onClick={() => handleApproveVersion(version.id)}
-                        disabled={approvingVersions.has(version.id)}
-                      >
-                        <Check className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
         </CardContent>
       </Card>
 
