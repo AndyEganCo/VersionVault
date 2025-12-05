@@ -1,5 +1,4 @@
 import { useAuth } from '@/contexts/auth-context';
-import { Navigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { useUsers } from '@/lib/users/hooks';
@@ -24,13 +23,8 @@ import { Shield, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function AdminUsers() {
-  const { user, isAdmin, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const { users, loading, toggleAdmin } = useUsers();
-
-  // Only redirect once we KNOW user is not admin (after auth loads)
-  if (!authLoading && (!user || !isAdmin)) {
-    return <Navigate to="/" replace />;
-  }
 
   const handleToggleAdmin = async (userId: string, currentIsAdmin: boolean) => {
     // Prevent removing last admin

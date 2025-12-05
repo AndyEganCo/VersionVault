@@ -1,6 +1,4 @@
 import { useState, useCallback } from 'react';
-import { useAuth } from '@/contexts/auth-context';
-import { Navigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { Button } from '@/components/ui/button';
@@ -11,7 +9,6 @@ import { AddSoftwareDialog } from '@/components/admin/software/add-software-dial
 import { useSoftwareList } from '@/lib/software/hooks';
 
 export function AdminSoftware() {
-  const { user, isAdmin, loading: authLoading } = useAuth();
   const { software, loading, refreshSoftware } = useSoftwareList();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [search, setSearch] = useState('');
@@ -20,11 +17,6 @@ export function AdminSoftware() {
   const handleSoftwareUpdate = useCallback(async () => {
     await refreshSoftware();
   }, [refreshSoftware]);
-
-  // Only redirect once we KNOW user is not admin (after auth loads)
-  if (!authLoading && (!user || !isAdmin)) {
-    return <Navigate to="/" replace />;
-  }
 
   // Filter and sort software
   const filteredSoftware = software

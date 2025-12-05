@@ -1,6 +1,4 @@
 import { useState } from 'react';
-import { useAuth } from '@/contexts/auth-context';
-import { Navigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { Button } from '@/components/ui/button';
@@ -38,8 +36,6 @@ interface ExtractionResult {
 }
 
 export function AdminExtractionTest() {
-  const { user, isAdmin, loading: authLoading } = useAuth();
-
   // Form state
   const [name, setName] = useState('ATEM Switchers');
   const [manufacturer, setManufacturer] = useState('Blackmagic Design');
@@ -51,11 +47,6 @@ export function AdminExtractionTest() {
   // Results state
   const [results, setResults] = useState<ExtractionResult[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // Only redirect once we KNOW user is not admin (after auth loads)
-  if (!authLoading && (!user || !isAdmin)) {
-    return <Navigate to="/" replace />;
-  }
 
   const runTest = async (mode: 'legacy' | 'enhanced' | 'interactive') => {
     setLoading(true);

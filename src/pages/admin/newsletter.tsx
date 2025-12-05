@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { Navigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
-import { LoadingPage } from '@/components/loading';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
@@ -125,7 +123,7 @@ const defaultSponsorForm: SponsorFormData = {
 };
 
 export function AdminNewsletter() {
-  const { user, isAdmin, loading: authLoading } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [queueSummary, setQueueSummary] = useState<QueueSummary>({
     pending: 0,
@@ -738,11 +736,6 @@ export function AdminNewsletter() {
       setPreviewLoading(false);
     }
   };
-
-  // Only redirect once we KNOW user is not admin (after auth loads)
-  if (!authLoading && (!user || !isAdmin)) {
-    return <Navigate to="/" replace />;
-  }
 
   return (
     <PageLayout>
