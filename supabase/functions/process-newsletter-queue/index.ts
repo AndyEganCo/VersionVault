@@ -47,6 +47,16 @@ serve(async (req) => {
     }
 
     let isAuthorized = false
+    let isAdminRequest = false
+
+    // Parse request body for force flag
+    let forceProcess = false
+    try {
+      const body = await req.json()
+      forceProcess = body?.force === true
+    } catch {
+      // No body or invalid JSON, that's fine
+    }
 
     // Check cron secret
     if (cronSecret) {
@@ -72,6 +82,7 @@ serve(async (req) => {
 
         if (adminData) {
           isAuthorized = true
+          isAdminRequest = true
           console.log(`✅ Admin user ${user.id} authorized`)
         }
       }
@@ -109,20 +120,29 @@ serve(async (req) => {
     }
 
     // Filter to only users where it's currently target hour in their timezone
-    const itemsToProcess = (queueItems || []).filter(item => {
-      try {
-        const formatter = new Intl.DateTimeFormat('en-US', {
-          timeZone: item.timezone,
-          hour: 'numeric',
-          hour12: false,
+    // Skip timezone filter if admin manually triggered with force=true
+    const shouldBypassTimezone = isAdminRequest && forceProcess
+
+    const itemsToProcess = shouldBypassTimezone
+      ? (queueItems || [])
+      : (queueItems || []).filter(item => {
+          try {
+            const formatter = new Intl.DateTimeFormat('en-US', {
+              timeZone: item.timezone,
+              hour: 'numeric',
+              hour12: false,
+            })
+            const currentHour = parseInt(formatter.format(now), 10)
+            return currentHour === targetHour
+          } catch {
+            // Invalid timezone, process anyway
+            return true
+          }
         })
-        const currentHour = parseInt(formatter.format(now), 10)
-        return currentHour === targetHour
-      } catch {
-        // Invalid timezone, process anyway
-        return true
-      }
-    })
+
+    if (shouldBypassTimezone) {
+      console.log('⚡ Admin force-processing: bypassing timezone filter')
+    }
 
     console.log(`📋 Found ${itemsToProcess.length} items to process (${queueItems?.length || 0} total pending)`)
 

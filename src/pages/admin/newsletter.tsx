@@ -380,6 +380,7 @@ export function AdminNewsletter() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
           },
+          body: JSON.stringify({ force: true }),
         }
       );
 
