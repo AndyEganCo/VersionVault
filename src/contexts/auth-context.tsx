@@ -77,18 +77,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     console.log('[Auth] Checking admin status for user:', userId);
-    const { data, error } = await supabase
-      .from('admin_users')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
 
-    if (error) {
-      console.log('[Auth] Admin check error (user might not be admin):', error.message);
+    try {
+      // Add timeout to admin check query
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Admin check timeout')), 5000)
+      );
+
+      const queryPromise = supabase
+        .from('admin_users')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+
+      if (error) {
+        console.log('[Auth] Admin check error:', error.message, error.code, error);
+        setIsAdmin(false);
+        return;
+      }
+
+      console.log('[Auth] Admin status:', !!data);
+      setIsAdmin(!!data);
+    } catch (err) {
+      console.error('[Auth] Admin check failed:', err);
+      setIsAdmin(false);
     }
-
-    console.log('[Auth] Admin status:', !!data);
-    setIsAdmin(!!data);
   }
 
   return (
