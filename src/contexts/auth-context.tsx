@@ -22,51 +22,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     console.log('[Auth] Initializing auth context...');
-    let initialized = false;
-
-    // Timeout fallback in case getSession hangs
-    const timeout = setTimeout(() => {
-      if (!initialized) {
-        console.log('[Auth] getSession timeout, setting loading to false');
-        setLoading(false);
-      }
-    }, 3000);
 
     // Check active session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       console.log('[Auth] Session retrieved:', session ? 'User logged in' : 'No session');
-      initialized = true;
-      clearTimeout(timeout);
       setUser(session?.user ?? null);
       await checkAdminStatus(session?.user?.id);
       console.log('[Auth] Auth initialization complete, setting loading to false');
       setLoading(false);
     }).catch((error) => {
       console.error('[Auth] Auth init error:', error);
-      initialized = true;
-      clearTimeout(timeout);
       setLoading(false);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      console.log('[Auth] Auth state changed:', _event, session ? 'User logged in' : 'No session');
+      console.log('[Auth] Auth state changed:', _event);
       setUser(session?.user ?? null);
       await checkAdminStatus(session?.user?.id);
-
-      // If this fires before getSession completes, we can stop loading
-      if (!initialized) {
-        console.log('[Auth] Auth ready from state change, setting loading to false');
-        initialized = true;
-        clearTimeout(timeout);
-        setLoading(false);
-      }
     });
 
-    return () => {
-      clearTimeout(timeout);
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   async function checkAdminStatus(userId: string | undefined) {
@@ -79,18 +55,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[Auth] Checking admin status for user:', userId);
 
     try {
-      // Add timeout to admin check query
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Admin check timeout')), 5000)
-      );
-
-      const queryPromise = supabase
+      // Use maybeSingle() instead of single() - returns null if no rows found (non-admin)
+      // instead of throwing an error
+      const { data, error } = await supabase
         .from('admin_users')
         .select('*')
         .eq('user_id', userId)
-        .single();
-
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]) as any;
+        .maybeSingle();
 
       if (error) {
         console.log('[Auth] Admin check error:', error.message, error.code, error);
@@ -98,6 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // data will be null for non-admins, which is expected
       console.log('[Auth] Admin status:', !!data);
       setIsAdmin(!!data);
     } catch (err) {
