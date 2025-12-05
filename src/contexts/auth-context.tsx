@@ -23,26 +23,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     console.log('[Auth] Initializing auth context...');
 
+    // Cancellation flag for React StrictMode double-invocation
+    let cancelled = false;
+
     // Check active session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (cancelled) {
+        console.log('[Auth] Init cancelled, ignoring getSession result');
+        return;
+      }
+
       console.log('[Auth] Session retrieved:', session ? 'User logged in' : 'No session');
       setUser(session?.user ?? null);
       await checkAdminStatus(session?.user?.id);
       console.log('[Auth] Auth initialization complete, setting loading to false');
       setLoading(false);
     }).catch((error) => {
-      console.error('[Auth] Auth init error:', error);
-      setLoading(false);
+      if (!cancelled) {
+        console.error('[Auth] Auth init error:', error);
+        setLoading(false);
+      }
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (cancelled) return;
+
       console.log('[Auth] Auth state changed:', _event);
       setUser(session?.user ?? null);
       await checkAdminStatus(session?.user?.id);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      console.log('[Auth] Cleaning up auth context');
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function checkAdminStatus(userId: string | undefined) {
