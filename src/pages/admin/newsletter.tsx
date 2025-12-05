@@ -125,7 +125,7 @@ const defaultSponsorForm: SponsorFormData = {
 };
 
 export function AdminNewsletter() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [queueSummary, setQueueSummary] = useState<QueueSummary>({
     pending: 0,
@@ -739,12 +739,13 @@ export function AdminNewsletter() {
     }
   };
 
-  if (!user || !isAdmin) {
-    return <Navigate to="/" replace />;
+  // Wait for auth to load before checking admin status
+  if (authLoading || loading) {
+    return <LoadingPage />;
   }
 
-  if (loading) {
-    return <LoadingPage />;
+  if (!user || !isAdmin) {
+    return <Navigate to="/" replace />;
   }
 
   return (

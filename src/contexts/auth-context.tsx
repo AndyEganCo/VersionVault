@@ -22,16 +22,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setUser(session?.user ?? null);
-      checkAdminStatus(session?.user?.id);
+      await checkAdminStatus(session?.user?.id);
+      setLoading(false);
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
-      checkAdminStatus(session?.user?.id);
-      setLoading(false);
+      await checkAdminStatus(session?.user?.id);
     });
 
     return () => subscription.unsubscribe();

@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Navigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
+import { LoadingPage } from '@/components/loading';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,7 +39,7 @@ interface ExtractionResult {
 }
 
 export function AdminExtractionTest() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
 
   // Form state
   const [name, setName] = useState('ATEM Switchers');
@@ -51,6 +52,11 @@ export function AdminExtractionTest() {
   // Results state
   const [results, setResults] = useState<ExtractionResult[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Wait for auth to load before checking admin status
+  if (authLoading) {
+    return <LoadingPage />;
+  }
 
   if (!user || !isAdmin) {
     return <Navigate to="/" replace />;

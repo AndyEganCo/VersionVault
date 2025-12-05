@@ -25,8 +25,13 @@ import { Shield, ShieldOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function AdminUsers() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
   const { users, loading, toggleAdmin } = useUsers();
+
+  // Wait for auth to load before checking admin status
+  if (authLoading) {
+    return <LoadingPage />;
+  }
 
   if (!user || !isAdmin) {
     return <Navigate to="/" replace />;

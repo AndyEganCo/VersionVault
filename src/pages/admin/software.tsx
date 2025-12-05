@@ -11,7 +11,7 @@ import { AddSoftwareDialog } from '@/components/admin/software/add-software-dial
 import { useSoftwareList } from '@/lib/software/hooks';
 
 export function AdminSoftware() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, loading: authLoading } = useAuth();
   const { software, loading, refreshSoftware } = useSoftwareList();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [search, setSearch] = useState('');
@@ -20,6 +20,11 @@ export function AdminSoftware() {
   const handleSoftwareUpdate = useCallback(async () => {
     await refreshSoftware();
   }, [refreshSoftware]);
+
+  // Wait for auth to load before checking admin status
+  if (authLoading) {
+    return null;
+  }
 
   if (!user || !isAdmin) {
     return <Navigate to="/" replace />;
