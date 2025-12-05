@@ -141,7 +141,6 @@ export function AdminNewsletter() {
   });
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
-  const [autoSendEnabled, setAutoSendEnabled] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
   // Sponsor modal state
@@ -230,17 +229,6 @@ export function AdminNewsletter() {
 
       if (sponsorsData) {
         setSponsors(sponsorsData);
-      }
-
-      // Load auto-send setting
-      const { data: settingData } = await supabase
-        .from('newsletter_settings')
-        .select('setting_value')
-        .eq('setting_key', 'auto_send_enabled')
-        .single();
-
-      if (settingData) {
-        setAutoSendEnabled(settingData.setting_value === 'true');
       }
 
       // Load unverified versions
@@ -419,25 +407,6 @@ export function AdminNewsletter() {
       toast.error('Failed to cancel queue');
     } finally {
       setActionLoading(false);
-    }
-  };
-
-  const handleToggleAutoSend = async (enabled: boolean) => {
-    try {
-      const { error } = await supabase
-        .from('newsletter_settings')
-        .upsert({
-          setting_key: 'auto_send_enabled',
-          setting_value: enabled.toString(),
-        });
-
-      if (error) throw error;
-
-      setAutoSendEnabled(enabled);
-      toast.success(`Auto-send ${enabled ? 'enabled' : 'disabled'}`);
-    } catch (error) {
-      console.error('Error updating auto-send setting:', error);
-      toast.error('Failed to update setting');
     }
   };
 
@@ -910,17 +879,6 @@ export function AdminNewsletter() {
                 <p className="text-3xl font-bold text-red-500">{queueSummary.failed}</p>
                 <p className="text-sm text-muted-foreground">Failed</p>
               </div>
-            </div>
-
-            <div className="flex items-center justify-between mb-4 p-3 bg-muted rounded-lg">
-              <div className="flex items-center gap-2">
-                <Label>Auto-send</Label>
-                <span className="text-xs text-muted-foreground">(8am user time)</span>
-              </div>
-              <Switch
-                checked={autoSendEnabled}
-                onCheckedChange={handleToggleAutoSend}
-              />
             </div>
 
             <div className="flex flex-wrap gap-2">
