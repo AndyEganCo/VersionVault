@@ -21,74 +21,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    console.log('[Auth] 1. Starting auth initialization');
-
     let subscription: any;
 
-    // Simple admin check function
+    // Check if user is admin
     const checkAdmin = async (userId: string | undefined) => {
       if (!userId) {
-        console.log('[Auth] 5a. No userId, setting isAdmin = false');
         setIsAdmin(false);
         return;
       }
 
       try {
-        console.log('[Auth] 5b. Checking admin status...');
         const { data } = await supabase
           .from('admin_users')
           .select('user_id')
           .eq('user_id', userId)
           .maybeSingle();
 
-        console.log('[Auth] 5c. Admin check complete:', !!data);
         setIsAdmin(!!data);
       } catch (err) {
-        console.log('[Auth] 5d. Admin check error:', err);
+        console.error('[Auth] Admin check failed:', err);
         setIsAdmin(false);
       }
     };
 
-    // Initialize auth
+    // Initialize auth session
     const initAuth = async () => {
       try {
-        console.log('[Auth] 2. Calling getSession...');
         const { data, error } = await supabase.auth.getSession();
 
-        console.log('[Auth] 3. getSession returned', {
-          hasSession: !!data.session,
-          hasError: !!error
-        });
-
         if (error) {
-          console.error('[Auth] 4. getSession error:', error);
+          console.error('[Auth] Failed to get session:', error);
           setLoading(false);
           return;
         }
 
-        console.log('[Auth] 5. Setting user state');
         setUser(data.session?.user ?? null);
-
         await checkAdmin(data.session?.user?.id);
-
-        console.log('[Auth] 6. Setting loading = false');
         setLoading(false);
-        console.log('[Auth] 7. Auth initialization complete');
       } catch (err) {
-        console.error('[Auth] Exception in initAuth:', err);
+        console.error('[Auth] Initialization error:', err);
         setLoading(false);
       }
     };
 
-    // Set up listener
-    console.log('[Auth] 8. Setting up onAuthStateChange');
+    // Listen for auth state changes
+    // IMPORTANT: Don't await checkAdmin here - it would block the auth state change
+    // and prevent getSession from completing, causing the app to freeze on refresh
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      console.log('[Auth] State changed:', _event);
       setUser(session?.user ?? null);
 
-      // Check admin on auth state changes (don't await - let it run in background)
       if (session?.user?.id) {
-        checkAdmin(session.user.id);
+        checkAdmin(session.user.id); // Fire and forget
       } else {
         setIsAdmin(false);
       }
@@ -96,11 +79,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     subscription = data.subscription;
 
     // Start initialization
-    console.log('[Auth] 9. Starting initAuth()');
     initAuth();
 
     return () => {
-      console.log('[Auth] 10. Cleanup');
       subscription?.unsubscribe();
     };
   }, []);
