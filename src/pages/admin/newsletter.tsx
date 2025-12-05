@@ -548,19 +548,26 @@ export function AdminNewsletter() {
 
       let sampleUpdates: any[] = [];
 
+      console.log('📊 Recent versions found:', recentVersions?.length || 0);
+
       if (recentVersions && recentVersions.length > 0) {
         // Get software details for these versions
         const softwareIds = [...new Set(recentVersions.map(v => v.software_id))];
+        console.log('🔍 Looking up software IDs:', softwareIds);
+
         const { data: softwareData } = await supabase
           .from('software')
           .select('id, name, manufacturer, category')
           .in('id', softwareIds);
+
+        console.log('✅ Software data found:', softwareData?.length || 0);
 
         const softwareMap = new Map(
           (softwareData || []).map(s => [s.id, s])
         );
 
         // Build updates array with real data
+        const beforeFilter = recentVersions.length;
         sampleUpdates = recentVersions
           .filter(v => softwareMap.has(v.software_id))
           .slice(0, 5)
@@ -578,6 +585,8 @@ export function AdminNewsletter() {
               update_type: v.type || 'minor',
             };
           });
+
+        console.log(`📧 Updates: ${beforeFilter} versions -> ${sampleUpdates.length} after filtering`);
       }
 
       // Only use fallback if truly no data in database
