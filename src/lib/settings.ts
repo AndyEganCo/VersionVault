@@ -7,12 +7,14 @@ export type UserSettings = {
   emailNotifications: boolean;
   notificationFrequency: NotificationFrequency;
   appUpdateNotifications: boolean;
+  timezone: string;
 };
 
 const DEFAULT_SETTINGS: UserSettings = {
   emailNotifications: true,
-  notificationFrequency: 'daily',
-  appUpdateNotifications: true
+  notificationFrequency: 'weekly',
+  appUpdateNotifications: true,
+  timezone: 'America/New_York',
 };
 
 export async function getUserSettings(userId: string): Promise<UserSettings> {
@@ -41,7 +43,8 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
     return {
       emailNotifications: data.email_notifications,
       notificationFrequency: data.notification_frequency,
-      appUpdateNotifications: data.app_update_notifications
+      appUpdateNotifications: data.app_update_notifications,
+      timezone: data.timezone || DEFAULT_SETTINGS.timezone,
     };
   } catch (error) {
     console.error('Error loading user settings:', error);
@@ -53,7 +56,7 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
 export async function updateUserSettings(
   userId: string,
   key: keyof UserSettings,
-  value: boolean | NotificationFrequency
+  value: boolean | NotificationFrequency | string
 ): Promise<boolean> {
   try {
     const dbKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);

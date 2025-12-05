@@ -1,6 +1,4 @@
 import { useState, useCallback } from 'react';
-import { useAuth } from '@/contexts/auth-context';
-import { Navigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { Button } from '@/components/ui/button';
@@ -12,7 +10,6 @@ import { VersionReviewWidget } from '@/components/admin/version-review-widget';
 import { useSoftwareList } from '@/lib/software/hooks';
 
 export function AdminSoftware() {
-  const { user, isAdmin } = useAuth();
   const { software, loading, refreshSoftware } = useSoftwareList();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [search, setSearch] = useState('');
@@ -21,10 +18,6 @@ export function AdminSoftware() {
   const handleSoftwareUpdate = useCallback(async () => {
     await refreshSoftware();
   }, [refreshSoftware]);
-
-  if (!user || !isAdmin) {
-    return <Navigate to="/" replace />;
-  }
 
   // Filter and sort software
   const filteredSoftware = software

@@ -8,18 +8,20 @@ export type NotificationSettings = {
   browserNotifications: boolean;
   notificationFrequency: NotificationFrequency;
   appUpdateNotifications: boolean;
+  timezone: string;
 };
 
 export function NotificationsPage() {
   const [preferences, setPreferences] = useState<NotificationSettings>({
     emailNotifications: true,
     browserNotifications: true,
-    notificationFrequency: 'daily',
-    appUpdateNotifications: true
+    notificationFrequency: 'weekly',
+    appUpdateNotifications: true,
+    timezone: 'America/New_York',
   });
   const [loading, setLoading] = useState(false);
 
-  const handlePreferenceChange = (key: string, value: boolean | NotificationFrequency): void => {
+  const handlePreferenceChange = (key: string, value: boolean | NotificationFrequency | string): void => {
     setLoading(true);
     try {
       setPreferences(prev => ({
@@ -42,11 +44,12 @@ export function NotificationsPage() {
         onPreferenceChange={handlePreferenceChange}
         loading={loading}
       />
-      <EmailPreferences 
+      <EmailPreferences
         preferences={{
           emailNotifications: preferences.emailNotifications,
           notificationFrequency: preferences.notificationFrequency,
-          appUpdateNotifications: preferences.appUpdateNotifications
+          appUpdateNotifications: preferences.appUpdateNotifications,
+          timezone: preferences.timezone,
         }}
         onPreferenceChange={handlePreferenceChange}
         loading={loading}
