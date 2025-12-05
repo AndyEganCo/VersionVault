@@ -21,45 +21,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    console.log('[Auth] Initializing auth context...');
+    console.log('[Auth] 1. Starting auth initialization');
 
-    // Cancellation flag for React StrictMode double-invocation
-    let cancelled = false;
+    let subscription: any;
 
-    // Check active session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (cancelled) {
-        console.log('[Auth] Init cancelled, ignoring getSession result');
-        return;
-      }
+    // Initialize auth
+    const initAuth = async () => {
+      try {
+        console.log('[Auth] 2. Calling getSession...');
+        const { data, error } = await supabase.auth.getSession();
 
-      console.log('[Auth] Session retrieved:', session ? 'User logged in' : 'No session');
-      setUser(session?.user ?? null);
-      // TEMPORARY: Admin checking disabled for debugging
-      setIsAdmin(false);
-      console.log('[Auth] Auth initialization complete, setting loading to false');
-      setLoading(false);
-    }).catch((error) => {
-      if (!cancelled) {
-        console.error('[Auth] Auth init error:', error);
+        console.log('[Auth] 3. getSession returned', {
+          hasSession: !!data.session,
+          hasError: !!error
+        });
+
+        if (error) {
+          console.error('[Auth] 4. getSession error:', error);
+          setLoading(false);
+          return;
+        }
+
+        console.log('[Auth] 5. Setting user state');
+        setUser(data.session?.user ?? null);
+        setIsAdmin(false); // TEMPORARY
+
+        console.log('[Auth] 6. Setting loading = false');
+        setLoading(false);
+        console.log('[Auth] 7. Auth initialization complete');
+      } catch (err) {
+        console.error('[Auth] Exception in initAuth:', err);
         setLoading(false);
       }
-    });
+    };
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (cancelled) return;
-
-      console.log('[Auth] Auth state changed:', _event);
+    // Set up listener
+    console.log('[Auth] 8. Setting up onAuthStateChange');
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('[Auth] State changed:', _event);
       setUser(session?.user ?? null);
-      // TEMPORARY: Admin checking disabled for debugging
-      setIsAdmin(false);
+      setIsAdmin(false); // TEMPORARY
     });
+    subscription = data.subscription;
+
+    // Start initialization
+    console.log('[Auth] 9. Starting initAuth()');
+    initAuth();
 
     return () => {
-      console.log('[Auth] Cleaning up auth context');
-      cancelled = true;
-      subscription.unsubscribe();
+      console.log('[Auth] 10. Cleanup');
+      subscription?.unsubscribe();
     };
   }, []);
 
