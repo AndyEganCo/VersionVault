@@ -35,7 +35,6 @@ import {
 } from '@/components/ui/dialog';
 import {
   Mail,
-  Send,
   Pause,
   Play,
   RefreshCw,
@@ -320,36 +319,6 @@ export function AdminNewsletter() {
     } catch (error) {
       console.error('Error verifying versions:', error);
       toast.error('Failed to verify versions');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleQueueDigest = async (frequency: 'daily' | 'weekly' | 'monthly') => {
-    setActionLoading(true);
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/queue-weekly-digest`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
-          },
-          body: JSON.stringify({ frequency }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error('Failed to queue digest');
-      }
-
-      const result = await response.json();
-      toast.success(`Queued ${result.queued} ${frequency} digest emails`);
-      loadData();
-    } catch (error) {
-      console.error('Error queuing digest:', error);
-      toast.error('Failed to queue digest');
     } finally {
       setActionLoading(false);
     }
@@ -882,14 +851,6 @@ export function AdminNewsletter() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                onClick={() => handleQueueDigest('weekly')}
-                disabled={actionLoading}
-              >
-                <Send className="h-4 w-4 mr-1" />
-                Queue Weekly
-              </Button>
               <Button
                 size="sm"
                 variant="outline"
