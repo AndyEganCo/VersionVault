@@ -524,16 +524,27 @@ export function AdminNewsletter() {
 
     setTestEmailLoading(true);
     try {
-      // Get recent version updates from the last 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      // For weekly digest, get updates from the last 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-      const { data: recentVersions } = await supabase
+      let { data: recentVersions } = await supabase
         .from('software_version_history')
         .select('software_id, version, detected_at, type, notes, release_date, previous_version')
-        .gte('detected_at', thirtyDaysAgo.toISOString())
+        .gte('detected_at', sevenDaysAgo.toISOString())
         .order('detected_at', { ascending: false })
         .limit(10);
+
+      // If no updates in the last 7 days, get the most recent updates regardless of date
+      if (!recentVersions || recentVersions.length === 0) {
+        const result = await supabase
+          .from('software_version_history')
+          .select('software_id, version, detected_at, type, notes, release_date, previous_version')
+          .order('detected_at', { ascending: false })
+          .limit(10);
+
+        recentVersions = result.data;
+      }
 
       let sampleUpdates: any[] = [];
 
@@ -569,7 +580,7 @@ export function AdminNewsletter() {
           });
       }
 
-      // Fallback to sample data if no recent versions found
+      // Only use fallback if truly no data in database
       if (sampleUpdates.length === 0) {
         sampleUpdates = [
           {
@@ -580,7 +591,7 @@ export function AdminNewsletter() {
             old_version: '2.4.0',
             new_version: '2.5.0',
             release_date: new Date().toISOString(),
-            release_notes: ['No recent version updates found in the last 30 days', 'This is sample data for testing'],
+            release_notes: ['No version updates found in database', 'This is sample data for testing'],
             update_type: 'minor',
           },
         ];
