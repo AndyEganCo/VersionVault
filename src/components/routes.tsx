@@ -13,6 +13,9 @@ import { UserNotifications } from '@/pages/user/notifications';
 import { Signup } from '@/pages/signup';
 import { AdminSoftware } from '@/pages/admin/software';
 import { AdminUsers } from '@/pages/admin/users';
+import { AdminExtractionTest } from '@/pages/admin/extraction-test';
+import { AdminNewsletter } from '@/pages/admin/newsletter';
+import { Unsubscribe } from '@/pages/unsubscribe';
 
 export function Routes() {
   return (
@@ -21,6 +24,7 @@ export function Routes() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/unsubscribe" element={<Unsubscribe />} />
 
       {/* Protected routes */}
       <Route element={<AuthCheck />}>
@@ -40,6 +44,8 @@ export function Routes() {
           <Route index element={<Navigate to="software" replace />} />
           <Route path="software" element={<AdminSoftware />} />
           <Route path="users" element={<AdminUsers />} />
+          <Route path="newsletter" element={<AdminNewsletter />} />
+          <Route path="extraction-test" element={<AdminExtractionTest />} />
         </Route>
       </Route>
 
