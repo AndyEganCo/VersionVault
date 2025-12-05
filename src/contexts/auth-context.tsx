@@ -21,18 +21,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
+    console.log('[Auth] Initializing auth context...');
+
     // Check active session
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('[Auth] Session retrieved:', session ? 'User logged in' : 'No session');
       setUser(session?.user ?? null);
       await checkAdminStatus(session?.user?.id);
+      console.log('[Auth] Auth initialization complete, setting loading to false');
       setLoading(false);
     }).catch((error) => {
-      console.error('Auth init error:', error);
+      console.error('[Auth] Auth init error:', error);
       setLoading(false);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('[Auth] Auth state changed:', _event, session ? 'User logged in' : 'No session');
       setUser(session?.user ?? null);
       await checkAdminStatus(session?.user?.id);
     });
@@ -42,16 +47,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function checkAdminStatus(userId: string | undefined) {
     if (!userId) {
+      console.log('[Auth] No user ID, setting isAdmin to false');
       setIsAdmin(false);
       return;
     }
 
-    const { data } = await supabase
+    console.log('[Auth] Checking admin status for user:', userId);
+    const { data, error } = await supabase
       .from('admin_users')
       .select('*')
       .eq('user_id', userId)
       .single();
 
+    if (error) {
+      console.log('[Auth] Admin check error (user might not be admin):', error.message);
+    }
+
+    console.log('[Auth] Admin status:', !!data);
     setIsAdmin(!!data);
   }
 
