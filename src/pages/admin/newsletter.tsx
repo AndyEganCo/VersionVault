@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Card,
   CardContent,
@@ -26,6 +28,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Mail,
   Send,
   Pause,
@@ -37,6 +47,11 @@ import {
   Eye,
   MousePointer,
   AlertTriangle,
+  Plus,
+  Pencil,
+  Trash2,
+  TestTube,
+  FileText,
 } from 'lucide-react';
 
 interface QueueSummary {
@@ -69,11 +84,30 @@ interface Sponsor {
   id: string;
   name: string;
   tagline: string | null;
+  description: string | null;
+  image_url: string | null;
   cta_url: string;
+  cta_text: string;
   is_active: boolean;
   impression_count: number;
   click_count: number;
+  start_date: string | null;
+  end_date: string | null;
 }
+
+type SponsorFormData = Omit<Sponsor, 'id' | 'impression_count' | 'click_count'>;
+
+const defaultSponsorForm: SponsorFormData = {
+  name: '',
+  tagline: '',
+  description: '',
+  image_url: '',
+  cta_url: '',
+  cta_text: 'Learn More',
+  is_active: false,
+  start_date: null,
+  end_date: null,
+};
 
 export function AdminNewsletter() {
   const { user, isAdmin } = useAuth();
@@ -93,9 +127,23 @@ export function AdminNewsletter() {
     clickRate: 0,
   });
   const [recentLogs, setRecentLogs] = useState<RecentLog[]>([]);
-  const [activeSponsor, setActiveSponsor] = useState<Sponsor | null>(null);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [autoSendEnabled, setAutoSendEnabled] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Sponsor modal state
+  const [sponsorModalOpen, setSponsorModalOpen] = useState(false);
+  const [editingSponsor, setEditingSponsor] = useState<Sponsor | null>(null);
+  const [sponsorForm, setSponsorForm] = useState<SponsorFormData>(defaultSponsorForm);
+  const [sponsorSaving, setSponsorSaving] = useState(false);
+
+  // Preview modal state
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Test email state
+  const [testEmailLoading, setTestEmailLoading] = useState(false);
 
   useEffect(() => {
     if (user && isAdmin) {
@@ -157,14 +205,15 @@ export function AdminNewsletter() {
         setRecentLogs(recentData);
       }
 
-      // Load active sponsor
-      const { data: sponsorData } = await supabase
+      // Load all sponsors
+      const { data: sponsorsData } = await supabase
         .from('newsletter_sponsors')
         .select('*')
-        .eq('is_active', true)
-        .single();
+        .order('created_at', { ascending: false });
 
-      setActiveSponsor(sponsorData || null);
+      if (sponsorsData) {
+        setSponsors(sponsorsData);
+      }
 
       // Load auto-send setting
       const { data: settingData } = await supabase
@@ -287,6 +336,282 @@ export function AdminNewsletter() {
     }
   };
 
+  // Sponsor management functions
+  const openSponsorModal = (sponsor?: Sponsor) => {
+    if (sponsor) {
+      setEditingSponsor(sponsor);
+      setSponsorForm({
+        name: sponsor.name,
+        tagline: sponsor.tagline || '',
+        description: sponsor.description || '',
+        image_url: sponsor.image_url || '',
+        cta_url: sponsor.cta_url,
+        cta_text: sponsor.cta_text,
+        is_active: sponsor.is_active,
+        start_date: sponsor.start_date,
+        end_date: sponsor.end_date,
+      });
+    } else {
+      setEditingSponsor(null);
+      setSponsorForm(defaultSponsorForm);
+    }
+    setSponsorModalOpen(true);
+  };
+
+  const handleSaveSponsor = async () => {
+    if (!sponsorForm.name || !sponsorForm.cta_url) {
+      toast.error('Name and CTA URL are required');
+      return;
+    }
+
+    setSponsorSaving(true);
+    try {
+      // If setting this sponsor as active, deactivate others first
+      if (sponsorForm.is_active) {
+        await supabase
+          .from('newsletter_sponsors')
+          .update({ is_active: false })
+          .neq('id', editingSponsor?.id || '');
+      }
+
+      if (editingSponsor) {
+        // Update existing
+        const { error } = await supabase
+          .from('newsletter_sponsors')
+          .update({
+            name: sponsorForm.name,
+            tagline: sponsorForm.tagline || null,
+            description: sponsorForm.description || null,
+            image_url: sponsorForm.image_url || null,
+            cta_url: sponsorForm.cta_url,
+            cta_text: sponsorForm.cta_text || 'Learn More',
+            is_active: sponsorForm.is_active,
+            start_date: sponsorForm.start_date || null,
+            end_date: sponsorForm.end_date || null,
+          })
+          .eq('id', editingSponsor.id);
+
+        if (error) throw error;
+        toast.success('Sponsor updated');
+      } else {
+        // Create new
+        const { error } = await supabase
+          .from('newsletter_sponsors')
+          .insert({
+            name: sponsorForm.name,
+            tagline: sponsorForm.tagline || null,
+            description: sponsorForm.description || null,
+            image_url: sponsorForm.image_url || null,
+            cta_url: sponsorForm.cta_url,
+            cta_text: sponsorForm.cta_text || 'Learn More',
+            is_active: sponsorForm.is_active,
+            start_date: sponsorForm.start_date || null,
+            end_date: sponsorForm.end_date || null,
+          });
+
+        if (error) throw error;
+        toast.success('Sponsor created');
+      }
+
+      setSponsorModalOpen(false);
+      loadData();
+    } catch (error) {
+      console.error('Error saving sponsor:', error);
+      toast.error('Failed to save sponsor');
+    } finally {
+      setSponsorSaving(false);
+    }
+  };
+
+  const handleDeleteSponsor = async (sponsor: Sponsor) => {
+    if (!confirm(`Are you sure you want to delete "${sponsor.name}"?`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('newsletter_sponsors')
+        .delete()
+        .eq('id', sponsor.id);
+
+      if (error) throw error;
+      toast.success('Sponsor deleted');
+      loadData();
+    } catch (error) {
+      console.error('Error deleting sponsor:', error);
+      toast.error('Failed to delete sponsor');
+    }
+  };
+
+  const handleToggleSponsorActive = async (sponsor: Sponsor) => {
+    try {
+      if (!sponsor.is_active) {
+        // Deactivate all others first
+        await supabase
+          .from('newsletter_sponsors')
+          .update({ is_active: false })
+          .neq('id', sponsor.id);
+      }
+
+      const { error } = await supabase
+        .from('newsletter_sponsors')
+        .update({ is_active: !sponsor.is_active })
+        .eq('id', sponsor.id);
+
+      if (error) throw error;
+      toast.success(sponsor.is_active ? 'Sponsor deactivated' : 'Sponsor activated');
+      loadData();
+    } catch (error) {
+      console.error('Error toggling sponsor:', error);
+      toast.error('Failed to update sponsor');
+    }
+  };
+
+  // Send test email to current user
+  const handleSendTestEmail = async () => {
+    if (!user?.email) {
+      toast.error('No email address found');
+      return;
+    }
+
+    setTestEmailLoading(true);
+    try {
+      // Get user's tracked software for a realistic test
+      const { data: trackedSoftware } = await supabase
+        .from('tracked_software')
+        .select(`
+          software_id,
+          software:software_id (
+            id, name, manufacturer, category, current_version
+          )
+        `)
+        .eq('user_id', user.id)
+        .limit(5);
+
+      // Create sample updates from tracked software
+      const sampleUpdates = (trackedSoftware || []).slice(0, 3).map((t: any) => ({
+        software_id: t.software_id,
+        name: t.software?.name || 'Test Software',
+        manufacturer: t.software?.manufacturer || 'Test Co',
+        category: t.software?.category || 'Test',
+        old_version: '1.0.0',
+        new_version: t.software?.current_version || '2.0.0',
+        release_date: new Date().toISOString(),
+        release_notes: ['New feature added', 'Bug fixes', 'Performance improvements'],
+        update_type: 'minor',
+      }));
+
+      // Get active sponsor
+      const activeSponsor = sponsors.find(s => s.is_active);
+
+      // Add to queue with immediate processing
+      const { error: queueError } = await supabase
+        .from('newsletter_queue')
+        .insert({
+          user_id: user.id,
+          email: user.email,
+          email_type: 'weekly_digest',
+          payload: {
+            updates: sampleUpdates.length > 0 ? sampleUpdates : [
+              {
+                software_id: 'test-1',
+                name: 'Sample App',
+                manufacturer: 'Test Company',
+                category: 'Productivity',
+                old_version: '2.4.0',
+                new_version: '2.5.0',
+                release_date: new Date().toISOString(),
+                release_notes: ['New dark mode', 'Performance improvements'],
+                update_type: 'minor',
+              },
+            ],
+            sponsor: activeSponsor ? {
+              name: activeSponsor.name,
+              tagline: activeSponsor.tagline,
+              description: activeSponsor.description,
+              image_url: activeSponsor.image_url,
+              cta_url: activeSponsor.cta_url,
+              cta_text: activeSponsor.cta_text,
+            } : null,
+          },
+          status: 'pending',
+          scheduled_for: new Date().toISOString(),
+          timezone: 'UTC',
+          idempotency_key: `test-${user.id}-${Date.now()}`,
+        });
+
+      if (queueError) throw queueError;
+
+      // Process the queue immediately
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-newsletter-queue`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to send test email');
+      }
+
+      toast.success(`Test email sent to ${user.email}`);
+      loadData();
+    } catch (error) {
+      console.error('Error sending test email:', error);
+      toast.error('Failed to send test email');
+    } finally {
+      setTestEmailLoading(false);
+    }
+  };
+
+  // Preview email
+  const handlePreviewEmail = async () => {
+    setPreviewLoading(true);
+    setPreviewModalOpen(true);
+
+    try {
+      // Get user's tracked software
+      const { data: trackedSoftware } = await supabase
+        .from('tracked_software')
+        .select(`
+          software_id,
+          software:software_id (
+            id, name, manufacturer, category, current_version
+          )
+        `)
+        .eq('user_id', user?.id)
+        .limit(5);
+
+      const sampleUpdates = (trackedSoftware || []).slice(0, 3).map((t: any) => ({
+        name: t.software?.name || 'Test Software',
+        manufacturer: t.software?.manufacturer || 'Test Co',
+        category: t.software?.category || 'Test',
+        old_version: '1.0.0',
+        new_version: t.software?.current_version || '2.0.0',
+        release_date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        release_notes: ['New feature added', 'Bug fixes'],
+        update_type: 'minor',
+      }));
+
+      const activeSponsor = sponsors.find(s => s.is_active);
+      const userName = user?.email?.split('@')[0] || 'User';
+
+      // Generate preview HTML (simplified version of the actual template)
+      const html = generatePreviewHtml(userName, sampleUpdates, activeSponsor);
+      setPreviewHtml(html);
+    } catch (error) {
+      console.error('Error generating preview:', error);
+      toast.error('Failed to generate preview');
+      setPreviewModalOpen(false);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   if (!user || !isAdmin) {
     return <Navigate to="/" replace />;
   }
@@ -386,7 +711,7 @@ export function AdminNewsletter() {
             <div className="flex items-center justify-between mb-4 p-3 bg-muted rounded-lg">
               <div className="flex items-center gap-2">
                 <Label>Auto-send</Label>
-                <span className="text-xs text-muted-foreground">(Emails send automatically at 8am user time)</span>
+                <span className="text-xs text-muted-foreground">(8am user time)</span>
               </div>
               <Switch
                 checked={autoSendEnabled}
@@ -419,7 +744,7 @@ export function AdminNewsletter() {
                 disabled={actionLoading || queueSummary.pending === 0}
               >
                 <Pause className="h-4 w-4 mr-1" />
-                Cancel Pending
+                Cancel
               </Button>
               <Button
                 size="sm"
@@ -430,47 +755,100 @@ export function AdminNewsletter() {
                 <RefreshCw className="h-4 w-4" />
               </Button>
             </div>
+
+            <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handlePreviewEmail}
+                disabled={previewLoading}
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                Preview Email
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleSendTestEmail}
+                disabled={testEmailLoading}
+              >
+                <TestTube className="h-4 w-4 mr-1" />
+                {testEmailLoading ? 'Sending...' : 'Send Test to Me'}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
         {/* Active Sponsor */}
         <Card>
           <CardHeader>
-            <CardTitle>Active Sponsor</CardTitle>
-            <CardDescription>Current sponsor shown in emails</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Sponsors</CardTitle>
+                <CardDescription>Manage newsletter sponsors</CardDescription>
+              </div>
+              <Button size="sm" onClick={() => openSponsorModal()}>
+                <Plus className="h-4 w-4 mr-1" />
+                Add
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            {activeSponsor ? (
-              <div className="space-y-4">
-                <div>
-                  <p className="font-semibold">{activeSponsor.name}</p>
-                  {activeSponsor.tagline && (
-                    <p className="text-sm text-muted-foreground">{activeSponsor.tagline}</p>
-                  )}
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center p-3 bg-muted rounded-lg">
-                    <p className="text-xl font-bold">{activeSponsor.impression_count}</p>
-                    <p className="text-xs text-muted-foreground">Impressions</p>
-                  </div>
-                  <div className="text-center p-3 bg-muted rounded-lg">
-                    <p className="text-xl font-bold">{activeSponsor.click_count}</p>
-                    <p className="text-xs text-muted-foreground">Clicks</p>
-                  </div>
-                </div>
-                <a
-                  href={activeSponsor.cta_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-500 hover:underline"
-                >
-                  {activeSponsor.cta_url}
-                </a>
+            {sponsors.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No sponsors yet</p>
+                <p className="text-sm mt-2">Add a sponsor to show ads in emails</p>
               </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>No active sponsor</p>
-                <p className="text-sm mt-2">Add a sponsor in the database to show ads in emails</p>
+              <div className="space-y-3">
+                {sponsors.map((sponsor) => (
+                  <div
+                    key={sponsor.id}
+                    className={`p-3 rounded-lg border ${sponsor.is_active ? 'border-green-500 bg-green-500/10' : 'bg-muted'}`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium">{sponsor.name}</p>
+                          {sponsor.is_active && (
+                            <Badge variant="default" className="bg-green-500">Active</Badge>
+                          )}
+                        </div>
+                        {sponsor.tagline && (
+                          <p className="text-sm text-muted-foreground">{sponsor.tagline}</p>
+                        )}
+                        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                          <span>{sponsor.impression_count} impressions</span>
+                          <span>{sponsor.click_count} clicks</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleToggleSponsorActive(sponsor)}
+                        >
+                          {sponsor.is_active ? 'Deactivate' : 'Activate'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openSponsorModal(sponsor)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-red-500 hover:text-red-600"
+                          onClick={() => handleDeleteSponsor(sponsor)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
@@ -546,6 +924,223 @@ export function AdminNewsletter() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Sponsor Modal */}
+      <Dialog open={sponsorModalOpen} onOpenChange={setSponsorModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingSponsor ? 'Edit Sponsor' : 'Add Sponsor'}</DialogTitle>
+            <DialogDescription>
+              {editingSponsor ? 'Update sponsor details' : 'Create a new sponsor for your newsletters'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name *</Label>
+              <Input
+                id="name"
+                value={sponsorForm.name}
+                onChange={(e) => setSponsorForm({ ...sponsorForm, name: e.target.value })}
+                placeholder="Company Name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tagline">Tagline</Label>
+              <Input
+                id="tagline"
+                value={sponsorForm.tagline || ''}
+                onChange={(e) => setSponsorForm({ ...sponsorForm, tagline: e.target.value })}
+                placeholder="Short catchy phrase"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                value={sponsorForm.description || ''}
+                onChange={(e) => setSponsorForm({ ...sponsorForm, description: e.target.value })}
+                placeholder="Brief description of the product/service"
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cta_url">CTA URL *</Label>
+              <Input
+                id="cta_url"
+                value={sponsorForm.cta_url}
+                onChange={(e) => setSponsorForm({ ...sponsorForm, cta_url: e.target.value })}
+                placeholder="https://..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cta_text">CTA Button Text</Label>
+              <Input
+                id="cta_text"
+                value={sponsorForm.cta_text}
+                onChange={(e) => setSponsorForm({ ...sponsorForm, cta_text: e.target.value })}
+                placeholder="Learn More"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="image_url">Image URL (optional)</Label>
+              <Input
+                id="image_url"
+                value={sponsorForm.image_url || ''}
+                onChange={(e) => setSponsorForm({ ...sponsorForm, image_url: e.target.value })}
+                placeholder="https://..."
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="is_active"
+                checked={sponsorForm.is_active}
+                onCheckedChange={(checked) => setSponsorForm({ ...sponsorForm, is_active: checked })}
+              />
+              <Label htmlFor="is_active">Active (shown in emails)</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSponsorModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveSponsor} disabled={sponsorSaving}>
+              {sponsorSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Modal */}
+      <Dialog open={previewModalOpen} onOpenChange={setPreviewModalOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Email Preview</DialogTitle>
+            <DialogDescription>
+              Preview of the weekly digest email
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto bg-[#0a0a0a] rounded-lg">
+            {previewLoading ? (
+              <div className="flex items-center justify-center h-64">
+                <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <iframe
+                srcDoc={previewHtml}
+                className="w-full h-[500px] border-0"
+                title="Email Preview"
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewModalOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={handleSendTestEmail} disabled={testEmailLoading}>
+              <TestTube className="h-4 w-4 mr-1" />
+              {testEmailLoading ? 'Sending...' : 'Send Test to Me'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
   );
+}
+
+// Helper function to generate preview HTML
+function generatePreviewHtml(
+  userName: string,
+  updates: any[],
+  sponsor: Sponsor | null | undefined
+): string {
+  const updateCards = updates.map((u) => `
+    <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 16px; font-weight: 600; color: #ffffff;">${u.name}</span>
+        <span style="font-size: 10px; font-weight: 600; color: #ffffff; background-color: #2563eb; padding: 3px 8px; border-radius: 4px;">${(u.update_type || 'MINOR').toUpperCase()}</span>
+      </div>
+      <div style="font-size: 13px; color: #a3a3a3; margin: 4px 0 12px 0;">${u.manufacturer} • ${u.category}</div>
+      <div style="font-size: 14px; font-family: monospace;">
+        <span style="color: #737373;">${u.old_version}</span>
+        <span style="color: #525252;"> → </span>
+        <span style="color: #22c55e; font-weight: 600;">${u.new_version}</span>
+      </div>
+      <div style="font-size: 12px; color: #525252; margin-top: 4px;">Released ${u.release_date}</div>
+      ${u.release_notes && u.release_notes.length > 0 ? `
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #262626;">
+          ${u.release_notes.slice(0, 2).map((note: string) => `<div style="font-size: 12px; color: #a3a3a3; margin-bottom: 4px;">• ${note}</div>`).join('')}
+        </div>
+      ` : ''}
+    </div>
+  `).join('');
+
+  const sponsorHtml = sponsor ? `
+    <div style="padding: 24px;">
+      <div style="font-size: 10px; font-weight: 600; color: #525252; text-align: center; margin-bottom: 8px; letter-spacing: 1px;">SPONSOR</div>
+      <a href="${sponsor.cta_url}" style="text-decoration: none;">
+        <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px;">
+          <div style="font-size: 14px; font-weight: 600; color: #ffffff;">${sponsor.name}</div>
+          ${sponsor.tagline ? `<div style="font-size: 13px; color: #3b82f6; margin-top: 4px;">${sponsor.tagline}</div>` : ''}
+          ${sponsor.description ? `<div style="font-size: 13px; color: #a3a3a3; margin-top: 8px; line-height: 1.5;">${sponsor.description}</div>` : ''}
+          <div style="display: inline-block; font-size: 12px; font-weight: 600; color: #ffffff; background-color: #2563eb; padding: 8px 16px; border-radius: 6px; margin-top: 12px;">${sponsor.cta_text}</div>
+        </div>
+      </a>
+    </div>
+  ` : '';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #0a0a0a;">
+    <!-- Header -->
+    <div style="padding: 32px 24px 24px 24px; border-bottom: 1px solid #262626;">
+      <a href="https://versionvault.dev" style="text-decoration: none;">
+        <div style="font-size: 20px; font-weight: 600; color: #ffffff; font-family: monospace;">
+          <span style="color: #a3a3a3;">&gt;_</span> VersionVault
+        </div>
+      </a>
+      <div style="font-size: 14px; color: #a3a3a3; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;">
+        Weekly Digest
+      </div>
+    </div>
+
+    <!-- Greeting -->
+    <div style="padding: 24px;">
+      <div style="font-size: 16px; color: #ffffff; margin-bottom: 12px;">Hey ${userName},</div>
+      <div style="font-size: 14px; color: #a3a3a3; line-height: 1.6;">
+        Here's what changed in the <strong>${updates.length}</strong> app${updates.length === 1 ? '' : 's'} you're tracking this week:
+      </div>
+    </div>
+
+    <!-- Updates -->
+    <div style="padding: 0 24px 24px 24px;">
+      ${updateCards}
+      <div style="text-align: center; margin-top: 16px;">
+        <a href="https://versionvault.dev/dashboard" style="font-size: 13px; color: #3b82f6; text-decoration: none;">View all in dashboard →</a>
+      </div>
+    </div>
+
+    ${sponsorHtml}
+
+    <!-- Footer -->
+    <div style="padding: 24px; border-top: 1px solid #262626;">
+      <div style="font-size: 13px; color: #a3a3a3; text-align: center; margin-bottom: 16px;">
+        <a href="#" style="color: #a3a3a3; text-decoration: underline;">Manage Preferences</a>
+        <span style="margin: 0 12px; color: #525252;">•</span>
+        <a href="#" style="color: #a3a3a3; text-decoration: underline;">Unsubscribe</a>
+        <span style="margin: 0 12px; color: #525252;">•</span>
+        <a href="#" style="color: #a3a3a3; text-decoration: underline;">Open Dashboard</a>
+      </div>
+      <div style="font-size: 12px; color: #525252; text-align: center; margin-bottom: 8px;">VersionVault • Software Version Tracking</div>
+      <div style="font-size: 12px; color: #404040; text-align: center;">© ${new Date().getFullYear()} VersionVault. All rights reserved.</div>
+    </div>
+  </div>
+</body>
+</html>
+  `;
 }
