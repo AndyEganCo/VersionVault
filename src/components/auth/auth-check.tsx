@@ -1,14 +1,13 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/auth-context';
-import { LoadingScreen } from '@/components/ui/loading-screen';
 
 export function AuthCheck() {
   const { user, loading } = useAuth();
   const location = useLocation();
 
-  // Show loading screen while auth state is being determined
+  // Wait for auth to initialize before redirecting
   if (loading) {
-    return <LoadingScreen />;
+    return null;
   }
 
   // Only redirect after we know user is not authenticated

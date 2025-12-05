@@ -21,39 +21,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      await checkAdminStatus(session?.user?.id);
-      setLoading(false);
-    }).catch((error) => {
-      console.error('Auth init error:', error);
-      setLoading(false);
-    });
+    let subscription: any;
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      setUser(session?.user ?? null);
-      await checkAdminStatus(session?.user?.id);
-    });
+    // Check if user is admin
+    const checkAdmin = async (userId: string | undefined) => {
+      if (!userId) {
+        setIsAdmin(false);
+        return;
+      }
 
-    return () => subscription.unsubscribe();
+      try {
+        const { data } = await supabase
+          .from('admin_users')
+          .select('user_id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        setIsAdmin(!!data);
+      } catch (err) {
+        console.error('[Auth] Admin check failed:', err);
+        setIsAdmin(false);
+      }
+    };
+
+    // Initialize auth session
+    const initAuth = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error('[Auth] Failed to get session:', error);
+          setLoading(false);
+          return;
+        }
+
+        setUser(data.session?.user ?? null);
+        await checkAdmin(data.session?.user?.id);
+        setLoading(false);
+      } catch (err) {
+        console.error('[Auth] Initialization error:', err);
+        setLoading(false);
+      }
+    };
+
+    // Listen for auth state changes
+    // IMPORTANT: Don't await checkAdmin here - it would block the auth state change
+    // and prevent getSession from completing, causing the app to freeze on refresh
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+
+      if (session?.user?.id) {
+        checkAdmin(session.user.id); // Fire and forget
+      } else {
+        setIsAdmin(false);
+      }
+    });
+    subscription = data.subscription;
+
+    // Start initialization
+    initAuth();
+
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, []);
-
-  async function checkAdminStatus(userId: string | undefined) {
-    if (!userId) {
-      setIsAdmin(false);
-      return;
-    }
-
-    const { data } = await supabase
-      .from('admin_users')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
-
-    setIsAdmin(!!data);
-  }
 
   return (
     <AuthContext.Provider value={{

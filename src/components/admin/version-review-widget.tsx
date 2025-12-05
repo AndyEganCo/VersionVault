@@ -9,7 +9,7 @@ import { CheckCircle2, XCircle, Edit, ChevronDown, ChevronUp, AlertTriangle } fr
 interface VersionCheck {
   id: string;
   software_id: string;
-  current_version: string | null;
+  version: string | null;
   confidence_score: number | null;
   validation_notes: string | null;
   software: {
@@ -36,7 +36,7 @@ export function VersionReviewWidget() {
         .select(`
           id,
           software_id,
-          current_version,
+          version,
           confidence_score,
           validation_notes,
           software:software_id (
@@ -93,7 +93,7 @@ export function VersionReviewWidget() {
       const { error } = await supabase
         .from('software_version_history')
         .update({
-          current_version: editedVersion || null,
+          version: editedVersion || null,
           requires_manual_review: false,
           confidence_score: 100
         })
@@ -177,7 +177,7 @@ export function VersionReviewWidget() {
                   <>
                     <div className="text-sm mb-2">
                       <span className="text-muted-foreground">Version: </span>
-                      {check.current_version || (
+                      {check.version || (
                         <span className="italic text-muted-foreground">None</span>
                       )}
                     </div>
@@ -196,7 +196,7 @@ export function VersionReviewWidget() {
                         variant="outline"
                         onClick={() => {
                           setEditingId(check.id);
-                          setEditedVersion(check.current_version || '');
+                          setEditedVersion(check.version || '');
                         }}
                       >
                         <Edit className="w-3 h-3 mr-1" />
