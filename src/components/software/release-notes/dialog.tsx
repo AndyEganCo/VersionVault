@@ -111,9 +111,11 @@ export function ReleaseNotesDialog({
                             {selectedNotes.type}
                           </Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {formatDate(selectedNotes.release_date || selectedNotes.detected_at)}
-                        </p>
+                        {(selectedNotes.release_date || selectedNotes.detected_at) && (
+                          <p className="text-sm text-muted-foreground">
+                            {formatDate(selectedNotes.release_date || selectedNotes.detected_at)}
+                          </p>
+                        )}
                         <ul className="list-disc list-inside space-y-1">
                           {Array.isArray(selectedNotes.notes) ? 
                             selectedNotes.notes.map((item, i) => (
