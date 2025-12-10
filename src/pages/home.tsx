@@ -107,11 +107,11 @@ export function Home() {
                           <span className="text-sm font-medium">{item.current_version}</span>
                         </div>
                       )}
-                      {item.release_date && (
+                      {(item.release_date || item.last_checked) && (
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">Released:</span>
+                          <span className="text-sm text-muted-foreground">{item.release_date ? 'Released:' : 'Added:'}</span>
                           <span className="text-sm font-medium">
-                            {new Date(item.release_date).toLocaleDateString()}
+                            {new Date(item.release_date || item.last_checked).toLocaleDateString()}
                           </span>
                         </div>
                       )}

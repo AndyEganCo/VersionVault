@@ -38,9 +38,11 @@ export function Software() {
   const sortedSoftware = filteredSoftware.sort((a, b) => {
     switch (sortBy) {
       case 'releaseDate':
-        if (!a.release_date) return 1;
-        if (!b.release_date) return -1;
-        return new Date(b.release_date).getTime() - new Date(a.release_date).getTime();
+        const aDate = a.release_date || a.last_checked;
+        const bDate = b.release_date || b.last_checked;
+        if (!aDate) return 1;
+        if (!bDate) return -1;
+        return new Date(bDate).getTime() - new Date(aDate).getTime();
       case 'lastChecked':
         if (!a.last_checked) return 1;
         if (!b.last_checked) return -1;
