@@ -159,10 +159,10 @@ export async function addVersionHistory(softwareId: string, data: {
         .eq('id', softwareId)
         .single();
 
-      // Insert new version - use provided date or current date if null
+      // Insert new version - use provided date or null if not available
       const releaseDate = (data.release_date && data.release_date !== 'null')
         ? data.release_date
-        : new Date().toISOString();
+        : null;
 
       const now = new Date().toISOString();
       const { error } = await supabase
