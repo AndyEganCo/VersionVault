@@ -94,33 +94,42 @@ serve(async (req) => {
     }
 
     console.log('✅ Authorization successful')
-    console.log('📬 Starting weekly digest queue generation...')
 
     // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get frequency from request body or default to weekly
+    // Get frequency from query parameter or request body, default to weekly
     let frequency = 'weekly'
-    try {
-      const body = await req.json()
-      if (body.frequency) frequency = body.frequency
-    } catch {
-      // No body, use default
+
+    // First try query parameter (more reliable)
+    const url = new URL(req.url)
+    const queryFrequency = url.searchParams.get('frequency')
+    if (queryFrequency) {
+      frequency = queryFrequency
+      console.log(`✅ Frequency from query param: ${frequency}`)
+    } else {
+      // Fallback to request body
+      try {
+        const body = await req.json()
+        if (body && body.frequency) {
+          frequency = body.frequency
+          console.log(`✅ Frequency from request body: ${frequency}`)
+        }
+      } catch (error) {
+        console.log('No frequency specified, using default: weekly')
+        // No body or invalid JSON, use default weekly
+      }
     }
+
+    console.log(`📬 Starting ${frequency} digest queue generation...`)
 
     // Calculate days to look back based on frequency
     const sinceDays = frequency === 'daily' ? 1 : frequency === 'monthly' ? 30 : 7
 
     // Get users who want this frequency of emails
-    const { data: subscribers, error: subError } = await supabase
+    const { data: userSettings, error: subError } = await supabase
       .from('user_settings')
-      .select(`
-        user_id,
-        timezone,
-        users:user_id (
-          email
-        )
-      `)
+      .select('user_id, timezone')
       .eq('email_notifications', true)
       .eq('notification_frequency', frequency)
 
@@ -128,7 +137,43 @@ serve(async (req) => {
       throw new Error(`Failed to fetch subscribers: ${subError.message}`)
     }
 
-    console.log(`📋 Found ${subscribers?.length || 0} subscribers for ${frequency} digest`)
+    if (!userSettings || userSettings.length === 0) {
+      console.log(`📋 No subscribers found for ${frequency} digest`)
+      return new Response(
+        JSON.stringify({
+          totalUsers: 0,
+          queued: 0,
+          withUpdates: 0,
+          allQuiet: 0,
+          skipped: 0,
+          errors: []
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Get user emails from auth.users
+    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers()
+
+    if (authError) {
+      throw new Error(`Failed to fetch user emails: ${authError.message}`)
+    }
+
+    // Create a map of user_id -> email
+    const userEmailMap = new Map(
+      authUsers.users.map(u => [u.id, u.email])
+    )
+
+    // Combine user settings with emails
+    const subscribers = userSettings
+      .map(settings => ({
+        user_id: settings.user_id,
+        timezone: settings.timezone,
+        email: userEmailMap.get(settings.user_id)
+      }))
+      .filter(sub => sub.email) // Only keep users with valid emails
+
+    console.log(`📋 Found ${subscribers.length} subscribers for ${frequency} digest`)
 
     const results: QueueResult[] = []
     const errors: QueueResult[] = []
@@ -153,8 +198,8 @@ serve(async (req) => {
     } : null
 
     // Process each subscriber
-    for (const sub of (subscribers || [])) {
-      const userEmail = (sub.users as { email: string } | null)?.email
+    for (const sub of subscribers) {
+      const userEmail = sub.email
       if (!userEmail) {
         skipped++
         continue
@@ -176,29 +221,37 @@ serve(async (req) => {
         }
 
         // Get user's tracked software
-        const { data: trackedSoftware } = await supabase
+        const { data: trackedSoftwareRaw } = await supabase
           .from('tracked_software')
-          .select(`
-            software_id,
-            last_notified_version,
-            software:software_id (
-              id,
-              name,
-              manufacturer,
-              category,
-              current_version
-            )
-          `)
+          .select('software_id, last_notified_version')
           .eq('user_id', sub.user_id)
 
-        if (!trackedSoftware || trackedSoftware.length === 0) {
+        if (!trackedSoftwareRaw || trackedSoftwareRaw.length === 0) {
           console.log(`⏭️  Skipping ${userEmail} - no tracked software`)
           skipped++
           continue
         }
 
+        // Get software details separately
+        const softwareIds = trackedSoftwareRaw.map(t => t.software_id)
+        const { data: softwareDetails } = await supabase
+          .from('software')
+          .select('id, name, manufacturer, category, current_version')
+          .in('id', softwareIds)
+
+        // Map software details
+        const softwareMap = new Map(
+          (softwareDetails || []).map(s => [s.id, s])
+        )
+
+        // Combine tracked software with details
+        const trackedSoftware = trackedSoftwareRaw.map(tracked => ({
+          software_id: tracked.software_id,
+          last_notified_version: tracked.last_notified_version,
+          software: softwareMap.get(tracked.software_id)
+        }))
+
         // Get version history for tracked software
-        const softwareIds = trackedSoftware.map(t => t.software_id)
         const sinceDate = new Date()
         sinceDate.setDate(sinceDate.getDate() - sinceDays)
 
@@ -206,45 +259,43 @@ serve(async (req) => {
           .from('software_version_history')
           .select('software_id, version, release_date, detected_at, notes, type')
           .in('software_id', softwareIds)
-          .gte('detected_at', sinceDate.toISOString())
+          .or(`release_date.gte.${sinceDate.toISOString()},and(release_date.is.null,detected_at.gte.${sinceDate.toISOString()})`)
+          .order('release_date', { ascending: false, nullsLast: true })
           .order('detected_at', { ascending: false })
 
-        // Build updates list
+        // Build updates list - only show the LATEST version per software
         const updates: any[] = []
         const processedSoftware = new Set<string>()
 
         for (const history of (versionHistory || [])) {
-          if (processedSoftware.has(history.software_id)) continue
+          // Skip if we already processed this software (we only want the latest version)
+          if (processedSoftware.has(history.software_id)) {
+            continue
+          }
 
           const tracked = trackedSoftware.find(t => t.software_id === history.software_id)
           if (!tracked?.software) continue
 
           const software = tracked.software as any
-          const lastNotified = tracked.last_notified_version
-
-          // Skip if this isn't newer than what we last notified about
-          if (lastNotified && !isNewerVersion(history.version, lastNotified)) {
-            continue
-          }
 
           updates.push({
             software_id: history.software_id,
             name: software.name,
             manufacturer: software.manufacturer,
             category: software.category,
-            old_version: lastNotified || '?.?.?',
+            old_version: tracked.last_notified_version || '?.?.?',
             new_version: history.version,
             release_date: history.release_date || history.detected_at,
             release_notes: history.notes || [],
             update_type: history.type || 'patch',
           })
 
+          // Mark this software as processed
           processedSoftware.add(history.software_id)
         }
 
-        // Limit updates
-        const limitedUpdates = updates.slice(0, MAX_UPDATES_PER_EMAIL)
-        const hasUpdates = limitedUpdates.length > 0
+        // Show all updates (no limit)
+        const hasUpdates = updates.length > 0
 
         // Generate idempotency key
         const today = new Date().toISOString().split('T')[0]
@@ -256,10 +307,11 @@ serve(async (req) => {
         // Determine email type and payload
         const emailType = hasUpdates ? `${frequency}_digest` : 'all_quiet'
         const payload = {
-          updates: limitedUpdates,
+          updates: updates,
           sponsor: sponsorData,
           all_quiet_message: hasUpdates ? undefined : ALL_QUIET_MESSAGES[Math.floor(Math.random() * ALL_QUIET_MESSAGES.length)],
           tracked_count: trackedSoftware.length,
+          frequency: frequency, // Include frequency for all_quiet emails
         }
 
         // Insert into queue
@@ -294,10 +346,10 @@ serve(async (req) => {
           email: userEmail,
           success: true,
           hasUpdates,
-          updateCount: limitedUpdates.length,
+          updateCount: updates.length,
         })
 
-        console.log(`✅ Queued for ${userEmail}: ${limitedUpdates.length} updates`)
+        console.log(`✅ Queued for ${userEmail}: ${updates.length} updates`)
 
       } catch (error) {
         const result: QueueResult = {

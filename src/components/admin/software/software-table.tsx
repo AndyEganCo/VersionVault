@@ -272,7 +272,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                   {software.current_version ? breakPhonePattern(software.current_version) : 'N/A'}
                 </TableCell>
                 <TableCell>
-                  {software.release_date ? formatDate(software.release_date) : 'N/A'}
+                  {formatDate(software.release_date || software.last_checked || software.created_at)}
                 </TableCell>
                 <TableCell className="space-x-2">
                   <span>{software.last_checked ? formatDate(software.last_checked) : 'Never'}</span>

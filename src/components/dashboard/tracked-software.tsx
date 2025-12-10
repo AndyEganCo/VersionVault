@@ -107,9 +107,9 @@ export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftware
                 </div>
               )}
 
-              {softwareItem.release_date && (
+              {(softwareItem.release_date || softwareItem.last_checked) && (
                 <div className="text-xs text-muted-foreground">
-                  {formatDate(softwareItem.release_date)}
+                  {formatDate(softwareItem.release_date || softwareItem.last_checked)}
                 </div>
               )}
             </CardContent>

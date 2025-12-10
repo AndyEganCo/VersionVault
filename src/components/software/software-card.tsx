@@ -61,9 +61,9 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
             </div>
 
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Released</span>
+              <span className="text-muted-foreground">{software.release_date ? 'Released' : 'Added'}</span>
               <span>
-                {software.release_date ? formatDate(software.release_date) : 'N/A'}
+                {formatDate(software.release_date || software.last_checked || software.created_at)}
               </span>
             </div>
           </div>

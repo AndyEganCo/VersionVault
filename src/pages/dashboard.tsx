@@ -12,8 +12,9 @@ export function Dashboard() {
   const trackedCount = trackedIds.size;
 
   const thisWeeksUpdates = updates.filter(s => {
-    if (!s.release_date) return false;
-    const date = new Date(s.release_date);
+    const dateStr = s.release_date || s.last_checked;
+    if (!dateStr) return false;
+    const date = new Date(dateStr);
     const now = new Date();
     return (now.getTime() - date.getTime()) <= 7 * 24 * 60 * 60 * 1000;
   }).length;

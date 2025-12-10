@@ -73,6 +73,10 @@ export function SoftwareDetailModal({
 
   const selectedNotes = versionHistory.find(v => v.version === selectedVersion);
 
+  // Get the current version's release info for the top-level "Released" field
+  const currentVersionInfo = versionHistory.find(v => v.version === software.current_version);
+  const currentVersionDate = currentVersionInfo?.release_date || currentVersionInfo?.detected_at;
+
   const handleTrackingChange = async (checked: boolean) => {
     if (!user) {
       toast.error('Please sign in to track software');
@@ -128,10 +132,10 @@ export function SoftwareDetailModal({
                   </div>
                 )}
 
-                {software.release_date && (
+                {currentVersionDate && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Released</span>
-                    <span>{formatDate(software.release_date)}</span>
+                    <span>{formatDate(currentVersionDate)}</span>
                   </div>
                 )}
               </div>
@@ -208,9 +212,11 @@ export function SoftwareDetailModal({
                         {selectedNotes.type}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      {formatDate(selectedNotes.release_date)}
-                    </p>
+                    {(selectedNotes.release_date || selectedNotes.detected_at) && (
+                      <p className="text-sm text-muted-foreground">
+                        {formatDate(selectedNotes.release_date || selectedNotes.detected_at)}
+                      </p>
+                    )}
                     <ul className="list-disc list-inside space-y-1">
                       {Array.isArray(selectedNotes.notes) ?
                         selectedNotes.notes.map((item, i) => (

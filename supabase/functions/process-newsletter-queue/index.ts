@@ -105,23 +105,30 @@ serve(async (req) => {
     const now = new Date()
     const targetHour = 8 // 8am
 
-    // Get pending queue items that are scheduled for now or earlier
-    const { data: queueItems, error: fetchError } = await supabase
+    // Get pending queue items
+    // If force=true, get all pending items regardless of scheduled time
+    let query = supabase
       .from('newsletter_queue')
       .select('*')
       .eq('status', 'pending')
-      .lte('scheduled_for', now.toISOString())
       .lt('attempts', MAX_RETRY_ATTEMPTS)
       .order('scheduled_for', { ascending: true })
       .limit(BATCH_SIZE)
+
+    // Only filter by scheduled_for if not forcing
+    if (!forceProcess) {
+      query = query.lte('scheduled_for', now.toISOString())
+    }
+
+    const { data: queueItems, error: fetchError } = await query
 
     if (fetchError) {
       throw new Error(`Failed to fetch queue: ${fetchError.message}`)
     }
 
     // Filter to only users where it's currently target hour in their timezone
-    // Skip timezone filter if admin manually triggered with force=true
-    const shouldBypassTimezone = isAdminRequest && forceProcess
+    // Skip timezone filter if manually triggered with force=true
+    const shouldBypassTimezone = forceProcess
 
     const itemsToProcess = shouldBypassTimezone
       ? (queueItems || [])
@@ -141,7 +148,7 @@ serve(async (req) => {
         })
 
     if (shouldBypassTimezone) {
-      console.log('⚡ Admin force-processing: bypassing timezone filter')
+      console.log('⚡ Force-processing: bypassing timezone filter')
     }
 
     console.log(`📋 Found ${itemsToProcess.length} items to process (${queueItems?.length || 0} total pending)`)
@@ -287,6 +294,23 @@ function generateEmailContent(item: any): { subject: string; html: string; text:
   const allQuietMessage = item.payload.all_quiet_message
   const trackedCount = item.payload.tracked_count || 0
 
+  // Extract frequency from email_type or payload
+  let frequency: string
+  let digestLabel: string
+
+  if (item.email_type === 'all_quiet') {
+    // For all_quiet emails, get frequency from payload
+    frequency = item.payload.frequency || 'weekly'
+    digestLabel = 'All Quiet Digest'
+  } else {
+    // For digest emails, extract from email_type (e.g., "weekly_digest" -> "weekly")
+    frequency = item.email_type.replace('_digest', '').toLowerCase()
+    digestLabel = frequency.charAt(0).toUpperCase() + frequency.slice(1) + ' Digest'
+  }
+
+  // Determine time period for messaging
+  const timePeriod = frequency === 'daily' ? 'today' : frequency === 'monthly' ? 'this month' : 'this week'
+
   // Generate subject
   let subject: string
   if (item.email_type === 'all_quiet') {
@@ -309,6 +333,8 @@ function generateEmailContent(item: any): { subject: string; html: string; text:
     allQuietMessage,
     trackedCount,
     userId: item.user_id,
+    digestLabel,
+    timePeriod,
   })
 
   // Generate plain text
@@ -318,6 +344,8 @@ function generateEmailContent(item: any): { subject: string; html: string; text:
     hasUpdates,
     allQuietMessage,
     trackedCount,
+    digestLabel,
+    timePeriod,
   })
 
   return { subject, html, text }
@@ -325,7 +353,7 @@ function generateEmailContent(item: any): { subject: string; html: string; text:
 
 // Generate HTML email content
 function generateHtmlEmail(data: any): string {
-  const { userName, updates, hasUpdates, sponsor, allQuietMessage, trackedCount, userId } = data
+  const { userName, updates, hasUpdates, sponsor, allQuietMessage, trackedCount, userId, digestLabel, timePeriod } = data
 
   const updateCards = updates.map((u: any) => `
     <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
@@ -380,7 +408,7 @@ function generateHtmlEmail(data: any): string {
         </div>
       </a>
       <div style="font-size: 14px; color: #a3a3a3; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;">
-        ${hasUpdates ? 'Weekly Digest' : 'Weekly Digest'}
+        ${digestLabel}
       </div>
     </div>
 
@@ -389,11 +417,11 @@ function generateHtmlEmail(data: any): string {
       <div style="font-size: 16px; color: #ffffff; margin-bottom: 12px;">Hey ${userName},</div>
       ${hasUpdates ? `
         <div style="font-size: 14px; color: #a3a3a3; line-height: 1.6;">
-          Here's what changed in the <strong>${updates.length}</strong> app${updates.length === 1 ? '' : 's'} you're tracking this week:
+          Here's what changed in the <strong>${updates.length}</strong> app${updates.length === 1 ? '' : 's'} you're tracking ${timePeriod}:
         </div>
       ` : `
         <div style="font-size: 14px; color: #a3a3a3; line-height: 1.6;">
-          No updates this week for the software you're tracking. We'll keep watching!
+          No updates ${timePeriod} for the software you're tracking. We'll keep watching!
         </div>
       `}
     </div>
@@ -440,13 +468,13 @@ function generateHtmlEmail(data: any): string {
 
 // Generate plain text email content
 function generateTextEmail(data: any): string {
-  const { userName, updates, hasUpdates, allQuietMessage, trackedCount } = data
+  const { userName, updates, hasUpdates, allQuietMessage, trackedCount, digestLabel, timePeriod } = data
 
-  let text = `>_ VersionVault - Weekly Digest\n\n`
+  let text = `>_ VersionVault - ${digestLabel}\n\n`
   text += `Hey ${userName},\n\n`
 
   if (hasUpdates) {
-    text += `Here's what changed in the ${updates.length} app${updates.length === 1 ? '' : 's'} you're tracking this week:\n\n`
+    text += `Here's what changed in the ${updates.length} app${updates.length === 1 ? '' : 's'} you're tracking ${timePeriod}:\n\n`
 
     for (const u of updates) {
       text += `${u.name} (${u.update_type.toUpperCase()})\n`

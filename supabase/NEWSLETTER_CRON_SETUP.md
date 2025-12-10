@@ -2,106 +2,196 @@
 
 This document describes how to configure cron jobs for the VersionVault newsletter system.
 
-## Required Cron Jobs
+## Automated Setup (Recommended)
+
+The newsletter cron jobs are now **automatically created** by database migrations. You only need to configure your Supabase URL and service role key.
+
+### Quick Setup Steps
+
+1. **Run the migrations** (if not already done):
+   ```bash
+   supabase db push
+   ```
+
+2. **Configure your Supabase URL and Service Role Key**:
+
+   Option A - **Using SQL Editor** (Supabase Dashboard):
+   ```sql
+   -- Update Supabase URL
+   UPDATE app_settings
+   SET value = 'https://your-project-ref.supabase.co'
+   WHERE key = 'supabase_url';
+
+   -- Store service role key in Vault (RECOMMENDED - most secure)
+   SELECT vault.create_secret(
+     'eyJhbGc...your-service-role-key',
+     'service_role_key',
+     'Service role key for cron job authentication'
+   );
+
+   -- OR store in app_settings (LESS SECURE)
+   INSERT INTO app_settings (key, value, description)
+   VALUES (
+     'service_role_key',
+     'eyJhbGc...your-service-role-key',
+     'Service role key for edge function authentication'
+   )
+   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+   ```
+
+   Option B - **Edit migration file** `20241210000002_update_app_settings_values.sql`:
+   - Replace the placeholder values
+   - Run: `supabase db push`
+
+3. **Verify the cron jobs were created**:
+   ```sql
+   -- Check all scheduled jobs
+   SELECT jobid, jobname, schedule, command
+   FROM cron.job
+   WHERE jobname LIKE '%newsletter%' OR jobname LIKE '%digest%';
+
+   -- Check recent job runs
+   SELECT jobid, job_name, status, return_message, start_time
+   FROM cron.job_run_details
+   ORDER BY start_time DESC
+   LIMIT 20;
+   ```
+
+### What Gets Created Automatically
+
+The migrations create these 5 cron jobs:
+
+1. **queue-weekly-digest** - Runs Sunday at 11 PM UTC
+2. **queue-daily-digest** - Runs every day at 11 PM UTC
+3. **queue-monthly-digest** - Runs 1st of month at 11 PM UTC
+4. **process-newsletter-queue** - Runs every hour
+5. **cleanup-newsletter-queue** - Runs Sunday at 4 AM UTC
+
+## Manual Cron Job Setup (Legacy)
+
+> ⚠️ **Not Recommended**: The manual setup below is kept for reference only. Use the automated migration-based setup above instead.
+
+<details>
+<summary>Click to expand manual setup instructions</summary>
 
 ### 1. Queue Weekly Digest (Sunday Night)
 
-Runs on Sunday at 11:00 PM UTC to prepare Monday's digest emails.
-
-**Supabase Dashboard → Database → Extensions → pg_cron**
-
 ```sql
--- Enable pg_cron if not already enabled
-CREATE EXTENSION IF NOT EXISTS pg_cron;
-
--- Queue weekly digest every Sunday at 11:00 PM UTC
 SELECT cron.schedule(
   'queue-weekly-digest',
-  '0 23 * * 0',  -- Sunday at 11:00 PM UTC
+  '0 23 * * 0',
   $$
-  SELECT net.http_post(
-    url := current_setting('app.settings.supabase_url') || '/functions/v1/queue-weekly-digest',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
-    ),
-    body := jsonb_build_object('frequency', 'weekly')
-  );
+  DO $$
+  DECLARE
+    supabase_url TEXT;
+    service_key TEXT;
+  BEGIN
+    supabase_url := get_app_setting('supabase_url');
+    service_key := get_service_role_key();
+
+    PERFORM net.http_post(
+      url := supabase_url || '/functions/v1/queue-weekly-digest',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || service_key
+      ),
+      body := jsonb_build_object('frequency', 'weekly')
+    );
+  END $$;
   $$
 );
 ```
 
-### 2. Queue Daily Digest (Every Night)
-
-Runs every night at 11:00 PM UTC to prepare daily digest emails.
+### 2. Queue Daily Digest
 
 ```sql
 SELECT cron.schedule(
   'queue-daily-digest',
-  '0 23 * * *',  -- Every day at 11:00 PM UTC
+  '0 23 * * *',
   $$
-  SELECT net.http_post(
-    url := current_setting('app.settings.supabase_url') || '/functions/v1/queue-weekly-digest',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
-    ),
-    body := jsonb_build_object('frequency', 'daily')
-  );
+  DO $$
+  DECLARE
+    supabase_url TEXT;
+    service_key TEXT;
+  BEGIN
+    supabase_url := get_app_setting('supabase_url');
+    service_key := get_service_role_key();
+
+    PERFORM net.http_post(
+      url := supabase_url || '/functions/v1/queue-weekly-digest',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || service_key
+      ),
+      body := jsonb_build_object('frequency', 'daily')
+    );
+  END $$;
   $$
 );
 ```
 
-### 3. Queue Monthly Digest (1st of Month)
-
-Runs on the 1st of each month at 11:00 PM UTC.
+### 3. Queue Monthly Digest
 
 ```sql
 SELECT cron.schedule(
   'queue-monthly-digest',
-  '0 23 1 * *',  -- 1st of month at 11:00 PM UTC
+  '0 23 1 * *',
   $$
-  SELECT net.http_post(
-    url := current_setting('app.settings.supabase_url') || '/functions/v1/queue-weekly-digest',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
-    ),
-    body := jsonb_build_object('frequency', 'monthly')
-  );
+  DO $$
+  DECLARE
+    supabase_url TEXT;
+    service_key TEXT;
+  BEGIN
+    supabase_url := get_app_setting('supabase_url');
+    service_key := get_service_role_key();
+
+    PERFORM net.http_post(
+      url := supabase_url || '/functions/v1/queue-weekly-digest',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || service_key
+      ),
+      body := jsonb_build_object('frequency', 'monthly')
+    );
+  END $$;
   $$
 );
 ```
 
-### 4. Process Newsletter Queue (Every Hour)
-
-Runs every hour to send emails to users where it's currently 8 AM in their timezone.
+### 4. Process Newsletter Queue
 
 ```sql
 SELECT cron.schedule(
   'process-newsletter-queue',
-  '0 * * * *',  -- Every hour at :00
+  '0 * * * *',
   $$
-  SELECT net.http_post(
-    url := current_setting('app.settings.supabase_url') || '/functions/v1/process-newsletter-queue',
-    headers := jsonb_build_object(
-      'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key')
-    ),
-    body := '{}'::jsonb
-  );
+  DO $$
+  DECLARE
+    supabase_url TEXT;
+    service_key TEXT;
+  BEGIN
+    supabase_url := get_app_setting('supabase_url');
+    service_key := get_service_role_key();
+
+    PERFORM net.http_post(
+      url := supabase_url || '/functions/v1/process-newsletter-queue',
+      headers := jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || service_key
+      ),
+      body := '{}'::jsonb
+    );
+  END $$;
   $$
 );
 ```
 
-### 5. Queue Cleanup (Weekly)
-
-Cleans up old sent/failed queue items to keep the table performant.
+### 5. Queue Cleanup
 
 ```sql
 SELECT cron.schedule(
   'cleanup-newsletter-queue',
-  '0 4 * * 0',  -- Sunday at 4:00 AM UTC
+  '0 4 * * 0',
   $$
   DELETE FROM newsletter_queue
   WHERE status IN ('sent', 'failed', 'cancelled')
@@ -109,6 +199,8 @@ SELECT cron.schedule(
   $$
 );
 ```
+
+</details>
 
 ## Alternative: External Cron Service
 

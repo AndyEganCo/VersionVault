@@ -59,11 +59,11 @@ export function UpdateList({ updates, loading, refreshTracking, trackedIds }: Up
                 </p>
               </div>
               <div className="ml-auto text-sm text-muted-foreground">
-                {software.release_date ? (
-                  <span title="Release Date">Released {formatDate(software.release_date)}</span>
-                ) : software.last_checked ? (
-                  <span title="Last Checked">Updated {formatDate(software.last_checked)}</span>
-                ) : null}
+                {(software.release_date || software.last_checked) && (
+                  <span title={software.release_date ? "Release Date" : "Last Checked"}>
+                    {software.release_date ? "Released" : "Updated"} {formatDate(software.release_date || software.last_checked)}
+                  </span>
+                )}
               </div>
             </div>
           ))}
