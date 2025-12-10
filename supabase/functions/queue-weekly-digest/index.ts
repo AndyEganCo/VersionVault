@@ -104,9 +104,13 @@ serve(async (req) => {
       // First read as text to see what we're getting
       const text = await req.text()
       console.log('📦 Request body (raw text):', text)
+      console.log('📦 Text length:', text.length)
+      console.log('📦 Text char codes:', Array.from(text).map(c => c.charCodeAt(0)).join(','))
 
-      if (text) {
-        const body = JSON.parse(text)
+      if (text && text.trim()) {
+        const trimmed = text.trim()
+        console.log('📦 Trimmed text:', trimmed)
+        const body = JSON.parse(trimmed)
         console.log('📦 Parsed body:', JSON.stringify(body))
         if (body.frequency) {
           frequency = body.frequency
@@ -119,6 +123,7 @@ serve(async (req) => {
       }
     } catch (error) {
       console.log('❌ Error parsing request body:', error.message)
+      console.log('❌ Error stack:', error.stack)
       // No body, use default
     }
 
