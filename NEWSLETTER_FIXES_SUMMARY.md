@@ -2,35 +2,44 @@
 
 ## ✅ Completed Changes
 
-### 1. Fixed Edge Function PostgREST Syntax Error
+### 1. Fixed Dynamic Frequency Parameter in Queue Function
+**File:** `supabase/functions/queue-weekly-digest/index.ts`
+
+**Problem:** When calling with `{"frequency": "daily"}`, the function was still querying for weekly users. The issue was that `req.json()` was failing due to invisible characters in the request body.
+
+**Solution:** Changed from `req.json()` to `req.text()` + `text.trim()` + `JSON.parse()`:
+```typescript
+// Before (failing):
+const body = await req.json()
+
+// After (working):
+const text = await req.text()
+if (text && text.trim()) {
+  const body = JSON.parse(text.trim())
+  if (body.frequency) {
+    frequency = body.frequency
+  }
+}
+```
+
+**Result:** Function now correctly uses the frequency parameter from the request body (daily/weekly/monthly).
+
+**Commits:** `e2acb7f`, `3f0077e`, `6f23036`, `af648ac`, `b86e2ea`
+
+---
+
+### 2. Fixed Edge Function PostgREST Syntax Error
 **File:** `supabase/functions/queue-weekly-digest/index.ts`
 
 **Problem:** PostgREST was throwing relationship errors when trying to use `.tracked_software()` method.
 
-**Solution:** Changed from relationship syntax to direct querying with manual joins:
-```typescript
-// Before (causing errors):
-const { data: users } = await supabase
-  .from('user_profiles')
-  .select('*, tracked_software(*)')
-
-// After (working):
-const { data: users } = await supabase
-  .from('user_profiles')
-  .select('*')
-
-// Then manually fetch tracked software for each user
-const { data: tracked } = await supabase
-  .from('tracked_software')
-  .select('*, software(*)')
-  .eq('user_id', user.id)
-```
+**Solution:** Changed from relationship syntax to direct querying with manual joins.
 
 **Commit:** `2ede256`
 
 ---
 
-### 2. Fixed Release Date Handling in API
+### 3. Fixed Release Date Handling in API
 **File:** `src/lib/software/api.ts:163-165`
 
 **Problem:** When inserting new versions without a `release_date`, the code was setting it to the current timestamp (`new Date().toISOString()`) instead of leaving it as `null`. This caused the "verified at" date to override the proper fallback chain.
