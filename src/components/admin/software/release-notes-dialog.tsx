@@ -239,18 +239,21 @@ export function ReleaseNotesDialog({
         const history = await getVersionHistory(software.id);
         setVersionHistory(history);
 
-        // If we deleted the current version, select the next available version
-        // Otherwise, reset to current version
-        if (selectedVersion === 'current') {
-          // Find the next available version (first one in remaining history)
-          if (history.length > 0) {
-            setSelectedVersion(history[0].version);
-          } else {
-            setSelectedVersion('new');
+        // Always navigate to the next available version after deletion
+        if (history.length > 0) {
+          // Find the index of the deleted version to determine next version
+          const deletedIndex = versionHistory.findIndex(v => v.version === versionToDelete);
+
+          // Navigate to the next version down (same index in new history, or previous if at end)
+          if (deletedIndex >= 0 && deletedIndex < history.length) {
+            setSelectedVersion(history[deletedIndex].version);
+          } else if (history.length > 0) {
+            // If deleted version was last, go to the new last version
+            setSelectedVersion(history[history.length - 1].version);
           }
         } else {
-          // If we deleted a past version, stay on current
-          setSelectedVersion('current');
+          // No versions left, show new version form
+          setSelectedVersion('new');
         }
 
         await onSuccess();
@@ -445,9 +448,12 @@ export function ReleaseNotesDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="current">
-                        {breakPhonePattern(software.current_version || 'Current Version')} (Current)
-                      </SelectItem>
+                      {/* Only show "current" option if current version exists in history */}
+                      {versionHistory.some(v => v.version === software.current_version) && (
+                        <SelectItem value="current">
+                          {breakPhonePattern(software.current_version || 'Current Version')} (Current)
+                        </SelectItem>
+                      )}
                       {versionHistory
                         .filter(v => v.version !== software.current_version)
                         // Remove duplicates by version number (keep first occurrence)
