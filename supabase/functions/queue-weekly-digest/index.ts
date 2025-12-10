@@ -298,6 +298,7 @@ serve(async (req) => {
           sponsor: sponsorData,
           all_quiet_message: hasUpdates ? undefined : ALL_QUIET_MESSAGES[Math.floor(Math.random() * ALL_QUIET_MESSAGES.length)],
           tracked_count: trackedSoftware.length,
+          frequency: frequency, // Include frequency for all_quiet emails
         }
 
         // Insert into queue

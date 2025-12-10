@@ -287,9 +287,19 @@ function generateEmailContent(item: any): { subject: string; html: string; text:
   const allQuietMessage = item.payload.all_quiet_message
   const trackedCount = item.payload.tracked_count || 0
 
-  // Extract frequency from email_type (e.g., "weekly_digest" -> "weekly")
-  const frequency = item.email_type.replace('_digest', '').toLowerCase()
-  const digestLabel = frequency.charAt(0).toUpperCase() + frequency.slice(1) + ' Digest'
+  // Extract frequency from email_type or payload
+  let frequency: string
+  let digestLabel: string
+
+  if (item.email_type === 'all_quiet') {
+    // For all_quiet emails, get frequency from payload
+    frequency = item.payload.frequency || 'weekly'
+    digestLabel = 'All Quiet Digest'
+  } else {
+    // For digest emails, extract from email_type (e.g., "weekly_digest" -> "weekly")
+    frequency = item.email_type.replace('_digest', '').toLowerCase()
+    digestLabel = frequency.charAt(0).toUpperCase() + frequency.slice(1) + ' Digest'
+  }
 
   // Determine time period for messaging
   const timePeriod = frequency === 'daily' ? 'today' : frequency === 'monthly' ? 'this month' : 'this week'
