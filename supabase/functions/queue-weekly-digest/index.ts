@@ -247,42 +247,30 @@ serve(async (req) => {
           .gte('detected_at', sinceDate.toISOString())
           .order('detected_at', { ascending: false })
 
-        // Build updates list
+        // Build updates list - show ALL updates within the time period
         const updates: any[] = []
-        const processedSoftware = new Set<string>()
 
         for (const history of (versionHistory || [])) {
-          if (processedSoftware.has(history.software_id)) continue
-
           const tracked = trackedSoftware.find(t => t.software_id === history.software_id)
           if (!tracked?.software) continue
 
           const software = tracked.software as any
-          const lastNotified = tracked.last_notified_version
-
-          // Skip if this isn't newer than what we last notified about
-          if (lastNotified && !isNewerVersion(history.version, lastNotified)) {
-            continue
-          }
 
           updates.push({
             software_id: history.software_id,
             name: software.name,
             manufacturer: software.manufacturer,
             category: software.category,
-            old_version: lastNotified || '?.?.?',
+            old_version: tracked.last_notified_version || '?.?.?',
             new_version: history.version,
             release_date: history.release_date || history.detected_at,
             release_notes: history.notes || [],
             update_type: history.type || 'patch',
           })
-
-          processedSoftware.add(history.software_id)
         }
 
-        // Limit updates
-        const limitedUpdates = updates.slice(0, MAX_UPDATES_PER_EMAIL)
-        const hasUpdates = limitedUpdates.length > 0
+        // Show all updates (no limit)
+        const hasUpdates = updates.length > 0
 
         // Generate idempotency key
         const today = new Date().toISOString().split('T')[0]
@@ -294,7 +282,7 @@ serve(async (req) => {
         // Determine email type and payload
         const emailType = hasUpdates ? `${frequency}_digest` : 'all_quiet'
         const payload = {
-          updates: limitedUpdates,
+          updates: updates,
           sponsor: sponsorData,
           all_quiet_message: hasUpdates ? undefined : ALL_QUIET_MESSAGES[Math.floor(Math.random() * ALL_QUIET_MESSAGES.length)],
           tracked_count: trackedSoftware.length,
@@ -333,10 +321,10 @@ serve(async (req) => {
           email: userEmail,
           success: true,
           hasUpdates,
-          updateCount: limitedUpdates.length,
+          updateCount: updates.length,
         })
 
-        console.log(`✅ Queued for ${userEmail}: ${limitedUpdates.length} updates`)
+        console.log(`✅ Queued for ${userEmail}: ${updates.length} updates`)
 
       } catch (error) {
         const result: QueueResult = {
