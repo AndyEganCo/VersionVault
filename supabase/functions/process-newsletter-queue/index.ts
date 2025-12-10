@@ -105,15 +105,22 @@ serve(async (req) => {
     const now = new Date()
     const targetHour = 8 // 8am
 
-    // Get pending queue items that are scheduled for now or earlier
-    const { data: queueItems, error: fetchError } = await supabase
+    // Get pending queue items
+    // If force=true, get all pending items regardless of scheduled time
+    let query = supabase
       .from('newsletter_queue')
       .select('*')
       .eq('status', 'pending')
-      .lte('scheduled_for', now.toISOString())
       .lt('attempts', MAX_RETRY_ATTEMPTS)
       .order('scheduled_for', { ascending: true })
       .limit(BATCH_SIZE)
+
+    // Only filter by scheduled_for if not forcing
+    if (!forceProcess) {
+      query = query.lte('scheduled_for', now.toISOString())
+    }
+
+    const { data: queueItems, error: fetchError } = await query
 
     if (fetchError) {
       throw new Error(`Failed to fetch queue: ${fetchError.message}`)
