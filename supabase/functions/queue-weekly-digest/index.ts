@@ -112,15 +112,9 @@ serve(async (req) => {
     const sinceDays = frequency === 'daily' ? 1 : frequency === 'monthly' ? 30 : 7
 
     // Get users who want this frequency of emails
-    const { data: subscribers, error: subError } = await supabase
+    const { data: userSettings, error: subError } = await supabase
       .from('user_settings')
-      .select(`
-        user_id,
-        timezone,
-        users:user_id (
-          email
-        )
-      `)
+      .select('user_id, timezone')
       .eq('email_notifications', true)
       .eq('notification_frequency', frequency)
 
@@ -128,7 +122,43 @@ serve(async (req) => {
       throw new Error(`Failed to fetch subscribers: ${subError.message}`)
     }
 
-    console.log(`📋 Found ${subscribers?.length || 0} subscribers for ${frequency} digest`)
+    if (!userSettings || userSettings.length === 0) {
+      console.log(`📋 No subscribers found for ${frequency} digest`)
+      return new Response(
+        JSON.stringify({
+          totalUsers: 0,
+          queued: 0,
+          withUpdates: 0,
+          allQuiet: 0,
+          skipped: 0,
+          errors: []
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Get user emails from auth.users
+    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers()
+
+    if (authError) {
+      throw new Error(`Failed to fetch user emails: ${authError.message}`)
+    }
+
+    // Create a map of user_id -> email
+    const userEmailMap = new Map(
+      authUsers.users.map(u => [u.id, u.email])
+    )
+
+    // Combine user settings with emails
+    const subscribers = userSettings
+      .map(settings => ({
+        user_id: settings.user_id,
+        timezone: settings.timezone,
+        email: userEmailMap.get(settings.user_id)
+      }))
+      .filter(sub => sub.email) // Only keep users with valid emails
+
+    console.log(`📋 Found ${subscribers.length} subscribers for ${frequency} digest`)
 
     const results: QueueResult[] = []
     const errors: QueueResult[] = []
@@ -153,8 +183,8 @@ serve(async (req) => {
     } : null
 
     // Process each subscriber
-    for (const sub of (subscribers || [])) {
-      const userEmail = (sub.users as { email: string } | null)?.email
+    for (const sub of subscribers) {
+      const userEmail = sub.email
       if (!userEmail) {
         skipped++
         continue
