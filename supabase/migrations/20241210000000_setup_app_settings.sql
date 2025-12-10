@@ -41,33 +41,41 @@ VALUES (
 )
 ON CONFLICT (key) DO NOTHING;
 
--- Create helper function to get service role key from vault
--- Note: The service role key should be stored in Supabase Vault with id 'service_role_key'
-CREATE OR REPLACE FUNCTION get_service_role_key()
+-- Insert placeholder for CRON_SECRET (to be updated with actual value)
+INSERT INTO app_settings (key, value, description)
+VALUES (
+  'cron_secret',
+  'your-cron-secret-here',
+  'Bearer token for authenticating cron job requests to edge functions'
+)
+ON CONFLICT (key) DO NOTHING;
+
+-- Create helper function to get cron secret
+CREATE OR REPLACE FUNCTION get_cron_secret()
 RETURNS TEXT AS $$
 DECLARE
-  key_value TEXT;
+  secret_value TEXT;
 BEGIN
   -- Try to get from vault first (Supabase Vault integration)
   BEGIN
-    SELECT decrypted_secret INTO key_value
+    SELECT decrypted_secret INTO secret_value
     FROM vault.decrypted_secrets
-    WHERE name = 'service_role_key'
+    WHERE name = 'cron_secret'
     LIMIT 1;
   EXCEPTION WHEN OTHERS THEN
     -- Fallback to app_settings if vault is not available
-    SELECT value INTO key_value
+    SELECT value INTO secret_value
     FROM app_settings
-    WHERE key = 'service_role_key';
+    WHERE key = 'cron_secret';
   END;
 
-  RETURN key_value;
+  RETURN secret_value;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Grant execute permissions
 GRANT EXECUTE ON FUNCTION get_app_setting(TEXT) TO postgres, service_role;
-GRANT EXECUTE ON FUNCTION get_service_role_key() TO postgres, service_role;
+GRANT EXECUTE ON FUNCTION get_cron_secret() TO postgres, service_role;
 
 -- Create a comment to remind about configuration
-COMMENT ON TABLE app_settings IS 'Application configuration settings. Update supabase_url with actual project URL. Service role key should be stored in Supabase Vault or app_settings table.';
+COMMENT ON TABLE app_settings IS 'Application configuration settings. Update supabase_url with actual project URL. CRON_SECRET should be stored in Supabase Vault or app_settings table.';

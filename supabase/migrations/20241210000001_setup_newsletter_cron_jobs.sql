@@ -11,12 +11,12 @@ CREATE OR REPLACE FUNCTION queue_digest_emails(frequency TEXT)
 RETURNS void AS $$
 DECLARE
   supabase_url TEXT;
-  service_key TEXT;
+  cron_secret TEXT;
   response_id bigint;
 BEGIN
   -- Get settings
   supabase_url := get_app_setting('supabase_url');
-  service_key := get_service_role_key();
+  cron_secret := get_cron_secret();
 
   -- Validate settings are configured
   IF supabase_url IS NULL OR supabase_url LIKE '%your-project%' THEN
@@ -24,17 +24,17 @@ BEGIN
     RETURN;
   END IF;
 
-  IF service_key IS NULL THEN
-    RAISE WARNING 'Service role key not configured';
+  IF cron_secret IS NULL OR cron_secret = 'your-cron-secret-here' THEN
+    RAISE WARNING 'CRON_SECRET not configured';
     RETURN;
   END IF;
 
-  -- Call edge function
+  -- Call edge function with Bearer token authentication
   SELECT net.http_post(
     url := supabase_url || '/functions/v1/queue-weekly-digest',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || service_key
+      'Authorization', 'Bearer ' || cron_secret
     ),
     body := jsonb_build_object('frequency', frequency)
   ) INTO response_id;
@@ -48,12 +48,12 @@ CREATE OR REPLACE FUNCTION process_newsletter_queue()
 RETURNS void AS $$
 DECLARE
   supabase_url TEXT;
-  service_key TEXT;
+  cron_secret TEXT;
   response_id bigint;
 BEGIN
   -- Get settings
   supabase_url := get_app_setting('supabase_url');
-  service_key := get_service_role_key();
+  cron_secret := get_cron_secret();
 
   -- Validate settings are configured
   IF supabase_url IS NULL OR supabase_url LIKE '%your-project%' THEN
@@ -61,17 +61,17 @@ BEGIN
     RETURN;
   END IF;
 
-  IF service_key IS NULL THEN
-    RAISE WARNING 'Service role key not configured';
+  IF cron_secret IS NULL OR cron_secret = 'your-cron-secret-here' THEN
+    RAISE WARNING 'CRON_SECRET not configured';
     RETURN;
   END IF;
 
-  -- Call edge function
+  -- Call edge function with Bearer token authentication
   SELECT net.http_post(
     url := supabase_url || '/functions/v1/process-newsletter-queue',
     headers := jsonb_build_object(
       'Content-Type', 'application/json',
-      'Authorization', 'Bearer ' || service_key
+      'Authorization', 'Bearer ' || cron_secret
     ),
     body := '{}'::jsonb
   ) INTO response_id;

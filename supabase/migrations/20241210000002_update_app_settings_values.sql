@@ -1,37 +1,29 @@
 -- Update app settings with actual values
 -- This migration should be run AFTER you've updated the values below with your actual configuration
 
--- IMPORTANT: Replace 'https://your-project.supabase.co' with your actual Supabase URL
--- You can find this in your Supabase dashboard under Settings > API
+-- IMPORTANT: Update the CRON_SECRET below with your actual cron authentication token
+-- This is the same bearer token you use for other cron jobs
 
--- Option 1: Update the Supabase URL
-UPDATE app_settings
-SET value = 'https://idlkxmbymqduafgatdwd.supabase.co',
-    updated_at = NOW()
-WHERE key = 'supabase_url';
+-- Supabase URL is already configured
+-- If you need to change it:
+-- UPDATE app_settings SET value = 'https://your-project.supabase.co' WHERE key = 'supabase_url';
 
--- Option 2a: Store service role key in app_settings (LESS SECURE - use vault instead if possible)
--- Uncomment and update if you want to use app_settings instead of vault
+-- Option 1: Store CRON_SECRET in app_settings (SIMPLE)
+-- Uncomment and update with your actual cron secret:
 /*
-INSERT INTO app_settings (key, value, description)
-VALUES (
-  'service_role_key',
-  'your-service-role-key-here',  -- REPLACE THIS
-  'Service role key for edge function authentication'
-)
-ON CONFLICT (key)
-DO UPDATE SET
-  value = EXCLUDED.value,
-  updated_at = NOW();
+UPDATE app_settings
+SET value = 'e8c3995b0665afea5b488d97c528a1564136f3c8eb878c1d23ecde27d54a0912',  -- REPLACE THIS
+    updated_at = NOW()
+WHERE key = 'cron_secret';
 */
 
--- Option 2b: Store service role key in Supabase Vault (RECOMMENDED)
--- Run this SQL in your Supabase SQL Editor to store the key securely:
+-- Option 2: Store CRON_SECRET in Supabase Vault (MORE SECURE)
+-- Run this SQL in your Supabase SQL Editor:
 /*
 SELECT vault.create_secret(
-  'your-service-role-key-here',  -- REPLACE THIS
-  'service_role_key',
-  'Service role key for cron job authentication'
+  'e8c3995b0665afea5b488d97c528a1564136f3c8eb878c1d23ecde27d54a0912',  -- REPLACE THIS
+  'cron_secret',
+  'Bearer token for authenticating cron job requests'
 );
 */
 
@@ -39,7 +31,7 @@ SELECT vault.create_secret(
 DO $$
 DECLARE
   url_value TEXT;
-  key_value TEXT;
+  secret_value TEXT;
 BEGIN
   -- Check URL
   SELECT value INTO url_value FROM app_settings WHERE key = 'supabase_url';
@@ -50,15 +42,15 @@ BEGIN
     RAISE WARNING 'Supabase URL needs to be configured. Current value: %', url_value;
   END IF;
 
-  -- Check service role key availability
+  -- Check CRON_SECRET availability
   BEGIN
-    key_value := get_service_role_key();
-    IF key_value IS NOT NULL AND length(key_value) > 20 THEN
-      RAISE NOTICE 'Service role key is configured (length: % chars)', length(key_value);
+    secret_value := get_cron_secret();
+    IF secret_value IS NOT NULL AND secret_value != 'your-cron-secret-here' AND length(secret_value) > 20 THEN
+      RAISE NOTICE 'CRON_SECRET is configured (length: % chars)', length(secret_value);
     ELSE
-      RAISE WARNING 'Service role key needs to be configured';
+      RAISE WARNING 'CRON_SECRET needs to be configured';
     END IF;
   EXCEPTION WHEN OTHERS THEN
-    RAISE WARNING 'Could not verify service role key: %', SQLERRM;
+    RAISE WARNING 'Could not verify CRON_SECRET: %', SQLERRM;
   END;
 END $$;
