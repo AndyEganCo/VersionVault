@@ -237,7 +237,7 @@ export async function getVersionHistory(softwareId: string) {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('software_version_history')
-      .select('id, version, notes, type, release_date')
+      .select('id, version, notes, type, release_date, detected_at')
       .eq('software_id', softwareId);
 
     if (error) throw error;
