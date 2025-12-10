@@ -249,6 +249,115 @@ async function fetchPDFContent(url: string): Promise<string> {
 }
 
 /**
+ * Extract version history from Apple App Store embedded JSON
+ * Apple embeds structured JSON in the HTML which is much more reliable than parsing text
+ */
+function extractAppleAppStoreJSON(html: string): string | null {
+  try {
+    console.log('🍎 Attempting to extract Apple App Store embedded JSON...')
+
+    // Look for the JSON data embedded in script tags
+    // Apple typically embeds data in <script type="application/json"> or window.__INITIAL_STATE__
+    const scriptMatches = html.match(/<script[^>]*>(.*?)<\/script>/gis)
+
+    if (!scriptMatches) {
+      console.log('⚠️ No script tags found')
+      return null
+    }
+
+    for (const scriptTag of scriptMatches) {
+      try {
+        // Extract the content between script tags
+        const scriptContent = scriptTag.replace(/<script[^>]*>|<\/script>/gi, '').trim()
+
+        // Skip if it's not JSON-like
+        if (!scriptContent.startsWith('{') && !scriptContent.startsWith('[')) {
+          continue
+        }
+
+        // Try to parse as JSON
+        const data = JSON.parse(scriptContent)
+
+        // Look for version history data in the JSON structure
+        // Based on the structure you provided, look for versionHistory or similar
+        const versionData = findVersionHistoryInJSON(data)
+
+        if (versionData && versionData.length > 0) {
+          console.log(`✅ Found ${versionData.length} versions in Apple App Store JSON`)
+          // Format the data in a way that's easy for AI to parse
+          return formatAppleVersionHistory(versionData)
+        }
+      } catch (e) {
+        // Not valid JSON or doesn't have what we need, continue to next script
+        continue
+      }
+    }
+
+    console.log('⚠️ No version history found in embedded JSON')
+    return null
+  } catch (error) {
+    console.error('Error extracting Apple App Store JSON:', error)
+    return null
+  }
+}
+
+/**
+ * Recursively search for version history in JSON object
+ */
+function findVersionHistoryInJSON(obj: any, depth: number = 0): any[] | null {
+  if (depth > 5) return null // Prevent infinite recursion
+
+  // Check if this object has version history structure
+  if (Array.isArray(obj)) {
+    // Check if this looks like a version array
+    if (obj.length > 0 && obj[0].text && obj[0].primarySubtitle && obj[0].secondarySubtitle) {
+      return obj
+    }
+    // Search through array elements
+    for (const item of obj) {
+      const result = findVersionHistoryInJSON(item, depth + 1)
+      if (result) return result
+    }
+  } else if (typeof obj === 'object' && obj !== null) {
+    // Look for common keys that might contain version history
+    const versionKeys = ['versionHistory', 'versions', 'items', 'shelves', 'data', 'pageData']
+    for (const key of versionKeys) {
+      if (obj[key]) {
+        const result = findVersionHistoryInJSON(obj[key], depth + 1)
+        if (result) return result
+      }
+    }
+    // Search through all object values
+    for (const value of Object.values(obj)) {
+      const result = findVersionHistoryInJSON(value, depth + 1)
+      if (result) return result
+    }
+  }
+
+  return null
+}
+
+/**
+ * Format Apple version history data for AI consumption
+ */
+function formatAppleVersionHistory(versions: any[]): string {
+  let formatted = 'APPLE APP STORE VERSION HISTORY (Structured Data):\n\n'
+
+  for (const version of versions) {
+    const notes = version.text || ''
+    const versionNum = version.primarySubtitle || ''
+    const date = version.secondarySubtitle || ''
+
+    formatted += `Version: ${versionNum}\n`
+    formatted += `Date: ${date}\n`
+    formatted += `Notes: ${notes}\n`
+    formatted += `---\n\n`
+  }
+
+  return formatted
+}
+
+/**
  * Fetches webpage content and extracts text, with intelligent content limits
  * Phase 3: Now supports interactive scraping strategies
  * Returns: { content: string, method: string }
@@ -319,6 +428,17 @@ async function fetchWebpageContent(
     }
 
     console.log(`📄 Raw HTML fetched: ${html.length} characters`)
+
+    // APPLE APP STORE: Try to extract structured JSON first
+    if (url.includes('apps.apple.com')) {
+      const jsonContent = extractAppleAppStoreJSON(html)
+      if (jsonContent) {
+        console.log(`✅ Using Apple App Store structured JSON (${jsonContent.length} chars)`)
+        return { content: jsonContent, method: 'apple_json' }
+      } else {
+        console.log('⚠️ Apple App Store JSON extraction failed, falling back to text extraction')
+      }
+    }
 
     const doc = new DOMParser().parseFromString(html, 'text/html')
 
