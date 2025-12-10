@@ -127,13 +127,6 @@ export function SoftwareDetailModal({
                     <span>{formatRelativeDate(software.last_checked)}</span>
                   </div>
                 )}
-
-                {software.release_date && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Released</span>
-                    <span>{formatDate(software.release_date)}</span>
-                  </div>
-                )}
               </div>
 
               <Button
