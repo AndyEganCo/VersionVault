@@ -255,10 +255,16 @@ serve(async (req) => {
           .order('release_date', { ascending: false, nullsLast: true })
           .order('detected_at', { ascending: false })
 
-        // Build updates list - show ALL updates within the time period
+        // Build updates list - only show the LATEST version per software
         const updates: any[] = []
+        const processedSoftware = new Set<string>()
 
         for (const history of (versionHistory || [])) {
+          // Skip if we already processed this software (we only want the latest version)
+          if (processedSoftware.has(history.software_id)) {
+            continue
+          }
+
           const tracked = trackedSoftware.find(t => t.software_id === history.software_id)
           if (!tracked?.software) continue
 
@@ -275,6 +281,9 @@ serve(async (req) => {
             release_notes: history.notes || [],
             update_type: history.type || 'patch',
           })
+
+          // Mark this software as processed
+          processedSoftware.add(history.software_id)
         }
 
         // Show all updates (no limit)
