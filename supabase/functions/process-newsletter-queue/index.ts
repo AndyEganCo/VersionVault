@@ -120,8 +120,8 @@ serve(async (req) => {
     }
 
     // Filter to only users where it's currently target hour in their timezone
-    // Skip timezone filter if admin manually triggered with force=true
-    const shouldBypassTimezone = isAdminRequest && forceProcess
+    // Skip timezone filter if manually triggered with force=true
+    const shouldBypassTimezone = forceProcess
 
     const itemsToProcess = shouldBypassTimezone
       ? (queueItems || [])
@@ -141,7 +141,7 @@ serve(async (req) => {
         })
 
     if (shouldBypassTimezone) {
-      console.log('⚡ Admin force-processing: bypassing timezone filter')
+      console.log('⚡ Force-processing: bypassing timezone filter')
     }
 
     console.log(`📋 Found ${itemsToProcess.length} items to process (${queueItems?.length || 0} total pending)`)
