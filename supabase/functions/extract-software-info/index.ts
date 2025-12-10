@@ -303,38 +303,48 @@ function extractAppleAppStoreJSON(html: string): string | null {
 
 /**
  * Recursively search for version history in JSON object
+ * Returns the LONGEST array of versions found (to prefer full version history over "What's New")
  */
 function findVersionHistoryInJSON(obj: any, depth: number = 0): any[] | null {
-  if (depth > 5) return null // Prevent infinite recursion
+  if (depth > 10) return null // Prevent infinite recursion
 
-  // Check if this object has version history structure
-  if (Array.isArray(obj)) {
-    // Check if this looks like a version array
-    if (obj.length > 0 && obj[0].text && obj[0].primarySubtitle && obj[0].secondarySubtitle) {
-      return obj
-    }
-    // Search through array elements
-    for (const item of obj) {
-      const result = findVersionHistoryInJSON(item, depth + 1)
-      if (result) return result
-    }
-  } else if (typeof obj === 'object' && obj !== null) {
-    // Look for common keys that might contain version history
-    const versionKeys = ['versionHistory', 'versions', 'items', 'shelves', 'data', 'pageData']
-    for (const key of versionKeys) {
-      if (obj[key]) {
-        const result = findVersionHistoryInJSON(obj[key], depth + 1)
-        if (result) return result
+  const allVersionArrays: any[][] = []
+
+  function search(o: any, d: number) {
+    if (d > 10) return
+
+    // Check if this object has version history structure
+    if (Array.isArray(o)) {
+      // Check if this looks like a version array
+      if (o.length > 0 && o[0].text && o[0].primarySubtitle && o[0].secondarySubtitle) {
+        allVersionArrays.push(o)
       }
-    }
-    // Search through all object values
-    for (const value of Object.values(obj)) {
-      const result = findVersionHistoryInJSON(value, depth + 1)
-      if (result) return result
+      // Continue searching through array elements
+      for (const item of o) {
+        search(item, d + 1)
+      }
+    } else if (typeof o === 'object' && o !== null) {
+      // Search through all object values
+      for (const value of Object.values(o)) {
+        search(value, d + 1)
+      }
     }
   }
 
-  return null
+  search(obj, depth)
+
+  // Return the longest version array (full version history, not just "What's New")
+  if (allVersionArrays.length === 0) {
+    return null
+  }
+
+  const longest = allVersionArrays.reduce((longest, current) => {
+    return current.length > longest.length ? current : longest
+  })
+
+  console.log(`📊 Found ${allVersionArrays.length} version arrays, using longest with ${longest.length} versions`)
+
+  return longest
 }
 
 /**
