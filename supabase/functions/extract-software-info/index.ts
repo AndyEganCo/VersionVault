@@ -596,6 +596,35 @@ Respond in JSON format:
   if (extracted.versions && extracted.versions.length > 0) {
     extracted.versions.sort((a, b) => compareVersions(b.version, a.version))
 
+    // APPLE APP STORE FIX: Check if this might be an App Store page with mismatched notes
+    // App Store pages often show the current version at top but with previous version's notes
+    if (versionUrl.includes('apps.apple.com') && extracted.versions.length >= 2) {
+      console.log('⚠️ Detected Apple App Store URL - checking for note mismatch...')
+
+      // Check if the first version's notes might actually belong to the second version
+      // by looking for version numbers mentioned in the notes
+      const firstVersion = extracted.versions[0]
+      const secondVersion = extracted.versions[1]
+
+      // If the first version's notes mention the second version number, they're probably swapped
+      const firstNotesLower = firstVersion.notes.toLowerCase()
+      const secondVersionClean = secondVersion.version.replace(/^[vr]/i, '')
+
+      if (firstNotesLower.includes(secondVersionClean.toLowerCase()) ||
+          firstNotesLower.includes(`version ${secondVersionClean}`) ||
+          firstNotesLower.includes(`v${secondVersionClean}`)) {
+        console.log('🔄 DETECTED NOTE MISMATCH: Swapping notes between top two versions')
+        console.log(`  Before: ${firstVersion.version} had notes mentioning ${secondVersionClean}`)
+
+        // Swap the notes
+        const tempNotes = firstVersion.notes
+        firstVersion.notes = secondVersion.notes
+        secondVersion.notes = tempNotes
+
+        console.log(`  After: Notes swapped between ${firstVersion.version} and ${secondVersion.version}`)
+      }
+    }
+
     // Set currentVersion to the highest version number
     extracted.currentVersion = extracted.versions[0].version
     extracted.releaseDate = extracted.versions[0].releaseDate
@@ -869,6 +898,35 @@ Better to be honest about uncertainty than to provide incorrect data.`
   // Sort versions array by version number (highest first)
   if (extracted.versions && extracted.versions.length > 0) {
     extracted.versions.sort((a, b) => compareVersions(b.version, a.version))
+
+    // APPLE APP STORE FIX: Check if this might be an App Store page with mismatched notes
+    // App Store pages often show the current version at top but with previous version's notes
+    if (versionUrl.includes('apps.apple.com') && extracted.versions.length >= 2) {
+      console.log('⚠️ Detected Apple App Store URL - checking for note mismatch...')
+
+      // Check if the first version's notes might actually belong to the second version
+      // by looking for version numbers mentioned in the notes
+      const firstVersion = extracted.versions[0]
+      const secondVersion = extracted.versions[1]
+
+      // If the first version's notes mention the second version number, they're probably swapped
+      const firstNotesLower = firstVersion.notes.toLowerCase()
+      const secondVersionClean = secondVersion.version.replace(/^[vr]/i, '')
+
+      if (firstNotesLower.includes(secondVersionClean.toLowerCase()) ||
+          firstNotesLower.includes(`version ${secondVersionClean}`) ||
+          firstNotesLower.includes(`v${secondVersionClean}`)) {
+        console.log('🔄 DETECTED NOTE MISMATCH: Swapping notes between top two versions')
+        console.log(`  Before: ${firstVersion.version} had notes mentioning ${secondVersionClean}`)
+
+        // Swap the notes
+        const tempNotes = firstVersion.notes
+        firstVersion.notes = secondVersion.notes
+        secondVersion.notes = tempNotes
+
+        console.log(`  After: Notes swapped between ${firstVersion.version} and ${secondVersion.version}`)
+      }
+    }
 
     // Set currentVersion to the highest version number
     extracted.currentVersion = extracted.versions[0].version
