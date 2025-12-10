@@ -206,29 +206,37 @@ serve(async (req) => {
         }
 
         // Get user's tracked software
-        const { data: trackedSoftware } = await supabase
+        const { data: trackedSoftwareRaw } = await supabase
           .from('tracked_software')
-          .select(`
-            software_id,
-            last_notified_version,
-            software:software_id (
-              id,
-              name,
-              manufacturer,
-              category,
-              current_version
-            )
-          `)
+          .select('software_id, last_notified_version')
           .eq('user_id', sub.user_id)
 
-        if (!trackedSoftware || trackedSoftware.length === 0) {
+        if (!trackedSoftwareRaw || trackedSoftwareRaw.length === 0) {
           console.log(`⏭️  Skipping ${userEmail} - no tracked software`)
           skipped++
           continue
         }
 
+        // Get software details separately
+        const softwareIds = trackedSoftwareRaw.map(t => t.software_id)
+        const { data: softwareDetails } = await supabase
+          .from('software')
+          .select('id, name, manufacturer, category, current_version')
+          .in('id', softwareIds)
+
+        // Map software details
+        const softwareMap = new Map(
+          (softwareDetails || []).map(s => [s.id, s])
+        )
+
+        // Combine tracked software with details
+        const trackedSoftware = trackedSoftwareRaw.map(tracked => ({
+          software_id: tracked.software_id,
+          last_notified_version: tracked.last_notified_version,
+          software: softwareMap.get(tracked.software_id)
+        }))
+
         // Get version history for tracked software
-        const softwareIds = trackedSoftware.map(t => t.software_id)
         const sinceDate = new Date()
         sinceDate.setDate(sinceDate.getDate() - sinceDays)
 
