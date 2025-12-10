@@ -249,6 +249,125 @@ async function fetchPDFContent(url: string): Promise<string> {
 }
 
 /**
+ * Extract version history from Apple App Store embedded JSON
+ * Apple embeds structured JSON in the HTML which is much more reliable than parsing text
+ */
+function extractAppleAppStoreJSON(html: string): string | null {
+  try {
+    console.log('🍎 Attempting to extract Apple App Store embedded JSON...')
+
+    // Look for the JSON data embedded in script tags
+    // Apple typically embeds data in <script type="application/json"> or window.__INITIAL_STATE__
+    const scriptMatches = html.match(/<script[^>]*>(.*?)<\/script>/gis)
+
+    if (!scriptMatches) {
+      console.log('⚠️ No script tags found')
+      return null
+    }
+
+    for (const scriptTag of scriptMatches) {
+      try {
+        // Extract the content between script tags
+        const scriptContent = scriptTag.replace(/<script[^>]*>|<\/script>/gi, '').trim()
+
+        // Skip if it's not JSON-like
+        if (!scriptContent.startsWith('{') && !scriptContent.startsWith('[')) {
+          continue
+        }
+
+        // Try to parse as JSON
+        const data = JSON.parse(scriptContent)
+
+        // Look for version history data in the JSON structure
+        // Based on the structure you provided, look for versionHistory or similar
+        const versionData = findVersionHistoryInJSON(data)
+
+        if (versionData && versionData.length > 0) {
+          console.log(`✅ Found ${versionData.length} versions in Apple App Store JSON`)
+          // Format the data in a way that's easy for AI to parse
+          return formatAppleVersionHistory(versionData)
+        }
+      } catch (e) {
+        // Not valid JSON or doesn't have what we need, continue to next script
+        continue
+      }
+    }
+
+    console.log('⚠️ No version history found in embedded JSON')
+    return null
+  } catch (error) {
+    console.error('Error extracting Apple App Store JSON:', error)
+    return null
+  }
+}
+
+/**
+ * Recursively search for version history in JSON object
+ * Returns the LONGEST array of versions found (to prefer full version history over "What's New")
+ */
+function findVersionHistoryInJSON(obj: any, depth: number = 0): any[] | null {
+  if (depth > 10) return null // Prevent infinite recursion
+
+  const allVersionArrays: any[][] = []
+
+  function search(o: any, d: number) {
+    if (d > 10) return
+
+    // Check if this object has version history structure
+    if (Array.isArray(o)) {
+      // Check if this looks like a version array
+      if (o.length > 0 && o[0].text && o[0].primarySubtitle && o[0].secondarySubtitle) {
+        allVersionArrays.push(o)
+      }
+      // Continue searching through array elements
+      for (const item of o) {
+        search(item, d + 1)
+      }
+    } else if (typeof o === 'object' && o !== null) {
+      // Search through all object values
+      for (const value of Object.values(o)) {
+        search(value, d + 1)
+      }
+    }
+  }
+
+  search(obj, depth)
+
+  // Return the longest version array (full version history, not just "What's New")
+  if (allVersionArrays.length === 0) {
+    return null
+  }
+
+  const longest = allVersionArrays.reduce((longest, current) => {
+    return current.length > longest.length ? current : longest
+  })
+
+  console.log(`📊 Found ${allVersionArrays.length} version arrays, using longest with ${longest.length} versions`)
+
+  return longest
+}
+
+/**
+ * Format Apple version history data for AI consumption
+ */
+function formatAppleVersionHistory(versions: any[]): string {
+  let formatted = 'APPLE APP STORE VERSION HISTORY (Structured Data):\n\n'
+
+  for (const version of versions) {
+    const notes = version.text || ''
+    const versionNum = version.primarySubtitle || ''
+    const date = version.secondarySubtitle || ''
+
+    formatted += `Version: ${versionNum}\n`
+    formatted += `Date: ${date}\n`
+    formatted += `Notes: ${notes}\n`
+    formatted += `---\n\n`
+  }
+
+  return formatted
+}
+
+/**
  * Fetches webpage content and extracts text, with intelligent content limits
  * Phase 3: Now supports interactive scraping strategies
  * Returns: { content: string, method: string }
@@ -319,6 +438,17 @@ async function fetchWebpageContent(
     }
 
     console.log(`📄 Raw HTML fetched: ${html.length} characters`)
+
+    // APPLE APP STORE: Try to extract structured JSON first
+    if (url.includes('apps.apple.com')) {
+      const jsonContent = extractAppleAppStoreJSON(html)
+      if (jsonContent) {
+        console.log(`✅ Using Apple App Store structured JSON (${jsonContent.length} chars)`)
+        return { content: jsonContent, method: 'apple_json' }
+      } else {
+        console.log('⚠️ Apple App Store JSON extraction failed, falling back to text extraction')
+      }
+    }
 
     const doc = new DOMParser().parseFromString(html, 'text/html')
 
@@ -509,6 +639,10 @@ TASK: Extract the following information:
    - If only one version found, still return it as an array with one element
    - Return empty array only if NO versions found anywhere
    - **CRITICAL**: Do not invent dates - only use dates explicitly mentioned in the content
+   - **APPLE APP STORE PAGES**: On App Store pages, release notes appear BEFORE the version number in the text flow
+     * Pattern: "notes text vX.X.X date notes text vX.X.X date"
+     * Each version's notes are the text that appears IMMEDIATELY BEFORE that version number
+     * Do NOT associate a version with the notes that come AFTER it
 
 CRITICAL INSTRUCTIONS:
 - **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data or knowledge about this software
@@ -796,6 +930,10 @@ Extract the following information:
    - ONLY include versions clearly associated with "${name}"
    - Exclude versions for other products
    - Include full release notes in markdown format
+   - **APPLE APP STORE PAGES**: On App Store pages, release notes appear BEFORE the version number in the text flow
+     * Pattern: "notes text vX.X.X date notes text vX.X.X date"
+     * Each version's notes are the text that appears IMMEDIATELY BEFORE that version number
+     * Do NOT associate a version with the notes that come AFTER it
 
 6. **Validation Fields** (REQUIRED):
    - **confidence**: 0-100 score for how confident you are this is correct
