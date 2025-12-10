@@ -73,6 +73,10 @@ export function SoftwareDetailModal({
 
   const selectedNotes = versionHistory.find(v => v.version === selectedVersion);
 
+  // Get the current version's release info for the top-level "Released" field
+  const currentVersionInfo = versionHistory.find(v => v.version === software.current_version);
+  const currentVersionDate = currentVersionInfo?.release_date || currentVersionInfo?.detected_at;
+
   const handleTrackingChange = async (checked: boolean) => {
     if (!user) {
       toast.error('Please sign in to track software');
@@ -125,6 +129,13 @@ export function SoftwareDetailModal({
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Last Checked</span>
                     <span>{formatRelativeDate(software.last_checked)}</span>
+                  </div>
+                )}
+
+                {currentVersionDate && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Released</span>
+                    <span>{formatDate(currentVersionDate)}</span>
                   </div>
                 )}
               </div>
