@@ -100,16 +100,19 @@ serve(async (req) => {
 
     // Get frequency from request body or default to weekly
     let frequency = 'weekly'
+
+    // Clone the request to ensure we have a fresh body stream
+    const clonedReq = req.clone()
+
     try {
-      const text = await req.text()
-      if (text && text.trim()) {
-        const body = JSON.parse(text.trim())
-        if (body.frequency) {
-          frequency = body.frequency
-        }
+      const body = await clonedReq.json()
+      if (body && body.frequency) {
+        frequency = body.frequency
+        console.log(`✅ Frequency from request: ${frequency}`)
       }
     } catch (error) {
       console.error('Error parsing request body:', error.message)
+      console.error('Using default frequency: weekly')
       // No body or invalid JSON, use default weekly
     }
 
