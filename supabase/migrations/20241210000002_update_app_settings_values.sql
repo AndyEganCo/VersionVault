@@ -42,15 +42,12 @@ BEGIN
     RAISE WARNING 'Supabase URL needs to be configured. Current value: %', url_value;
   END IF;
 
-  -- Check CRON_SECRET availability
-  BEGIN
-    secret_value := get_cron_secret();
-    IF secret_value IS NOT NULL AND secret_value != 'your-cron-secret-here' AND length(secret_value) > 20 THEN
-      RAISE NOTICE 'CRON_SECRET is configured (length: % chars)', length(secret_value);
-    ELSE
-      RAISE WARNING 'CRON_SECRET needs to be configured';
-    END IF;
-  EXCEPTION WHEN OTHERS THEN
-    RAISE WARNING 'Could not verify CRON_SECRET: %', SQLERRM;
-  END;
+  -- Check CRON_SECRET availability (check table directly)
+  SELECT value INTO secret_value FROM app_settings WHERE key = 'cron_secret';
+
+  IF secret_value IS NOT NULL AND secret_value != 'your-cron-secret-here' AND length(secret_value) > 20 THEN
+    RAISE NOTICE 'CRON_SECRET is configured (length: % chars)', length(secret_value);
+  ELSE
+    RAISE WARNING 'CRON_SECRET needs to be configured in app_settings';
+  END IF;
 END $$;
