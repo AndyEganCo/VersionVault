@@ -98,22 +98,27 @@ serve(async (req) => {
     // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Get frequency from request body or default to weekly
+    // Get frequency from query parameter or request body, default to weekly
     let frequency = 'weekly'
 
-    // Clone the request to ensure we have a fresh body stream
-    const clonedReq = req.clone()
-
-    try {
-      const body = await clonedReq.json()
-      if (body && body.frequency) {
-        frequency = body.frequency
-        console.log(`✅ Frequency from request: ${frequency}`)
+    // First try query parameter (more reliable)
+    const url = new URL(req.url)
+    const queryFrequency = url.searchParams.get('frequency')
+    if (queryFrequency) {
+      frequency = queryFrequency
+      console.log(`✅ Frequency from query param: ${frequency}`)
+    } else {
+      // Fallback to request body
+      try {
+        const body = await req.json()
+        if (body && body.frequency) {
+          frequency = body.frequency
+          console.log(`✅ Frequency from request body: ${frequency}`)
+        }
+      } catch (error) {
+        console.log('No frequency specified, using default: weekly')
+        // No body or invalid JSON, use default weekly
       }
-    } catch (error) {
-      console.error('Error parsing request body:', error.message)
-      console.error('Using default frequency: weekly')
-      // No body or invalid JSON, use default weekly
     }
 
     console.log(`📬 Starting ${frequency} digest queue generation...`)
