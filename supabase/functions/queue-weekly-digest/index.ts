@@ -94,7 +94,6 @@ serve(async (req) => {
     }
 
     console.log('✅ Authorization successful')
-    console.log('📬 Starting weekly digest queue generation...')
 
     // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
@@ -107,6 +106,8 @@ serve(async (req) => {
     } catch {
       // No body, use default
     }
+
+    console.log(`📬 Starting ${frequency} digest queue generation...`)
 
     // Calculate days to look back based on frequency
     const sinceDays = frequency === 'daily' ? 1 : frequency === 'monthly' ? 30 : 7
