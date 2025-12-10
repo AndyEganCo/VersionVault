@@ -32,11 +32,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Insert placeholder for Supabase URL (to be updated with actual value)
+-- Insert Supabase URL
 INSERT INTO app_settings (key, value, description)
 VALUES (
   'supabase_url',
-  'https://your-project.supabase.co',
+  'https://idlkxmbymqduafgatdwd.supabase.co',
   'Supabase project URL for edge function calls'
 )
 ON CONFLICT (key) DO NOTHING;

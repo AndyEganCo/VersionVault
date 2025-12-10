@@ -6,7 +6,7 @@
 
 -- Option 1: Update the Supabase URL
 UPDATE app_settings
-SET value = 'https://your-project.supabase.co',  -- REPLACE THIS
+SET value = 'https://idlkxmbymqduafgatdwd.supabase.co',
     updated_at = NOW()
 WHERE key = 'supabase_url';
 
