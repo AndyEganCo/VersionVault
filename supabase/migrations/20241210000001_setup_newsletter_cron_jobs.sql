@@ -29,14 +29,13 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Call edge function with Bearer token authentication
+  -- Call edge function with query parameter (more reliable than request body)
   SELECT net.http_post(
-    url := supabase_url || '/functions/v1/queue-weekly-digest',
+    url := supabase_url || '/functions/v1/queue-weekly-digest?frequency=' || frequency,
     headers := jsonb_build_object(
-      'Content-Type', 'application/json',
       'Authorization', 'Bearer ' || cron_secret
     ),
-    body := jsonb_build_object('frequency', frequency)
+    body := '{}'::jsonb
   ) INTO response_id;
 
   RAISE NOTICE 'Queued % digest emails (response id: %)', frequency, response_id;
