@@ -45,9 +45,11 @@ export function UpdateCard({ update }: UpdateCardProps) {
           </Text>
 
           {/* Release date */}
-          <Text style={dateText}>
-            Released {formatDate(update.release_date)}
-          </Text>
+          {update.release_date && (
+            <Text style={dateText}>
+              Released {formatDate(update.release_date)}
+            </Text>
+          )}
 
           {/* Release notes (if available, show first 2) */}
           {update.release_notes && update.release_notes.length > 0 && (

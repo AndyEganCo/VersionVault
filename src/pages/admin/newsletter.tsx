@@ -560,7 +560,7 @@ export function AdminNewsletter() {
             category: software.category,
             old_version: historyEntry?.previous_version || 'N/A',
             new_version: software.current_version,
-            release_date: software.release_date || software.updated_at,
+            release_date: software.release_date || software.last_checked || software.updated_at,
             release_notes: historyEntry?.notes || [],
             update_type: historyEntry?.type || 'minor',
           });
@@ -1203,7 +1203,7 @@ function generatePreviewHtml(
         <span style="color: #525252;"> → </span>
         <span style="color: #22c55e; font-weight: 600;">${u.new_version}</span>
       </div>
-      <div style="font-size: 12px; color: #525252; margin-top: 4px;">Released ${u.release_date}</div>
+      <div style="font-size: 12px; color: #525252; margin-top: 4px;">Released ${u.release_date || 'N/A'}</div>
       ${u.release_notes && u.release_notes.length > 0 ? `
         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #262626;">
           ${u.release_notes.map((note: string) => `<div style="font-size: 12px; color: #a3a3a3; margin-bottom: 4px;">• ${note}</div>`).join('')}

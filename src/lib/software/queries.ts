@@ -45,7 +45,7 @@ export async function getAllSoftwareWithVersions(): Promise<Software[]> {
       // Fetch ALL versions and sort by version number (not date)
       const { data: allVersions } = await supabase
         .from('software_version_history')
-        .select('version, notes, type, release_date')
+        .select('version, notes, type, release_date, detected_at')
         .eq('software_id', software.id);
 
       // Sort by version number to get the true latest version
@@ -55,10 +55,10 @@ export async function getAllSoftwareWithVersions(): Promise<Software[]> {
       return {
         ...software,
         current_version: versionHistory?.version || software.current_version,
-        release_date: versionHistory?.release_date || software.release_date,
+        release_date: versionHistory?.release_date || versionHistory?.detected_at || software.release_date,
         release_notes: versionHistory ? [{
           version: versionHistory.version,
-          date: versionHistory.release_date,
+          date: versionHistory.release_date || versionHistory.detected_at,
           notes: Array.isArray(versionHistory.notes) ? versionHistory.notes : [versionHistory.notes],
           type: versionHistory.type
         }] : []
@@ -95,7 +95,7 @@ export async function getLatestVersionInfo(softwareId: string): Promise<{
     // Fetch ALL versions and sort by version number (not date)
     const { data, error } = await supabase
       .from('software_version_history')
-      .select('version, notes, release_date, type')
+      .select('version, notes, release_date, detected_at, type')
       .eq('software_id', softwareId);
 
     if (error) {
@@ -119,7 +119,7 @@ export async function getLatestVersionInfo(softwareId: string): Promise<{
     return {
       version: latestVersion.version,
       notes: latestVersion.notes,
-      release_date: latestVersion.release_date,
+      release_date: latestVersion.release_date || latestVersion.detected_at,
       type: latestVersion.type
     };
   } catch (err) {
