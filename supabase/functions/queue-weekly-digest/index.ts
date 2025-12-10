@@ -244,7 +244,8 @@ serve(async (req) => {
           .from('software_version_history')
           .select('software_id, version, release_date, detected_at, notes, type')
           .in('software_id', softwareIds)
-          .gte('detected_at', sinceDate.toISOString())
+          .or(`release_date.gte.${sinceDate.toISOString()},and(release_date.is.null,detected_at.gte.${sinceDate.toISOString()})`)
+          .order('release_date', { ascending: false, nullsLast: true })
           .order('detected_at', { ascending: false })
 
         // Build updates list - show ALL updates within the time period
