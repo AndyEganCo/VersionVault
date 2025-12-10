@@ -209,7 +209,7 @@ export function SoftwareDetailModal({
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {formatDate(selectedNotes.release_date)}
+                      {formatDate(selectedNotes.release_date || selectedNotes.detected_at)}
                     </p>
                     <ul className="list-disc list-inside space-y-1">
                       {Array.isArray(selectedNotes.notes) ?
