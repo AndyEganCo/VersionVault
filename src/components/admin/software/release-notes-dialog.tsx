@@ -448,9 +448,12 @@ export function ReleaseNotesDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="current">
-                        {breakPhonePattern(software.current_version || 'Current Version')} (Current)
-                      </SelectItem>
+                      {/* Only show "current" option if current version exists in history */}
+                      {versionHistory.some(v => v.version === software.current_version) && (
+                        <SelectItem value="current">
+                          {breakPhonePattern(software.current_version || 'Current Version')} (Current)
+                        </SelectItem>
+                      )}
                       {versionHistory
                         .filter(v => v.version !== software.current_version)
                         // Remove duplicates by version number (keep first occurrence)
