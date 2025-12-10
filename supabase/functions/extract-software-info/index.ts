@@ -509,6 +509,10 @@ TASK: Extract the following information:
    - If only one version found, still return it as an array with one element
    - Return empty array only if NO versions found anywhere
    - **CRITICAL**: Do not invent dates - only use dates explicitly mentioned in the content
+   - **APPLE APP STORE PAGES**: On App Store pages, release notes appear BEFORE the version number in the text flow
+     * Pattern: "notes text vX.X.X date notes text vX.X.X date"
+     * Each version's notes are the text that appears IMMEDIATELY BEFORE that version number
+     * Do NOT associate a version with the notes that come AFTER it
 
 CRITICAL INSTRUCTIONS:
 - **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data or knowledge about this software
@@ -796,6 +800,10 @@ Extract the following information:
    - ONLY include versions clearly associated with "${name}"
    - Exclude versions for other products
    - Include full release notes in markdown format
+   - **APPLE APP STORE PAGES**: On App Store pages, release notes appear BEFORE the version number in the text flow
+     * Pattern: "notes text vX.X.X date notes text vX.X.X date"
+     * Each version's notes are the text that appears IMMEDIATELY BEFORE that version number
+     * Do NOT associate a version with the notes that come AFTER it
 
 6. **Validation Fields** (REQUIRED):
    - **confidence**: 0-100 score for how confident you are this is correct
