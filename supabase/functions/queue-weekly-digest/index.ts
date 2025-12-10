@@ -101,30 +101,16 @@ serve(async (req) => {
     // Get frequency from request body or default to weekly
     let frequency = 'weekly'
     try {
-      // First read as text to see what we're getting
       const text = await req.text()
-      console.log('📦 Request body (raw text):', text)
-      console.log('📦 Text length:', text.length)
-      console.log('📦 Text char codes:', Array.from(text).map(c => c.charCodeAt(0)).join(','))
-
       if (text && text.trim()) {
-        const trimmed = text.trim()
-        console.log('📦 Trimmed text:', trimmed)
-        const body = JSON.parse(trimmed)
-        console.log('📦 Parsed body:', JSON.stringify(body))
+        const body = JSON.parse(text.trim())
         if (body.frequency) {
           frequency = body.frequency
-          console.log(`✅ Frequency set to: ${frequency}`)
-        } else {
-          console.log('⚠️  No frequency in body, using default: weekly')
         }
-      } else {
-        console.log('⚠️  Empty request body, using default: weekly')
       }
     } catch (error) {
-      console.log('❌ Error parsing request body:', error.message)
-      console.log('❌ Error stack:', error.stack)
-      // No body, use default
+      console.error('Error parsing request body:', error.message)
+      // No body or invalid JSON, use default weekly
     }
 
     console.log(`📬 Starting ${frequency} digest queue generation...`)
