@@ -102,8 +102,15 @@ serve(async (req) => {
     let frequency = 'weekly'
     try {
       const body = await req.json()
-      if (body.frequency) frequency = body.frequency
-    } catch {
+      console.log('📦 Request body:', JSON.stringify(body))
+      if (body.frequency) {
+        frequency = body.frequency
+        console.log(`✅ Frequency set to: ${frequency}`)
+      } else {
+        console.log('⚠️  No frequency in body, using default: weekly')
+      }
+    } catch (error) {
+      console.log('❌ Error parsing request body:', error.message)
       // No body, use default
     }
 
