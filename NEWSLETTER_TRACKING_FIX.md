@@ -2,19 +2,42 @@
 
 ## Issue
 
-Email tracking (open rate, click rate, bounces) shows **0.0%** on the Newsletter Management dashboard because the **Resend webhook is not configured**.
+Email tracking (open rate, click rate, bounces) shows **0.0%** on the Newsletter Management dashboard because the **Resend webhook URL is incorrect**.
 
 ## What's Happening
 
-Your newsletter system has a webhook handler (`handle-email-webhook`) that processes email engagement events from Resend, but Resend doesn't know where to send these events yet.
+Your newsletter system has a webhook handler (`handle-email-webhook`) that processes email engagement events from Resend. The webhook is configured in Resend, but **the URL is missing `.supabase` in the domain**.
 
 ## Root Cause
 
-The webhook needs to be manually configured in your Resend account to point to your Supabase Edge Function.
+**Current (INCORRECT) URL:**
+```
+https://idlkxmbymqduafgatdwd.co/functions/v1/handle-email-webhook
+```
+
+**Correct URL should be:**
+```
+https://idlkxmbymqduafgatdwd.supabase.co/functions/v1/handle-email-webhook
+                              ^^^^^^^^
+                              Missing this!
+```
+
+Resend is sending webhook events to the wrong domain, so they never reach your Edge Function.
 
 ---
 
-## Fix Instructions
+## 🚀 Quick Fix (Do This First!)
+
+1. Go to https://resend.com/webhooks
+2. Find your webhook pointing to `idlkxmbymqduafgatdwd.co/functions/v1/handle-email-webhook`
+3. **Edit the URL** to: `https://idlkxmbymqduafgatdwd.supabase.co/functions/v1/handle-email-webhook`
+4. Save the webhook
+5. Send a test email from `/admin/newsletter` and open it
+6. Wait 1-2 minutes and refresh - open rate should now update!
+
+---
+
+## Detailed Fix Instructions
 
 ### Step 1: Verify Your Webhook Endpoint is Deployed
 
