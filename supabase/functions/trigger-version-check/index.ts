@@ -25,6 +25,25 @@ interface CheckSummary {
   results: VersionCheckResult[]
 }
 
+/**
+ * Normalize version numbers for software that uses non-standard formats
+ * For disguise: strip the 'r' prefix (e.g., "r32.2" -> "32.2")
+ */
+function normalizeVersion(version: string, softwareName: string): string {
+  const lowerName = softwareName.toLowerCase()
+
+  // Handle disguise versions - strip 'r' prefix
+  if (lowerName.includes('disguise') || lowerName.includes('designer')) {
+    // Match versions like "r32.2", "r32.1.4" but not "version 32.2"
+    const match = version.match(/^r(\d+(?:\.\d+)*)$/i)
+    if (match) {
+      return match[1]
+    }
+  }
+
+  return version
+}
+
 serve(async (req) => {
   console.log(`📥 Received ${req.method} request to trigger-version-check`)
 
@@ -148,7 +167,8 @@ serve(async (req) => {
 
         // Update with new version if found
         if (extracted.currentVersion) {
-          updateData.current_version = extracted.currentVersion
+          // Normalize version for consistent storage
+          updateData.current_version = normalizeVersion(extracted.currentVersion, software.name)
           updateData.release_date = extracted.releaseDate || null
         }
 
@@ -167,12 +187,15 @@ serve(async (req) => {
         let versionsAdded = 0
         if (extracted.versions && extracted.versions.length > 0) {
           for (const version of extracted.versions) {
+            // Normalize version number for consistent storage
+            const normalizedVersion = normalizeVersion(version.version, software.name)
+
             // Check if version already exists
             const { data: existing } = await supabase
               .from('software_version_history')
               .select('id')
               .eq('software_id', software.id)
-              .eq('version', version.version)
+              .eq('version', normalizedVersion)
               .single()
 
             const notesArray = typeof version.notes === 'string'
@@ -205,7 +228,7 @@ serve(async (req) => {
                 .from('software_version_history')
                 .insert({
                   software_id: software.id,
-                  version: version.version,
+                  version: normalizedVersion,
                   release_date: releaseDate,
                   notes: notesArray,
                   type: version.type,

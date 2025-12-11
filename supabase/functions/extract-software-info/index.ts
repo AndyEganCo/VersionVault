@@ -759,6 +759,78 @@ Respond in JSON format:
       }
     }
 
+    // DISGUISE FIX: Fetch individual version pages for full release notes
+    // The main release notes list page only shows version numbers, not full content
+    if (versionUrl.includes('help.disguise.one') && versionUrl.includes('/release-notes')) {
+      console.log('🎭 Detected disguise release notes - fetching individual version pages...')
+
+      const baseUrl = 'https://help.disguise.one/designer/release-notes/'
+
+      // Fetch full notes for each version (limit to top 10 to avoid rate limiting)
+      const versionsToEnrich = extracted.versions.slice(0, 10)
+
+      for (const version of versionsToEnrich) {
+        // Check if notes are minimal (likely just a title)
+        const notesText = Array.isArray(version.notes)
+          ? version.notes.join(' ')
+          : (version.notes || '')
+
+        if (notesText.length < 100) {
+          console.log(`  📄 Fetching full notes for version ${version.version}...`)
+
+          try {
+            // Construct URL - disguise uses 'r' prefix in URLs
+            const versionUrlSlug = version.version.match(/^\d/)
+              ? `r${version.version}`
+              : version.version
+            const individualVersionUrl = `${baseUrl}${versionUrlSlug}`
+
+            console.log(`    URL: ${individualVersionUrl}`)
+
+            // Fetch the individual version page
+            const versionPageResult = await fetchWebpageContent(individualVersionUrl, 15000, false)
+
+            if (versionPageResult.content.length > 500) {
+              // Extract just the release notes content using the AI
+              const notesPrompt = `Extract ONLY the release notes content from this disguise Designer version ${version.version} page. Return the notes in clean markdown format. Do not include the version number or title, just the actual release notes content.
+
+Content:
+${versionPageResult.content.substring(0, 10000)}`
+
+              const notesResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'gpt-4o-mini',
+                  messages: [
+                    { role: 'user', content: notesPrompt }
+                  ],
+                  temperature: 0.3,
+                })
+              })
+
+              if (notesResponse.ok) {
+                const notesData = await notesResponse.json()
+                const enrichedNotes = notesData.choices[0].message.content
+
+                // Update the version notes
+                version.notes = enrichedNotes
+                console.log(`    ✅ Enriched notes (${enrichedNotes.length} chars)`)
+              }
+            } else {
+              console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping`)
+            }
+          } catch (error) {
+            console.error(`    ❌ Error fetching version ${version.version}:`, error.message)
+            // Continue with next version even if one fails
+          }
+        }
+      }
+    }
+
     // Set currentVersion to the highest version number
     extracted.currentVersion = extracted.versions[0].version
     extracted.releaseDate = extracted.versions[0].releaseDate
@@ -1063,6 +1135,78 @@ Better to be honest about uncertainty than to provide incorrect data.`
         secondVersion.notes = tempNotes
 
         console.log(`  After: Notes swapped between ${firstVersion.version} and ${secondVersion.version}`)
+      }
+    }
+
+    // DISGUISE FIX: Fetch individual version pages for full release notes
+    // The main release notes list page only shows version numbers, not full content
+    if (versionUrl.includes('help.disguise.one') && versionUrl.includes('/release-notes')) {
+      console.log('🎭 Detected disguise release notes - fetching individual version pages...')
+
+      const baseUrl = 'https://help.disguise.one/designer/release-notes/'
+
+      // Fetch full notes for each version (limit to top 10 to avoid rate limiting)
+      const versionsToEnrich = extracted.versions.slice(0, 10)
+
+      for (const version of versionsToEnrich) {
+        // Check if notes are minimal (likely just a title)
+        const notesText = Array.isArray(version.notes)
+          ? version.notes.join(' ')
+          : (version.notes || '')
+
+        if (notesText.length < 100) {
+          console.log(`  📄 Fetching full notes for version ${version.version}...`)
+
+          try {
+            // Construct URL - disguise uses 'r' prefix in URLs
+            const versionUrlSlug = version.version.match(/^\d/)
+              ? `r${version.version}`
+              : version.version
+            const individualVersionUrl = `${baseUrl}${versionUrlSlug}`
+
+            console.log(`    URL: ${individualVersionUrl}`)
+
+            // Fetch the individual version page
+            const versionPageResult = await fetchWebpageContent(individualVersionUrl, 15000, false)
+
+            if (versionPageResult.content.length > 500) {
+              // Extract just the release notes content using the AI
+              const notesPrompt = `Extract ONLY the release notes content from this disguise Designer version ${version.version} page. Return the notes in clean markdown format. Do not include the version number or title, just the actual release notes content.
+
+Content:
+${versionPageResult.content.substring(0, 10000)}`
+
+              const notesResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'gpt-4o-mini',
+                  messages: [
+                    { role: 'user', content: notesPrompt }
+                  ],
+                  temperature: 0.3,
+                })
+              })
+
+              if (notesResponse.ok) {
+                const notesData = await notesResponse.json()
+                const enrichedNotes = notesData.choices[0].message.content
+
+                // Update the version notes
+                version.notes = enrichedNotes
+                console.log(`    ✅ Enriched notes (${enrichedNotes.length} chars)`)
+              }
+            } else {
+              console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping`)
+            }
+          } catch (error) {
+            console.error(`    ❌ Error fetching version ${version.version}:`, error.message)
+            // Continue with next version even if one fails
+          }
+        }
       }
     }
 
