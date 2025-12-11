@@ -759,40 +759,72 @@ Respond in JSON format:
       }
     }
 
-    // DISGUISE FIX: Fetch individual version pages for full release notes
-    // The main release notes list page only shows version numbers, not full content
+    // DISGUISE FIX: Fetch version family pages for full release notes
+    // disguise organizes by major version: /r32 contains all 32.x versions, /r31 contains all 31.x versions
     if (versionUrl.includes('help.disguise.one') && versionUrl.includes('/release-notes')) {
-      console.log('🎭 Detected disguise release notes - fetching individual version pages...')
+      console.log('🎭 Detected disguise release notes - fetching version family pages...')
 
       const baseUrl = 'https://help.disguise.one/designer/release-notes/'
 
-      // Fetch full notes for each version (limit to top 10 to avoid rate limiting)
-      const versionsToEnrich = extracted.versions.slice(0, 10)
+      // Group versions by major version family to minimize page fetches
+      const versionFamilies = new Map<string, any[]>()
 
-      for (const version of versionsToEnrich) {
-        // Check if notes are minimal (likely just a title)
-        const notesText = Array.isArray(version.notes)
-          ? version.notes.join(' ')
-          : (version.notes || '')
+      for (const version of extracted.versions) {
+        // Extract major version (e.g., "32" from "32.0.3")
+        const majorVersionMatch = version.version.match(/^(\d+)/)
+        if (majorVersionMatch) {
+          const majorVersion = majorVersionMatch[1]
+          if (!versionFamilies.has(majorVersion)) {
+            versionFamilies.set(majorVersion, [])
+          }
+          versionFamilies.get(majorVersion)!.push(version)
+        }
+      }
 
-        if (notesText.length < 100) {
-          console.log(`  📄 Fetching full notes for version ${version.version}...`)
+      console.log(`  📦 Found ${versionFamilies.size} version families to fetch`)
 
-          try {
-            // Construct URL - disguise uses 'r' prefix in URLs
-            const versionUrlSlug = version.version.match(/^\d/)
-              ? `r${version.version}`
-              : version.version
-            const individualVersionUrl = `${baseUrl}${versionUrlSlug}`
+      // Fetch each version family page (e.g., r32, r31)
+      for (const [majorVersion, versions] of versionFamilies) {
+        // Only fetch if versions have minimal notes
+        const needsEnrichment = versions.some(v => {
+          const notesText = Array.isArray(v.notes) ? v.notes.join(' ') : (v.notes || '')
+          return notesText.length < 100
+        })
 
-            console.log(`    URL: ${individualVersionUrl}`)
+        if (!needsEnrichment) {
+          console.log(`  ⏭️  Skipping r${majorVersion} - versions already have notes`)
+          continue
+        }
 
-            // Fetch the individual version page
-            const versionPageResult = await fetchWebpageContent(individualVersionUrl, 15000, false)
+        try {
+          const familyUrl = `${baseUrl}r${majorVersion}`
+          console.log(`  📄 Fetching version family page: ${familyUrl}`)
 
-            if (versionPageResult.content.length > 500) {
-              // Extract release notes and release date using the AI
-              const notesPrompt = `Extract the release notes and release date from this disguise Designer version ${version.version} page.
+          // Fetch the version family page
+          const versionPageResult = await fetchWebpageContent(familyUrl, 20000, false)
+
+          if (versionPageResult.content.length < 500) {
+            console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping family r${majorVersion}`)
+            continue
+          }
+
+          console.log(`    ✅ Fetched ${versionPageResult.content.length} chars for family r${majorVersion}`)
+
+          // Now enrich each version in this family
+          for (const version of versions) {
+            const notesText = Array.isArray(version.notes) ? version.notes.join(' ') : (version.notes || '')
+
+            if (notesText.length >= 100) {
+              console.log(`    ⏭️  Version ${version.version} already has notes, skipping`)
+              continue
+            }
+
+            console.log(`    🔍 Extracting notes and date for version ${version.version}...`)
+
+            // Extract notes and date for this specific version from the family page
+            const notesPrompt = `Extract the release notes and release date for disguise Designer version ${version.version} from this page.
+
+This page contains multiple versions. Find the section for version ${version.version} specifically.
 
 Return ONLY valid JSON in this exact format:
 {
@@ -801,13 +833,15 @@ Return ONLY valid JSON in this exact format:
 }
 
 IMPORTANT:
-- For releaseDate: Look for text like "Released: October 8th 2025" and convert to YYYY-MM-DD format (e.g., "2025-10-08")
-- For notes: Include the full release notes content but NOT the version number or title
-- Return null for releaseDate if no date is found
+- Look for section headers like "r${version.version}" or "${version.version}"
+- For releaseDate: Look for text like "Released: October 8th 2025" near this version and convert to YYYY-MM-DD format
+- For notes: Extract ONLY the notes for version ${version.version}, not other versions
+- Return null for releaseDate if no date is found for this version
 
-Content:
-${versionPageResult.content.substring(0, 10000)}`
+Content (first 15000 chars):
+${versionPageResult.content.substring(0, 15000)}`
 
+            try {
               const notesResponse = await fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -829,41 +863,46 @@ ${versionPageResult.content.substring(0, 10000)}`
                 const enrichedData = JSON.parse(notesData.choices[0].message.content)
 
                 // Update the version notes
-                version.notes = enrichedData.notes
+                if (enrichedData.notes && enrichedData.notes.length > 50) {
+                  version.notes = enrichedData.notes
+                }
 
                 // Update release date if found
                 if (enrichedData.releaseDate && enrichedData.releaseDate !== 'null') {
                   version.releaseDate = enrichedData.releaseDate
-                  console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars), date: ${enrichedData.releaseDate}`)
+                  console.log(`      ✅ Extracted notes (${enrichedData.notes?.length || 0} chars) and date: ${enrichedData.releaseDate}`)
                 } else {
-                  // Fallback: Try to extract date with regex if AI didn't find it
-                  const dateMatch = versionPageResult.content.match(/Released:\s*([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?\s+\d{4})/i)
+                  // Fallback: Try to extract date with regex
+                  const versionPattern = new RegExp(`${version.version.replace('.', '\\.')}[\\s\\S]{0,500}Released:\\s*([A-Za-z]+\\s+\\d{1,2}(?:st|nd|rd|th)?\\s+\\d{4})`, 'i')
+                  const dateMatch = versionPageResult.content.match(versionPattern)
                   if (dateMatch) {
-                    console.log(`    ⚠️  AI didn't find date, trying regex fallback: "${dateMatch[1]}"`)
-                    // Try to parse the date using a simple conversion
+                    console.log(`      ⚠️  AI didn't find date, trying regex: "${dateMatch[1]}"`)
                     try {
                       const dateStr = dateMatch[1].replace(/(\d+)(st|nd|rd|th)/, '$1')
                       const parsedDate = new Date(dateStr)
                       if (!isNaN(parsedDate.getTime())) {
                         version.releaseDate = parsedDate.toISOString().split('T')[0]
-                        console.log(`    ✅ Extracted date via regex: ${version.releaseDate}`)
+                        console.log(`      ✅ Extracted date via regex: ${version.releaseDate}`)
                       }
                     } catch (e) {
-                      console.log(`    ❌ Failed to parse date: ${e.message}`)
+                      console.log(`      ❌ Failed to parse date: ${e.message}`)
                     }
                   } else {
-                    console.log(`    ⚠️  No release date found in content (AI or regex)`)
+                    console.log(`      ⚠️  No release date found for version ${version.version}`)
                   }
-                  console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars)`)
+                  if (enrichedData.notes && enrichedData.notes.length > 50) {
+                    console.log(`      ✅ Extracted notes (${enrichedData.notes.length} chars)`)
+                  }
                 }
+              } else {
+                console.log(`      ❌ AI request failed for version ${version.version}`)
               }
-            } else {
-              console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping`)
+            } catch (error) {
+              console.error(`      ❌ Error extracting version ${version.version}:`, error.message)
             }
-          } catch (error) {
-            console.error(`    ❌ Error fetching version ${version.version}:`, error.message)
-            // Continue with next version even if one fails
           }
+        } catch (error) {
+          console.error(`    ❌ Error fetching family r${majorVersion}:`, error.message)
         }
       }
     }
@@ -1175,40 +1214,72 @@ Better to be honest about uncertainty than to provide incorrect data.`
       }
     }
 
-    // DISGUISE FIX: Fetch individual version pages for full release notes
-    // The main release notes list page only shows version numbers, not full content
+    // DISGUISE FIX: Fetch version family pages for full release notes
+    // disguise organizes by major version: /r32 contains all 32.x versions, /r31 contains all 31.x versions
     if (versionUrl.includes('help.disguise.one') && versionUrl.includes('/release-notes')) {
-      console.log('🎭 Detected disguise release notes - fetching individual version pages...')
+      console.log('🎭 Detected disguise release notes - fetching version family pages...')
 
       const baseUrl = 'https://help.disguise.one/designer/release-notes/'
 
-      // Fetch full notes for each version (limit to top 10 to avoid rate limiting)
-      const versionsToEnrich = extracted.versions.slice(0, 10)
+      // Group versions by major version family to minimize page fetches
+      const versionFamilies = new Map<string, any[]>()
 
-      for (const version of versionsToEnrich) {
-        // Check if notes are minimal (likely just a title)
-        const notesText = Array.isArray(version.notes)
-          ? version.notes.join(' ')
-          : (version.notes || '')
+      for (const version of extracted.versions) {
+        // Extract major version (e.g., "32" from "32.0.3")
+        const majorVersionMatch = version.version.match(/^(\d+)/)
+        if (majorVersionMatch) {
+          const majorVersion = majorVersionMatch[1]
+          if (!versionFamilies.has(majorVersion)) {
+            versionFamilies.set(majorVersion, [])
+          }
+          versionFamilies.get(majorVersion)!.push(version)
+        }
+      }
 
-        if (notesText.length < 100) {
-          console.log(`  📄 Fetching full notes for version ${version.version}...`)
+      console.log(`  📦 Found ${versionFamilies.size} version families to fetch`)
 
-          try {
-            // Construct URL - disguise uses 'r' prefix in URLs
-            const versionUrlSlug = version.version.match(/^\d/)
-              ? `r${version.version}`
-              : version.version
-            const individualVersionUrl = `${baseUrl}${versionUrlSlug}`
+      // Fetch each version family page (e.g., r32, r31)
+      for (const [majorVersion, versions] of versionFamilies) {
+        // Only fetch if versions have minimal notes
+        const needsEnrichment = versions.some(v => {
+          const notesText = Array.isArray(v.notes) ? v.notes.join(' ') : (v.notes || '')
+          return notesText.length < 100
+        })
 
-            console.log(`    URL: ${individualVersionUrl}`)
+        if (!needsEnrichment) {
+          console.log(`  ⏭️  Skipping r${majorVersion} - versions already have notes`)
+          continue
+        }
 
-            // Fetch the individual version page
-            const versionPageResult = await fetchWebpageContent(individualVersionUrl, 15000, false)
+        try {
+          const familyUrl = `${baseUrl}r${majorVersion}`
+          console.log(`  📄 Fetching version family page: ${familyUrl}`)
 
-            if (versionPageResult.content.length > 500) {
-              // Extract release notes and release date using the AI
-              const notesPrompt = `Extract the release notes and release date from this disguise Designer version ${version.version} page.
+          // Fetch the version family page
+          const versionPageResult = await fetchWebpageContent(familyUrl, 20000, false)
+
+          if (versionPageResult.content.length < 500) {
+            console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping family r${majorVersion}`)
+            continue
+          }
+
+          console.log(`    ✅ Fetched ${versionPageResult.content.length} chars for family r${majorVersion}`)
+
+          // Now enrich each version in this family
+          for (const version of versions) {
+            const notesText = Array.isArray(version.notes) ? version.notes.join(' ') : (version.notes || '')
+
+            if (notesText.length >= 100) {
+              console.log(`    ⏭️  Version ${version.version} already has notes, skipping`)
+              continue
+            }
+
+            console.log(`    🔍 Extracting notes and date for version ${version.version}...`)
+
+            // Extract notes and date for this specific version from the family page
+            const notesPrompt = `Extract the release notes and release date for disguise Designer version ${version.version} from this page.
+
+This page contains multiple versions. Find the section for version ${version.version} specifically.
 
 Return ONLY valid JSON in this exact format:
 {
@@ -1217,13 +1288,15 @@ Return ONLY valid JSON in this exact format:
 }
 
 IMPORTANT:
-- For releaseDate: Look for text like "Released: October 8th 2025" and convert to YYYY-MM-DD format (e.g., "2025-10-08")
-- For notes: Include the full release notes content but NOT the version number or title
-- Return null for releaseDate if no date is found
+- Look for section headers like "r${version.version}" or "${version.version}"
+- For releaseDate: Look for text like "Released: October 8th 2025" near this version and convert to YYYY-MM-DD format
+- For notes: Extract ONLY the notes for version ${version.version}, not other versions
+- Return null for releaseDate if no date is found for this version
 
-Content:
-${versionPageResult.content.substring(0, 10000)}`
+Content (first 15000 chars):
+${versionPageResult.content.substring(0, 15000)}`
 
+            try {
               const notesResponse = await fetch('https://api.openai.com/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -1245,41 +1318,46 @@ ${versionPageResult.content.substring(0, 10000)}`
                 const enrichedData = JSON.parse(notesData.choices[0].message.content)
 
                 // Update the version notes
-                version.notes = enrichedData.notes
+                if (enrichedData.notes && enrichedData.notes.length > 50) {
+                  version.notes = enrichedData.notes
+                }
 
                 // Update release date if found
                 if (enrichedData.releaseDate && enrichedData.releaseDate !== 'null') {
                   version.releaseDate = enrichedData.releaseDate
-                  console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars), date: ${enrichedData.releaseDate}`)
+                  console.log(`      ✅ Extracted notes (${enrichedData.notes?.length || 0} chars) and date: ${enrichedData.releaseDate}`)
                 } else {
-                  // Fallback: Try to extract date with regex if AI didn't find it
-                  const dateMatch = versionPageResult.content.match(/Released:\s*([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?\s+\d{4})/i)
+                  // Fallback: Try to extract date with regex
+                  const versionPattern = new RegExp(`${version.version.replace('.', '\\.')}[\\s\\S]{0,500}Released:\\s*([A-Za-z]+\\s+\\d{1,2}(?:st|nd|rd|th)?\\s+\\d{4})`, 'i')
+                  const dateMatch = versionPageResult.content.match(versionPattern)
                   if (dateMatch) {
-                    console.log(`    ⚠️  AI didn't find date, trying regex fallback: "${dateMatch[1]}"`)
-                    // Try to parse the date using a simple conversion
+                    console.log(`      ⚠️  AI didn't find date, trying regex: "${dateMatch[1]}"`)
                     try {
                       const dateStr = dateMatch[1].replace(/(\d+)(st|nd|rd|th)/, '$1')
                       const parsedDate = new Date(dateStr)
                       if (!isNaN(parsedDate.getTime())) {
                         version.releaseDate = parsedDate.toISOString().split('T')[0]
-                        console.log(`    ✅ Extracted date via regex: ${version.releaseDate}`)
+                        console.log(`      ✅ Extracted date via regex: ${version.releaseDate}`)
                       }
                     } catch (e) {
-                      console.log(`    ❌ Failed to parse date: ${e.message}`)
+                      console.log(`      ❌ Failed to parse date: ${e.message}`)
                     }
                   } else {
-                    console.log(`    ⚠️  No release date found in content (AI or regex)`)
+                    console.log(`      ⚠️  No release date found for version ${version.version}`)
                   }
-                  console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars)`)
+                  if (enrichedData.notes && enrichedData.notes.length > 50) {
+                    console.log(`      ✅ Extracted notes (${enrichedData.notes.length} chars)`)
+                  }
                 }
+              } else {
+                console.log(`      ❌ AI request failed for version ${version.version}`)
               }
-            } else {
-              console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping`)
+            } catch (error) {
+              console.error(`      ❌ Error extracting version ${version.version}:`, error.message)
             }
-          } catch (error) {
-            console.error(`    ❌ Error fetching version ${version.version}:`, error.message)
-            // Continue with next version even if one fails
           }
+        } catch (error) {
+          console.error(`    ❌ Error fetching family r${majorVersion}:`, error.message)
         }
       }
     }
