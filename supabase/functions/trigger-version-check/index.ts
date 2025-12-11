@@ -146,10 +146,22 @@ serve(async (req) => {
           last_checked: new Date().toISOString()
         }
 
+        // Determine current version: use extracted.currentVersion if available,
+        // otherwise use the first (latest) version from the versions array
+        let currentVersion = extracted.currentVersion
+        let currentReleaseDate = extracted.releaseDate
+
+        if (!currentVersion && extracted.versions && extracted.versions.length > 0) {
+          // Use the first version in the array as current (assumes sorted by date, newest first)
+          currentVersion = extracted.versions[0].version
+          currentReleaseDate = extracted.versions[0].releaseDate
+          console.log(`  📌 Using first version from array as current: ${currentVersion}`)
+        }
+
         // Update with new version if found
-        if (extracted.currentVersion) {
-          updateData.current_version = extracted.currentVersion
-          updateData.release_date = extracted.releaseDate || null
+        if (currentVersion) {
+          updateData.current_version = currentVersion
+          updateData.release_date = currentReleaseDate || null
         }
 
         await supabase
@@ -157,8 +169,8 @@ serve(async (req) => {
           .update(updateData)
           .eq('id', software.id)
 
-        if (extracted.currentVersion) {
-          console.log(`  ✅ Updated to version ${extracted.currentVersion}`)
+        if (currentVersion) {
+          console.log(`  ✅ Updated to version ${currentVersion}`)
         } else {
           console.log(`  ⏭️  No new version found, updated last_checked`)
         }
