@@ -288,12 +288,6 @@ serve(async (req) => {
             continue
           }
 
-          // Check if this version is newer than what we last notified about
-          // This prevents sending duplicate notifications
-          if (tracked.last_notified_version && !isNewerVersion(history.version, tracked.last_notified_version)) {
-            continue
-          }
-
           // Use the previous_version from the database (what it upgraded FROM)
           // Fallback to last notified version if previous_version is missing
           const oldVersion = history.previous_version || tracked.last_notified_version || 'N/A'

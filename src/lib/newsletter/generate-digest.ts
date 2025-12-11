@@ -129,12 +129,6 @@ export async function generateUserDigest(
 
     const lastNotified = lastNotifiedMap.get(history.software_id);
 
-    // Check if this version is newer than what we last notified about
-    // This prevents sending duplicate notifications
-    if (lastNotified && !isNewerVersion(history.version, lastNotified)) {
-      continue;
-    }
-
     // Use the previous_version from the database (what it upgraded FROM)
     // Fallback to last notified version if previous_version is missing
     const oldVersion = history.previous_version || lastNotified || 'N/A';
