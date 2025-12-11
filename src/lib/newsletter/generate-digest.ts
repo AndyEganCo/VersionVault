@@ -22,6 +22,7 @@ interface TrackedSoftwareWithHistory {
 interface VersionHistoryItem {
   software_id: string;
   version: string;
+  previous_version: string | null;
   release_date: string;
   detected_at: string;
   notes: string[] | null;
@@ -73,10 +74,10 @@ export async function generateUserDigest(
 
   // Get version history for tracked software since cutoff
   // Only include verified versions (admin has confirmed data quality)
-  // The isNewerVersion check below also filters out old versions found during backfill
+  // Only include versions that match the software's current version (not intermediate updates)
   const { data: versionHistory, error: historyError } = await supabase
     .from('software_version_history')
-    .select('software_id, version, release_date, detected_at, notes, type')
+    .select('software_id, version, previous_version, release_date, detected_at, notes, type')
     .in('software_id', softwareIds)
     .eq('newsletter_verified', true)
     .gte('detected_at', sinceDate.toISOString())
@@ -103,7 +104,8 @@ export async function generateUserDigest(
   }
 
   // Process version history into updates
-  // Only include versions NEWER than what we last notified about
+  // Only include versions that match the software's CURRENT version
+  // This ensures we only notify about what's currently installed, not intermediate updates
   const updates: SoftwareUpdateSummary[] = [];
   const processedSoftware = new Set<string>();
 
@@ -117,18 +119,23 @@ export async function generateUserDigest(
     const software = softwareMap.get(history.software_id);
     if (!software) continue;
 
+    // CRITICAL: Only include versions that match the software's current version
+    // This prevents notifying about intermediate versions that are no longer current
+    if (history.version !== software.current_version) {
+      continue;
+    }
+
     const lastNotified = lastNotifiedMap.get(history.software_id);
 
     // Check if this version is newer than what we last notified about
-    // This prevents notifying about old versions discovered during backfill
+    // This prevents sending duplicate notifications
     if (lastNotified && !isNewerVersion(history.version, lastNotified)) {
       continue;
     }
 
-    // Also check it's newer than current version (sanity check)
-    // Actually, version history entries should be about changes TO the current version
-    // The history.version IS the new version
-    const oldVersion = lastNotified || getPreviousVersion(history.version);
+    // Use the previous_version from the database (what it upgraded FROM)
+    // Fallback to last notified version if previous_version is missing
+    const oldVersion = history.previous_version || lastNotified || 'N/A';
 
     updates.push({
       software_id: history.software_id,
@@ -153,27 +160,6 @@ export async function generateUserDigest(
     hasUpdates: limitedUpdates.length > 0,
     allQuietMessage: limitedUpdates.length === 0 ? getRandomAllQuietMessage() : undefined,
   };
-}
-
-/**
- * Get a placeholder "previous version" when we don't have one
- * This is a rough estimate for display purposes
- */
-function getPreviousVersion(currentVersion: string): string {
-  // Try to decrement the last number in the version
-  const parts = currentVersion.replace(/^[vr]/i, '').split('.');
-
-  if (parts.length > 0) {
-    const lastPartIndex = parts.length - 1;
-    const lastPart = parseInt(parts[lastPartIndex], 10);
-
-    if (!isNaN(lastPart) && lastPart > 0) {
-      parts[lastPartIndex] = String(lastPart - 1);
-      return parts.join('.');
-    }
-  }
-
-  return '?.?.?';
 }
 
 /**
