@@ -828,12 +828,34 @@ ${versionPageResult.content.substring(0, 10000)}`
                 const notesData = await notesResponse.json()
                 const enrichedData = JSON.parse(notesData.choices[0].message.content)
 
-                // Update the version notes and release date
+                // Update the version notes
                 version.notes = enrichedData.notes
+
+                // Update release date if found
                 if (enrichedData.releaseDate && enrichedData.releaseDate !== 'null') {
                   version.releaseDate = enrichedData.releaseDate
+                  console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars), date: ${enrichedData.releaseDate}`)
+                } else {
+                  // Fallback: Try to extract date with regex if AI didn't find it
+                  const dateMatch = versionPageResult.content.match(/Released:\s*([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?\s+\d{4})/i)
+                  if (dateMatch) {
+                    console.log(`    ⚠️  AI didn't find date, trying regex fallback: "${dateMatch[1]}"`)
+                    // Try to parse the date using a simple conversion
+                    try {
+                      const dateStr = dateMatch[1].replace(/(\d+)(st|nd|rd|th)/, '$1')
+                      const parsedDate = new Date(dateStr)
+                      if (!isNaN(parsedDate.getTime())) {
+                        version.releaseDate = parsedDate.toISOString().split('T')[0]
+                        console.log(`    ✅ Extracted date via regex: ${version.releaseDate}`)
+                      }
+                    } catch (e) {
+                      console.log(`    ❌ Failed to parse date: ${e.message}`)
+                    }
+                  } else {
+                    console.log(`    ⚠️  No release date found in content (AI or regex)`)
+                  }
+                  console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars)`)
                 }
-                console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars)${enrichedData.releaseDate ? ', date: ' + enrichedData.releaseDate : ''}`)
               }
             } else {
               console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping`)
@@ -1222,12 +1244,34 @@ ${versionPageResult.content.substring(0, 10000)}`
                 const notesData = await notesResponse.json()
                 const enrichedData = JSON.parse(notesData.choices[0].message.content)
 
-                // Update the version notes and release date
+                // Update the version notes
                 version.notes = enrichedData.notes
+
+                // Update release date if found
                 if (enrichedData.releaseDate && enrichedData.releaseDate !== 'null') {
                   version.releaseDate = enrichedData.releaseDate
+                  console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars), date: ${enrichedData.releaseDate}`)
+                } else {
+                  // Fallback: Try to extract date with regex if AI didn't find it
+                  const dateMatch = versionPageResult.content.match(/Released:\s*([A-Za-z]+\s+\d{1,2}(?:st|nd|rd|th)?\s+\d{4})/i)
+                  if (dateMatch) {
+                    console.log(`    ⚠️  AI didn't find date, trying regex fallback: "${dateMatch[1]}"`)
+                    // Try to parse the date using a simple conversion
+                    try {
+                      const dateStr = dateMatch[1].replace(/(\d+)(st|nd|rd|th)/, '$1')
+                      const parsedDate = new Date(dateStr)
+                      if (!isNaN(parsedDate.getTime())) {
+                        version.releaseDate = parsedDate.toISOString().split('T')[0]
+                        console.log(`    ✅ Extracted date via regex: ${version.releaseDate}`)
+                      }
+                    } catch (e) {
+                      console.log(`    ❌ Failed to parse date: ${e.message}`)
+                    }
+                  } else {
+                    console.log(`    ⚠️  No release date found in content (AI or regex)`)
+                  }
+                  console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars)`)
                 }
-                console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars)${enrichedData.releaseDate ? ', date: ' + enrichedData.releaseDate : ''}`)
               }
             } else {
               console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping`)
