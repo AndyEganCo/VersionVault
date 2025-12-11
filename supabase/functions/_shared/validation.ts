@@ -110,22 +110,54 @@ export function validateExtraction(
   }
 
   // Check 2: Version appears near product name
+  // However, some page types (blog, changelog, release notes aggregation) naturally
+  // have product names in navigation/headers while versions appear in content below
   const proximity = calculateProximity(
     software.name,
     extracted.currentVersion,
     pageContent
   );
 
-  if (proximity > 500) {
-    warnings.push(
-      `Version "${extracted.currentVersion}" found ${proximity} characters away from product name. May be incorrect.`
-    );
-    confidence = Math.min(confidence, 60);
-  } else if (proximity > 200) {
-    warnings.push(
-      `Version found ${proximity} characters from product name (moderate distance)`
-    );
-    confidence = Math.min(confidence, 80);
+  // Detect page types where large proximity is expected
+  const contentLower = pageContent.toLowerCase();
+  const isBlogOrChangelogPage =
+    contentLower.includes('blog') ||
+    contentLower.includes('changelog') ||
+    contentLower.includes('release notes') ||
+    contentLower.includes('what\'s new') ||
+    contentLower.includes('version history') ||
+    contentLower.includes('updates');
+
+  // For blog/changelog pages, use relaxed proximity thresholds
+  // For regular pages, use strict thresholds
+  const strictProximityThreshold = 500;
+  const moderateProximityThreshold = 200;
+  const relaxedProximityThreshold = 20000; // For blog/changelog pages
+  const relaxedModerateThreshold = 5000;
+
+  if (isBlogOrChangelogPage) {
+    // Relaxed validation for blog/changelog pages
+    if (proximity > relaxedProximityThreshold) {
+      warnings.push(
+        `Version "${extracted.currentVersion}" found ${proximity} characters away from product name on blog/changelog page.`
+      );
+      // Only reduce confidence slightly - trust the AI more on these pages
+      confidence = Math.min(confidence, 80);
+    }
+    // else if proximity > relaxedModerateThreshold: This is normal for blog pages, no warning needed
+  } else {
+    // Strict validation for regular product/download pages
+    if (proximity > strictProximityThreshold) {
+      warnings.push(
+        `Version "${extracted.currentVersion}" found ${proximity} characters away from product name. May be incorrect.`
+      );
+      confidence = Math.min(confidence, 60);
+    } else if (proximity > moderateProximityThreshold) {
+      warnings.push(
+        `Version found ${proximity} characters from product name (moderate distance)`
+      );
+      confidence = Math.min(confidence, 80);
+    }
   }
 
   // Check 3: AI confidence threshold

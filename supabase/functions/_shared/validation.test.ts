@@ -112,6 +112,41 @@ Deno.test('validateExtraction - no version found (valid)', () => {
   }
 });
 
+Deno.test('validateExtraction - blog page with far proximity (valid)', () => {
+  // Simulate Resolume Arena blog page scenario
+  // Product name appears in navigation/header, version in blog post content
+  const software = { name: 'Resolume Arena' };
+  const extracted = {
+    currentVersion: '7.23.2',
+    confidence: 85,
+    productNameFound: true,
+  };
+
+  // Simulate a blog page with navigation containing product name,
+  // followed by lots of content, then the version number in a blog post
+  const navigation = 'Resolume Arena Media Server | Blog | Software | ';
+  const filler = 'Lorem ipsum dolor sit amet. '.repeat(500); // ~14,000 chars
+  const blogPost = 'Resolume 7.23 Release... Avenue, Arena & Wire 7.23.2 Fix List...';
+  const content = navigation + filler + blogPost;
+
+  const result = validateExtraction(software, extracted, content);
+
+  // Should be valid because:
+  // 1. Product name IS found on page
+  // 2. It's detected as a blog page
+  // 3. Large proximity is expected on blog pages
+  // 4. AI confidence is high (85%)
+  if (!result.valid) {
+    console.log('Validation result:', result);
+    throw new Error(`Expected valid for blog page with far proximity. Reason: ${result.reason}`);
+  }
+
+  // Confidence should be maintained (not capped at 60%)
+  if (result.confidence < 80) {
+    throw new Error(`Expected confidence >= 80 for blog page, got ${result.confidence}`);
+  }
+});
+
 // Test getVersionFormat
 Deno.test('getVersionFormat - semantic versioning', () => {
   const format = getVersionFormat('1.2.3');
