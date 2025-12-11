@@ -8,6 +8,9 @@ export interface ExtractedSoftwareInfo {
   releaseDate?: string;
   isJavaScriptPage?: boolean;      // True if page likely needs browser rendering
   lowContentWarning?: string;       // Warning message for manual checking
+  validationNotes?: string;         // Validation notes explaining extraction issues
+  confidence?: number;              // AI confidence score (0-100)
+  productNameFound?: boolean;       // Whether the product name was found on the page
   versions?: Array<{               // Array of ALL versions found on the page
     version: string;
     releaseDate: string;
@@ -58,9 +61,18 @@ export async function extractSoftwareInfo(
 
     const extracted = await response.json() as ExtractedSoftwareInfo;
 
-    // Validate the response
+    // Validate the response - but allow validation notes to come through
+    // even if extraction failed (product name mismatch scenario)
     if (!extracted.manufacturer || !extracted.category) {
-      throw new Error('Invalid response from server');
+      // If we have validation notes, this is a handled error scenario
+      if (extracted.validationNotes) {
+        console.warn('Extraction failed with validation notes:', extracted.validationNotes);
+        // Return the response so UI can show the helpful message
+        return extracted;
+      } else {
+        // Genuinely invalid response
+        throw new Error('Invalid response from server');
+      }
     }
 
     console.log('Extraction successful:', extracted);

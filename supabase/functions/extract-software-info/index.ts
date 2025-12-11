@@ -1092,6 +1092,8 @@ Extract the following information:
      - 0-29: Very low, likely wrong product
    - **productNameFound**: true/false - was "${name}" found on page?
    - **validationNotes**: Brief explanation of confidence level
+     - If product name NOT found: Suggest what product name you DID find
+     - Format: "Product '${name}' not found. Found '{actual product name}' instead. Consider updating database entry."
 
 **CRITICAL INSTRUCTIONS:**
 - **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data
@@ -1100,6 +1102,10 @@ Extract the following information:
 - DO NOT make up or guess release dates - use null if not found
 - BE HONEST about confidence - low confidence is better than wrong data
 - Better to return null with explanation than wrong product's version
+- **If target product not found but you find a DIFFERENT product with versions:**
+  - Return null for version (don't extract wrong product's version)
+  - But STILL return the manufacturer and category you found
+  - In validationNotes, suggest the correct product name
 
 **RESPOND IN JSON FORMAT:**
 {
@@ -1173,13 +1179,34 @@ Better to be honest about uncertainty than to provide incorrect data.`
 
   const extracted = JSON.parse(result) as ExtractedInfo
 
-  // Validate required fields
+  // Check for product name mismatch scenario
+  // If AI couldn't find the product name, it may have returned incomplete data
+  // but with helpful validation notes about what it DID find
   if (!extracted.manufacturer || !extracted.category) {
-    throw new Error('Invalid AI response - missing required fields')
+    // Check if this is a product name mismatch (AI found version but wrong product)
+    if (extracted.productNameFound === false && extracted.validationNotes) {
+      // Return the validation notes as an error so UI can show helpful message
+      console.warn('⚠️ Product name mismatch detected')
+      console.warn('Validation notes:', extracted.validationNotes)
+
+      // Instead of throwing, return a structured response with the issue
+      // Set low confidence and include helpful validation notes
+      extracted.manufacturer = extracted.manufacturer || 'Unknown'
+      extracted.category = extracted.category || 'Show Control'
+      extracted.confidence = 0
+      extracted.extractionMethod = 'enhanced_ai_failed'
+
+      // Don't throw - let the response flow through with validation notes
+    } else {
+      // Genuinely missing required fields - this shouldn't happen
+      throw new Error('Invalid AI response - missing required fields')
+    }
   }
 
-  // Mark extraction method
-  extracted.extractionMethod = 'enhanced_ai'
+  // Mark extraction method (if not already set above)
+  if (!extracted.extractionMethod) {
+    extracted.extractionMethod = 'enhanced_ai'
+  }
 
   // Sort versions array by version number (highest first)
   if (extracted.versions && extracted.versions.length > 0) {

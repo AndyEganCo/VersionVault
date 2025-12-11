@@ -178,7 +178,17 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
         }
       } else {
         // No versions found at all
-        toast.warning('No versions found on the page. Try a different URL or check manually.', { id: loadingToast });
+        // Check if there are validation notes that explain why
+        if (extracted.validationNotes) {
+          // Product name mismatch or other validation issue
+          toast.warning(
+            `⚠️ Version Extraction Issue\n\n${extracted.validationNotes}\n\nPlease update the software name in the database to match the actual product name.`,
+            { id: loadingToast, duration: 10000 }
+          );
+        } else {
+          // Generic no versions found
+          toast.warning('No versions found on the page. Try a different URL or check manually.', { id: loadingToast });
+        }
       }
     } catch (error) {
       console.error('Error checking version:', error);
