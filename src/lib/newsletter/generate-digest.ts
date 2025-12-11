@@ -71,15 +71,15 @@ export async function generateUserDigest(
   // Get software IDs the user is tracking
   const softwareIds = trackedSoftware.map(t => t.software_id);
 
-  // Get version history for tracked software since cutoff
-  // Only include verified versions (admin has confirmed data quality)
-  // The isNewerVersion check below also filters out old versions found during backfill
-  const { data: versionHistory, error: historyError } = await supabase
+  // Get ALL verified version history for tracked software
+  // We need the full history to find the previous version for each software
+  const { data: allVersionHistory, error: historyError } = await supabase
     .from('software_version_history')
     .select('software_id, version, release_date, detected_at, notes, type')
     .in('software_id', softwareIds)
     .eq('newsletter_verified', true)
-    .gte('detected_at', sinceDate.toISOString())
+    .order('software_id')
+    .order('release_date', { ascending: false, nullsLast: true })
     .order('detected_at', { ascending: false });
 
   if (historyError) {
@@ -102,47 +102,55 @@ export async function generateUserDigest(
     }
   }
 
-  // Process version history into updates
-  // Only include versions NEWER than what we last notified about
+  // Group version history by software_id
+  const versionHistoryBySoftware = new Map<string, VersionHistoryItem[]>();
+  for (const history of (allVersionHistory || []) as VersionHistoryItem[]) {
+    if (!versionHistoryBySoftware.has(history.software_id)) {
+      versionHistoryBySoftware.set(history.software_id, []);
+    }
+    versionHistoryBySoftware.get(history.software_id)!.push(history);
+  }
+
+  // Process each tracked software to find updates
   const updates: SoftwareUpdateSummary[] = [];
-  const processedSoftware = new Set<string>();
 
-  for (const history of (versionHistory || []) as VersionHistoryItem[]) {
-    // Skip if we already processed an update for this software
-    // (we only want the latest update per software in the digest)
-    if (processedSoftware.has(history.software_id)) {
+  for (const tracked of trackedSoftware as unknown as TrackedSoftwareWithHistory[]) {
+    const software = tracked.software;
+    if (!software || !software.current_version) continue;
+
+    const histories = versionHistoryBySoftware.get(tracked.software_id) || [];
+    if (histories.length === 0) continue;
+
+    // Find the current version in the history
+    const currentVersionEntry = histories.find(h => h.version === software.current_version);
+    if (!currentVersionEntry) continue;
+
+    // Check if the current version was released in the time period
+    const releaseDate = currentVersionEntry.release_date || currentVersionEntry.detected_at;
+    const releaseDateObj = new Date(releaseDate);
+    if (releaseDateObj < sinceDate) {
+      // Current version was released before the time period, skip
       continue;
     }
 
-    const software = softwareMap.get(history.software_id);
-    if (!software) continue;
+    // Find the previous version (the next one in the sorted array)
+    const currentIndex = histories.indexOf(currentVersionEntry);
+    const previousVersionEntry = currentIndex < histories.length - 1 ? histories[currentIndex + 1] : null;
 
-    const lastNotified = lastNotifiedMap.get(history.software_id);
-
-    // Check if this version is newer than what we last notified about
-    // This prevents notifying about old versions discovered during backfill
-    if (lastNotified && !isNewerVersion(history.version, lastNotified)) {
-      continue;
-    }
-
-    // Also check it's newer than current version (sanity check)
-    // Actually, version history entries should be about changes TO the current version
-    // The history.version IS the new version
-    const oldVersion = lastNotified || getPreviousVersion(history.version);
+    // Determine old version
+    const oldVersion = previousVersionEntry?.version || lastNotifiedMap.get(tracked.software_id) || 'N/A';
 
     updates.push({
-      software_id: history.software_id,
+      software_id: tracked.software_id,
       name: software.name,
       manufacturer: software.manufacturer,
       category: software.category,
       old_version: oldVersion,
-      new_version: history.version,
-      release_date: history.release_date || history.detected_at,
-      release_notes: history.notes || undefined,
-      update_type: history.type || getUpdateType(oldVersion, history.version),
+      new_version: software.current_version,
+      release_date: releaseDate,
+      release_notes: currentVersionEntry.notes || undefined,
+      update_type: currentVersionEntry.type || getUpdateType(oldVersion, software.current_version),
     });
-
-    processedSoftware.add(history.software_id);
   }
 
   // Limit updates to prevent massive emails
@@ -153,27 +161,6 @@ export async function generateUserDigest(
     hasUpdates: limitedUpdates.length > 0,
     allQuietMessage: limitedUpdates.length === 0 ? getRandomAllQuietMessage() : undefined,
   };
-}
-
-/**
- * Get a placeholder "previous version" when we don't have one
- * This is a rough estimate for display purposes
- */
-function getPreviousVersion(currentVersion: string): string {
-  // Try to decrement the last number in the version
-  const parts = currentVersion.replace(/^[vr]/i, '').split('.');
-
-  if (parts.length > 0) {
-    const lastPartIndex = parts.length - 1;
-    const lastPart = parseInt(parts[lastPartIndex], 10);
-
-    if (!isNaN(lastPart) && lastPart > 0) {
-      parts[lastPartIndex] = String(lastPart - 1);
-      return parts.join('.');
-    }
-  }
-
-  return '?.?.?';
 }
 
 /**

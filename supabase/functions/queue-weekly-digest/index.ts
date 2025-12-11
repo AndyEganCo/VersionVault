@@ -236,7 +236,7 @@ serve(async (req) => {
         const softwareIds = trackedSoftwareRaw.map(t => t.software_id)
         const { data: softwareDetails } = await supabase
           .from('software')
-          .select('id, name, manufacturer, category, current_version')
+          .select('id, name, manufacturer, category, current_version, release_date')
           .in('id', softwareIds)
 
         // Map software details
@@ -251,47 +251,69 @@ serve(async (req) => {
           software: softwareMap.get(tracked.software_id)
         }))
 
-        // Get version history for tracked software
+        // Get ALL verified version history for tracked software
+        // We need the full history to find the previous version for each software
         const sinceDate = new Date()
         sinceDate.setDate(sinceDate.getDate() - sinceDays)
 
-        const { data: versionHistory } = await supabase
+        const { data: allVersionHistory } = await supabase
           .from('software_version_history')
           .select('software_id, version, release_date, detected_at, notes, type')
           .in('software_id', softwareIds)
-          .or(`release_date.gte.${sinceDate.toISOString()},and(release_date.is.null,detected_at.gte.${sinceDate.toISOString()})`)
+          .eq('newsletter_verified', true)
+          .order('software_id')
           .order('release_date', { ascending: false, nullsLast: true })
           .order('detected_at', { ascending: false })
 
-        // Build updates list - only show the LATEST version per software
-        const updates: any[] = []
-        const processedSoftware = new Set<string>()
+        // Group version history by software_id
+        const versionHistoryBySoftware = new Map<string, any[]>()
+        for (const history of (allVersionHistory || [])) {
+          if (!versionHistoryBySoftware.has(history.software_id)) {
+            versionHistoryBySoftware.set(history.software_id, [])
+          }
+          versionHistoryBySoftware.get(history.software_id)!.push(history)
+        }
 
-        for (const history of (versionHistory || [])) {
-          // Skip if we already processed this software (we only want the latest version)
-          if (processedSoftware.has(history.software_id)) {
+        // Process each tracked software to find updates
+        const updates: any[] = []
+
+        for (const tracked of trackedSoftware) {
+          const software = tracked.software as any
+          if (!software || !software.current_version) continue
+
+          const histories = versionHistoryBySoftware.get(tracked.software_id) || []
+          if (histories.length === 0) continue
+
+          // Find the current version in the history
+          const currentVersionEntry = histories.find((h: any) => h.version === software.current_version)
+          if (!currentVersionEntry) continue
+
+          // Check if the current version was released in the time period
+          const releaseDate = currentVersionEntry.release_date || currentVersionEntry.detected_at
+          const releaseDateObj = new Date(releaseDate)
+          if (releaseDateObj < sinceDate) {
+            // Current version was released before the time period, skip
             continue
           }
 
-          const tracked = trackedSoftware.find(t => t.software_id === history.software_id)
-          if (!tracked?.software) continue
+          // Find the previous version (the next one in the sorted array)
+          const currentIndex = histories.indexOf(currentVersionEntry)
+          const previousVersionEntry = currentIndex < histories.length - 1 ? histories[currentIndex + 1] : null
 
-          const software = tracked.software as any
+          // Determine old version
+          const oldVersion = previousVersionEntry?.version || tracked.last_notified_version || 'N/A'
 
           updates.push({
-            software_id: history.software_id,
+            software_id: tracked.software_id,
             name: software.name,
             manufacturer: software.manufacturer,
             category: software.category,
-            old_version: tracked.last_notified_version || '?.?.?',
-            new_version: history.version,
-            release_date: history.release_date || history.detected_at,
-            release_notes: history.notes || [],
-            update_type: history.type || 'patch',
+            old_version: oldVersion,
+            new_version: software.current_version,
+            release_date: releaseDate,
+            release_notes: currentVersionEntry.notes || [],
+            update_type: currentVersionEntry.type || 'patch',
           })
-
-          // Mark this software as processed
-          processedSoftware.add(history.software_id)
         }
 
         // Show all updates (no limit)
