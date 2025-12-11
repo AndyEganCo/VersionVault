@@ -759,6 +759,154 @@ Respond in JSON format:
       }
     }
 
+    // DISGUISE FIX: Fetch version family pages for full release notes
+    // disguise organizes by major version: /r32 contains all 32.x versions, /r31 contains all 31.x versions
+    if (versionUrl.includes('help.disguise.one') && versionUrl.includes('/release-notes')) {
+      console.log('🎭 Detected disguise release notes - fetching version family pages...')
+
+      const baseUrl = 'https://help.disguise.one/designer/release-notes/'
+
+      // Group versions by major version family to minimize page fetches
+      const versionFamilies = new Map<string, any[]>()
+
+      for (const version of extracted.versions) {
+        // Extract major version (e.g., "32" from "32.0.3")
+        const majorVersionMatch = version.version.match(/^(\d+)/)
+        if (majorVersionMatch) {
+          const majorVersion = majorVersionMatch[1]
+          if (!versionFamilies.has(majorVersion)) {
+            versionFamilies.set(majorVersion, [])
+          }
+          versionFamilies.get(majorVersion)!.push(version)
+        }
+      }
+
+      console.log(`  📦 Found ${versionFamilies.size} version families to fetch`)
+
+      // Fetch each version family page (e.g., r32, r31)
+      for (const [majorVersion, versions] of versionFamilies) {
+        // Only fetch if versions have minimal notes
+        const needsEnrichment = versions.some(v => {
+          const notesText = Array.isArray(v.notes) ? v.notes.join(' ') : (v.notes || '')
+          return notesText.length < 100
+        })
+
+        if (!needsEnrichment) {
+          console.log(`  ⏭️  Skipping r${majorVersion} - versions already have notes`)
+          continue
+        }
+
+        try {
+          const familyUrl = `${baseUrl}r${majorVersion}`
+          console.log(`  📄 Fetching version family page: ${familyUrl}`)
+
+          // Fetch the version family page
+          const versionPageResult = await fetchWebpageContent(familyUrl, 20000, false)
+
+          if (versionPageResult.content.length < 500) {
+            console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping family r${majorVersion}`)
+            continue
+          }
+
+          console.log(`    ✅ Fetched ${versionPageResult.content.length} chars for family r${majorVersion}`)
+
+          // Now enrich each version in this family
+          for (const version of versions) {
+            const notesText = Array.isArray(version.notes) ? version.notes.join(' ') : (version.notes || '')
+
+            if (notesText.length >= 100) {
+              console.log(`    ⏭️  Version ${version.version} already has notes, skipping`)
+              continue
+            }
+
+            console.log(`    🔍 Extracting notes and date for version ${version.version}...`)
+
+            // Extract notes and date for this specific version from the family page
+            const notesPrompt = `Extract the release notes and release date for disguise Designer version ${version.version} from this page.
+
+This page contains multiple versions. Find the section for version ${version.version} specifically.
+
+Return ONLY valid JSON in this exact format:
+{
+  "releaseDate": "YYYY-MM-DD or null if not found",
+  "notes": "Release notes content in clean markdown format"
+}
+
+IMPORTANT:
+- Look for section headers like "r${version.version}" or "${version.version}"
+- For releaseDate: Look for text like "Released: October 8th 2025" near this version and convert to YYYY-MM-DD format
+- For notes: Extract ONLY the notes for version ${version.version}, not other versions
+- Return null for releaseDate if no date is found for this version
+
+Content (first 15000 chars):
+${versionPageResult.content.substring(0, 15000)}`
+
+            try {
+              const notesResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'gpt-4o-mini',
+                  messages: [
+                    { role: 'user', content: notesPrompt }
+                  ],
+                  temperature: 0.3,
+                  response_format: { type: 'json_object' }
+                })
+              })
+
+              if (notesResponse.ok) {
+                const notesData = await notesResponse.json()
+                const enrichedData = JSON.parse(notesData.choices[0].message.content)
+
+                // Update the version notes
+                if (enrichedData.notes && enrichedData.notes.length > 50) {
+                  version.notes = enrichedData.notes
+                }
+
+                // Update release date if found
+                if (enrichedData.releaseDate && enrichedData.releaseDate !== 'null') {
+                  version.releaseDate = enrichedData.releaseDate
+                  console.log(`      ✅ Extracted notes (${enrichedData.notes?.length || 0} chars) and date: ${enrichedData.releaseDate}`)
+                } else {
+                  // Fallback: Try to extract date with regex
+                  const versionPattern = new RegExp(`${version.version.replace('.', '\\.')}[\\s\\S]{0,500}Released:\\s*([A-Za-z]+\\s+\\d{1,2}(?:st|nd|rd|th)?\\s+\\d{4})`, 'i')
+                  const dateMatch = versionPageResult.content.match(versionPattern)
+                  if (dateMatch) {
+                    console.log(`      ⚠️  AI didn't find date, trying regex: "${dateMatch[1]}"`)
+                    try {
+                      const dateStr = dateMatch[1].replace(/(\d+)(st|nd|rd|th)/, '$1')
+                      const parsedDate = new Date(dateStr)
+                      if (!isNaN(parsedDate.getTime())) {
+                        version.releaseDate = parsedDate.toISOString().split('T')[0]
+                        console.log(`      ✅ Extracted date via regex: ${version.releaseDate}`)
+                      }
+                    } catch (e) {
+                      console.log(`      ❌ Failed to parse date: ${e.message}`)
+                    }
+                  } else {
+                    console.log(`      ⚠️  No release date found for version ${version.version}`)
+                  }
+                  if (enrichedData.notes && enrichedData.notes.length > 50) {
+                    console.log(`      ✅ Extracted notes (${enrichedData.notes.length} chars)`)
+                  }
+                }
+              } else {
+                console.log(`      ❌ AI request failed for version ${version.version}`)
+              }
+            } catch (error) {
+              console.error(`      ❌ Error extracting version ${version.version}:`, error.message)
+            }
+          }
+        } catch (error) {
+          console.error(`    ❌ Error fetching family r${majorVersion}:`, error.message)
+        }
+      }
+    }
+
     // Set currentVersion to the highest version number
     extracted.currentVersion = extracted.versions[0].version
     extracted.releaseDate = extracted.versions[0].releaseDate
@@ -1063,6 +1211,154 @@ Better to be honest about uncertainty than to provide incorrect data.`
         secondVersion.notes = tempNotes
 
         console.log(`  After: Notes swapped between ${firstVersion.version} and ${secondVersion.version}`)
+      }
+    }
+
+    // DISGUISE FIX: Fetch version family pages for full release notes
+    // disguise organizes by major version: /r32 contains all 32.x versions, /r31 contains all 31.x versions
+    if (versionUrl.includes('help.disguise.one') && versionUrl.includes('/release-notes')) {
+      console.log('🎭 Detected disguise release notes - fetching version family pages...')
+
+      const baseUrl = 'https://help.disguise.one/designer/release-notes/'
+
+      // Group versions by major version family to minimize page fetches
+      const versionFamilies = new Map<string, any[]>()
+
+      for (const version of extracted.versions) {
+        // Extract major version (e.g., "32" from "32.0.3")
+        const majorVersionMatch = version.version.match(/^(\d+)/)
+        if (majorVersionMatch) {
+          const majorVersion = majorVersionMatch[1]
+          if (!versionFamilies.has(majorVersion)) {
+            versionFamilies.set(majorVersion, [])
+          }
+          versionFamilies.get(majorVersion)!.push(version)
+        }
+      }
+
+      console.log(`  📦 Found ${versionFamilies.size} version families to fetch`)
+
+      // Fetch each version family page (e.g., r32, r31)
+      for (const [majorVersion, versions] of versionFamilies) {
+        // Only fetch if versions have minimal notes
+        const needsEnrichment = versions.some(v => {
+          const notesText = Array.isArray(v.notes) ? v.notes.join(' ') : (v.notes || '')
+          return notesText.length < 100
+        })
+
+        if (!needsEnrichment) {
+          console.log(`  ⏭️  Skipping r${majorVersion} - versions already have notes`)
+          continue
+        }
+
+        try {
+          const familyUrl = `${baseUrl}r${majorVersion}`
+          console.log(`  📄 Fetching version family page: ${familyUrl}`)
+
+          // Fetch the version family page
+          const versionPageResult = await fetchWebpageContent(familyUrl, 20000, false)
+
+          if (versionPageResult.content.length < 500) {
+            console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping family r${majorVersion}`)
+            continue
+          }
+
+          console.log(`    ✅ Fetched ${versionPageResult.content.length} chars for family r${majorVersion}`)
+
+          // Now enrich each version in this family
+          for (const version of versions) {
+            const notesText = Array.isArray(version.notes) ? version.notes.join(' ') : (version.notes || '')
+
+            if (notesText.length >= 100) {
+              console.log(`    ⏭️  Version ${version.version} already has notes, skipping`)
+              continue
+            }
+
+            console.log(`    🔍 Extracting notes and date for version ${version.version}...`)
+
+            // Extract notes and date for this specific version from the family page
+            const notesPrompt = `Extract the release notes and release date for disguise Designer version ${version.version} from this page.
+
+This page contains multiple versions. Find the section for version ${version.version} specifically.
+
+Return ONLY valid JSON in this exact format:
+{
+  "releaseDate": "YYYY-MM-DD or null if not found",
+  "notes": "Release notes content in clean markdown format"
+}
+
+IMPORTANT:
+- Look for section headers like "r${version.version}" or "${version.version}"
+- For releaseDate: Look for text like "Released: October 8th 2025" near this version and convert to YYYY-MM-DD format
+- For notes: Extract ONLY the notes for version ${version.version}, not other versions
+- Return null for releaseDate if no date is found for this version
+
+Content (first 15000 chars):
+${versionPageResult.content.substring(0, 15000)}`
+
+            try {
+              const notesResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  model: 'gpt-4o-mini',
+                  messages: [
+                    { role: 'user', content: notesPrompt }
+                  ],
+                  temperature: 0.3,
+                  response_format: { type: 'json_object' }
+                })
+              })
+
+              if (notesResponse.ok) {
+                const notesData = await notesResponse.json()
+                const enrichedData = JSON.parse(notesData.choices[0].message.content)
+
+                // Update the version notes
+                if (enrichedData.notes && enrichedData.notes.length > 50) {
+                  version.notes = enrichedData.notes
+                }
+
+                // Update release date if found
+                if (enrichedData.releaseDate && enrichedData.releaseDate !== 'null') {
+                  version.releaseDate = enrichedData.releaseDate
+                  console.log(`      ✅ Extracted notes (${enrichedData.notes?.length || 0} chars) and date: ${enrichedData.releaseDate}`)
+                } else {
+                  // Fallback: Try to extract date with regex
+                  const versionPattern = new RegExp(`${version.version.replace('.', '\\.')}[\\s\\S]{0,500}Released:\\s*([A-Za-z]+\\s+\\d{1,2}(?:st|nd|rd|th)?\\s+\\d{4})`, 'i')
+                  const dateMatch = versionPageResult.content.match(versionPattern)
+                  if (dateMatch) {
+                    console.log(`      ⚠️  AI didn't find date, trying regex: "${dateMatch[1]}"`)
+                    try {
+                      const dateStr = dateMatch[1].replace(/(\d+)(st|nd|rd|th)/, '$1')
+                      const parsedDate = new Date(dateStr)
+                      if (!isNaN(parsedDate.getTime())) {
+                        version.releaseDate = parsedDate.toISOString().split('T')[0]
+                        console.log(`      ✅ Extracted date via regex: ${version.releaseDate}`)
+                      }
+                    } catch (e) {
+                      console.log(`      ❌ Failed to parse date: ${e.message}`)
+                    }
+                  } else {
+                    console.log(`      ⚠️  No release date found for version ${version.version}`)
+                  }
+                  if (enrichedData.notes && enrichedData.notes.length > 50) {
+                    console.log(`      ✅ Extracted notes (${enrichedData.notes.length} chars)`)
+                  }
+                }
+              } else {
+                console.log(`      ❌ AI request failed for version ${version.version}`)
+              }
+            } catch (error) {
+              console.error(`      ❌ Error extracting version ${version.version}:`, error.message)
+            }
+          }
+        } catch (error) {
+          console.error(`    ❌ Error fetching family r${majorVersion}:`, error.message)
+        }
       }
     }
 
