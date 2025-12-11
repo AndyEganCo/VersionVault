@@ -252,6 +252,8 @@ serve(async (req) => {
         }))
 
         // Get version history for tracked software
+        // Filter by release_date (or detected_at if release_date is null)
+        // This ensures we show software released in the time period, not just detected
         const sinceDate = new Date()
         sinceDate.setDate(sinceDate.getDate() - sinceDays)
 
@@ -260,7 +262,8 @@ serve(async (req) => {
           .select('software_id, version, previous_version, release_date, detected_at, notes, type')
           .in('software_id', softwareIds)
           .eq('newsletter_verified', true)
-          .gte('detected_at', sinceDate.toISOString())
+          .or(`release_date.gte.${sinceDate.toISOString()},and(release_date.is.null,detected_at.gte.${sinceDate.toISOString()})`)
+          .order('release_date', { ascending: false, nullsLast: true })
           .order('detected_at', { ascending: false })
 
         // Build updates list - only show versions matching software's CURRENT version

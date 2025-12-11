@@ -74,13 +74,15 @@ export async function generateUserDigest(
 
   // Get version history for tracked software since cutoff
   // Only include verified versions (admin has confirmed data quality)
-  // Only include versions that match the software's current version (not intermediate updates)
+  // Filter by release_date (or detected_at if release_date is null)
+  // This ensures we show software released in the time period, not just detected
   const { data: versionHistory, error: historyError } = await supabase
     .from('software_version_history')
     .select('software_id, version, previous_version, release_date, detected_at, notes, type')
     .in('software_id', softwareIds)
     .eq('newsletter_verified', true)
-    .gte('detected_at', sinceDate.toISOString())
+    .or(`release_date.gte.${sinceDate.toISOString()},and(release_date.is.null,detected_at.gte.${sinceDate.toISOString()})`)
+    .order('release_date', { ascending: false, nullsLast: true })
     .order('detected_at', { ascending: false });
 
   if (historyError) {
