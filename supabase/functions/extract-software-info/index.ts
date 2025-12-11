@@ -791,8 +791,19 @@ Respond in JSON format:
             const versionPageResult = await fetchWebpageContent(individualVersionUrl, 15000, false)
 
             if (versionPageResult.content.length > 500) {
-              // Extract just the release notes content using the AI
-              const notesPrompt = `Extract ONLY the release notes content from this disguise Designer version ${version.version} page. Return the notes in clean markdown format. Do not include the version number or title, just the actual release notes content.
+              // Extract release notes and release date using the AI
+              const notesPrompt = `Extract the release notes and release date from this disguise Designer version ${version.version} page.
+
+Return ONLY valid JSON in this exact format:
+{
+  "releaseDate": "YYYY-MM-DD or null if not found",
+  "notes": "Release notes content in clean markdown format"
+}
+
+IMPORTANT:
+- For releaseDate: Look for text like "Released: October 8th 2025" and convert to YYYY-MM-DD format (e.g., "2025-10-08")
+- For notes: Include the full release notes content but NOT the version number or title
+- Return null for releaseDate if no date is found
 
 Content:
 ${versionPageResult.content.substring(0, 10000)}`
@@ -809,16 +820,20 @@ ${versionPageResult.content.substring(0, 10000)}`
                     { role: 'user', content: notesPrompt }
                   ],
                   temperature: 0.3,
+                  response_format: { type: 'json_object' }
                 })
               })
 
               if (notesResponse.ok) {
                 const notesData = await notesResponse.json()
-                const enrichedNotes = notesData.choices[0].message.content
+                const enrichedData = JSON.parse(notesData.choices[0].message.content)
 
-                // Update the version notes
-                version.notes = enrichedNotes
-                console.log(`    ✅ Enriched notes (${enrichedNotes.length} chars)`)
+                // Update the version notes and release date
+                version.notes = enrichedData.notes
+                if (enrichedData.releaseDate && enrichedData.releaseDate !== 'null') {
+                  version.releaseDate = enrichedData.releaseDate
+                }
+                console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars)${enrichedData.releaseDate ? ', date: ' + enrichedData.releaseDate : ''}`)
               }
             } else {
               console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping`)
@@ -1170,8 +1185,19 @@ Better to be honest about uncertainty than to provide incorrect data.`
             const versionPageResult = await fetchWebpageContent(individualVersionUrl, 15000, false)
 
             if (versionPageResult.content.length > 500) {
-              // Extract just the release notes content using the AI
-              const notesPrompt = `Extract ONLY the release notes content from this disguise Designer version ${version.version} page. Return the notes in clean markdown format. Do not include the version number or title, just the actual release notes content.
+              // Extract release notes and release date using the AI
+              const notesPrompt = `Extract the release notes and release date from this disguise Designer version ${version.version} page.
+
+Return ONLY valid JSON in this exact format:
+{
+  "releaseDate": "YYYY-MM-DD or null if not found",
+  "notes": "Release notes content in clean markdown format"
+}
+
+IMPORTANT:
+- For releaseDate: Look for text like "Released: October 8th 2025" and convert to YYYY-MM-DD format (e.g., "2025-10-08")
+- For notes: Include the full release notes content but NOT the version number or title
+- Return null for releaseDate if no date is found
 
 Content:
 ${versionPageResult.content.substring(0, 10000)}`
@@ -1188,16 +1214,20 @@ ${versionPageResult.content.substring(0, 10000)}`
                     { role: 'user', content: notesPrompt }
                   ],
                   temperature: 0.3,
+                  response_format: { type: 'json_object' }
                 })
               })
 
               if (notesResponse.ok) {
                 const notesData = await notesResponse.json()
-                const enrichedNotes = notesData.choices[0].message.content
+                const enrichedData = JSON.parse(notesData.choices[0].message.content)
 
-                // Update the version notes
-                version.notes = enrichedNotes
-                console.log(`    ✅ Enriched notes (${enrichedNotes.length} chars)`)
+                // Update the version notes and release date
+                version.notes = enrichedData.notes
+                if (enrichedData.releaseDate && enrichedData.releaseDate !== 'null') {
+                  version.releaseDate = enrichedData.releaseDate
+                }
+                console.log(`    ✅ Enriched notes (${enrichedData.notes.length} chars)${enrichedData.releaseDate ? ', date: ' + enrichedData.releaseDate : ''}`)
               }
             } else {
               console.log(`    ⚠️  Content too short (${versionPageResult.content.length} chars), skipping`)
