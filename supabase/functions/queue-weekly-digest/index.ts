@@ -236,7 +236,7 @@ serve(async (req) => {
         const softwareIds = trackedSoftwareRaw.map(t => t.software_id)
         const { data: softwareDetails } = await supabase
           .from('software')
-          .select('id, name, manufacturer, category, current_version')
+          .select('id, name, manufacturer, category, current_version, release_date')
           .in('id', softwareIds)
 
         // Map software details
@@ -257,18 +257,19 @@ serve(async (req) => {
 
         const { data: versionHistory } = await supabase
           .from('software_version_history')
-          .select('software_id, version, release_date, detected_at, notes, type')
+          .select('software_id, version, previous_version, release_date, detected_at, notes, type')
           .in('software_id', softwareIds)
-          .or(`release_date.gte.${sinceDate.toISOString()},and(release_date.is.null,detected_at.gte.${sinceDate.toISOString()})`)
-          .order('release_date', { ascending: false, nullsLast: true })
+          .eq('newsletter_verified', true)
+          .gte('detected_at', sinceDate.toISOString())
           .order('detected_at', { ascending: false })
 
-        // Build updates list - only show the LATEST version per software
+        // Build updates list - only show versions matching software's CURRENT version
+        // This ensures we only notify about what's currently installed, not intermediate updates
         const updates: any[] = []
         const processedSoftware = new Set<string>()
 
         for (const history of (versionHistory || [])) {
-          // Skip if we already processed this software (we only want the latest version)
+          // Skip if we already processed this software (we only want one update per software)
           if (processedSoftware.has(history.software_id)) {
             continue
           }
@@ -278,12 +279,28 @@ serve(async (req) => {
 
           const software = tracked.software as any
 
+          // CRITICAL: Only include versions that match the software's current version
+          // This prevents notifying about intermediate versions that are no longer current
+          if (history.version !== software.current_version) {
+            continue
+          }
+
+          // Check if this version is newer than what we last notified about
+          // This prevents sending duplicate notifications
+          if (tracked.last_notified_version && !isNewerVersion(history.version, tracked.last_notified_version)) {
+            continue
+          }
+
+          // Use the previous_version from the database (what it upgraded FROM)
+          // Fallback to last notified version if previous_version is missing
+          const oldVersion = history.previous_version || tracked.last_notified_version || 'N/A'
+
           updates.push({
             software_id: history.software_id,
             name: software.name,
             manufacturer: software.manufacturer,
             category: software.category,
-            old_version: tracked.last_notified_version || '?.?.?',
+            old_version: oldVersion,
             new_version: history.version,
             release_date: history.release_date || history.detected_at,
             release_notes: history.notes || [],
