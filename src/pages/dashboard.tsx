@@ -3,7 +3,7 @@ import { Metrics } from '@/components/dashboard/metrics';
 import { TrackedSoftware } from '@/components/dashboard/tracked-software';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
-import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks';
+import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks/hooks';
 
 export function Dashboard() {
   const { updates } = useRecentUpdates();

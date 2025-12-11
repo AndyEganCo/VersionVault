@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
-import { useSoftwareRequests } from '@/lib/software/requests-hooks';
-import { useFeatureRequests } from '@/lib/software/feature-requests-hooks';
+import { useSoftwareRequests } from '@/lib/software/hooks/requests-hooks';
+import { useFeatureRequests } from '@/lib/software/hooks/feature-requests-hooks';
 import { useAuth } from '@/contexts/auth-context';
 import { LoadingPage } from '@/components/loading';
 import { Button } from '@/components/ui/button';

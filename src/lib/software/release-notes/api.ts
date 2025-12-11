@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { ReleaseNote } from './types';
+import type { ReleaseNote } from '../types';
 
 export async function getReleaseNotes(softwareId: string): Promise<ReleaseNote[]> {
   const { data, error } = await supabase

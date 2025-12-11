@@ -7,7 +7,7 @@ import { SoftwareTable } from '@/components/admin/software/software-table';
 import { SoftwareFilters } from '@/components/admin/software/software-filters';
 import { AddSoftwareDialog } from '@/components/admin/software/add-software-dialog';
 import { VersionReviewWidget } from '@/components/admin/version-review-widget';
-import { useSoftwareList } from '@/lib/software/hooks';
+import { useSoftwareList } from '@/lib/software/hooks/hooks';
 
 export function AdminSoftware() {
   const { software, loading, refreshSoftware } = useSoftwareList();
