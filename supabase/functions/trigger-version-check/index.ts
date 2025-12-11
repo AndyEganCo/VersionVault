@@ -209,6 +209,8 @@ serve(async (req) => {
                   release_date: releaseDate,
                   notes: notesArray,
                   type: version.type,
+                  newsletter_verified: true,  // Auto-verify new versions for newsletters
+                  verified_at: new Date().toISOString(),
                   created_at: new Date().toISOString()
                 })
 

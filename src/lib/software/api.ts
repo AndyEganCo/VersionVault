@@ -175,6 +175,8 @@ export async function addVersionHistory(softwareId: string, data: {
           release_date: releaseDate,
           notes: notesArray,
           type: data.type,
+          newsletter_verified: true,  // Auto-verify new versions for newsletters
+          verified_at: now,
           detected_at: now,
           created_at: now
         });
