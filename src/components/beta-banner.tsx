@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { X, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 
 const BETA_BANNER_STORAGE_KEY = 'versionvault-beta-banner-dismissed';
 
@@ -31,7 +32,9 @@ export function BetaBanner() {
           Thanks for trying VersionVault Beta! This is currently free during our beta period.
           When we officially launch, a small subscription fee will apply to support ongoing development.
           Have feedback?{' '}
-          <span className="font-semibold">Click the user menu to request features or software you'd like to see included.</span>
+          <Link to="/requests" className="font-semibold underline hover:text-blue-600 transition-colors">
+            Click here to request features or software you'd like to see included.
+          </Link>
         </AlertDescription>
         <Button
           variant="ghost"
