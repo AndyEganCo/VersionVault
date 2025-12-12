@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 type AuthContextType = {
   user: User | null;
   isAdmin: boolean;
+  isPremium: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -44,6 +46,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
+    // Check if user is premium
+    const checkPremium = async (userId: string | undefined) => {
+      if (!userId) {
+        setIsPremium(false);
+        return;
+      }
+
+      try {
+        const { data } = await supabase
+          .from('premium_users')
+          .select('user_id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        setIsPremium(!!data);
+      } catch (err) {
+        console.error('[Auth] Premium check failed:', err);
+        setIsPremium(false);
+      }
+    };
+
     // Initialize auth session
     const initAuth = async () => {
       try {
@@ -57,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setUser(data.session?.user ?? null);
         await checkAdmin(data.session?.user?.id);
+        await checkPremium(data.session?.user?.id);
         setLoading(false);
       } catch (err) {
         console.error('[Auth] Initialization error:', err);
@@ -65,15 +89,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Listen for auth state changes
-    // IMPORTANT: Don't await checkAdmin here - it would block the auth state change
+    // IMPORTANT: Don't await checkAdmin/checkPremium here - it would block the auth state change
     // and prevent getSession from completing, causing the app to freeze on refresh
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
 
       if (session?.user?.id) {
         checkAdmin(session.user.id); // Fire and forget
+        checkPremium(session.user.id); // Fire and forget
       } else {
         setIsAdmin(false);
+        setIsPremium(false);
       }
     });
     subscription = data.subscription;
@@ -90,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{
       user,
       isAdmin,
+      isPremium,
       loading,
       signIn: async (email, password) => {
         const { error } = await supabase.auth.signInWithPassword({ email, password });

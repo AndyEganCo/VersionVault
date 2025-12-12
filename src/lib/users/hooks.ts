@@ -6,6 +6,7 @@ export interface User {
   readonly email: string;
   readonly created_at: string;
   readonly isAdmin: boolean;
+  readonly isPremium: boolean;
 }
 
 export function useUsers() {
@@ -31,16 +32,25 @@ export function useUsers() {
 
       if (adminError) throw adminError;
 
-      // Create a Set of admin user IDs for fast lookup
+      // Get all premium user IDs
+      const { data: premiumData, error: premiumError } = await supabase
+        .from('premium_users')
+        .select('user_id');
+
+      if (premiumError) throw premiumError;
+
+      // Create Sets for fast lookup
       const adminIds = new Set(adminData?.map(a => a.user_id) || []);
+      const premiumIds = new Set(premiumData?.map(p => p.user_id) || []);
 
       // Combine the data
-      const usersWithAdminStatus = (usersData || []).map(user => ({
+      const usersWithStatus = (usersData || []).map(user => ({
         ...user,
-        isAdmin: adminIds.has(user.id)
+        isAdmin: adminIds.has(user.id),
+        isPremium: premiumIds.has(user.id)
       }));
 
-      setUsers(usersWithAdminStatus);
+      setUsers(usersWithStatus);
     } catch (error) {
       console.error('Error fetching users:', error);
       setUsers([]);
@@ -80,10 +90,44 @@ export function useUsers() {
     }
   };
 
+  const togglePremium = async (userId: string, isPremium: boolean) => {
+    try {
+      if (isPremium) {
+        // Add to premium_users (use upsert to avoid duplicate key errors)
+        const { error } = await supabase
+          .from('premium_users')
+          .upsert([{ user_id: userId }], { onConflict: 'user_id', ignoreDuplicates: true });
+
+        if (error) throw error;
+      } else {
+        // Remove from premium_users
+        const { error } = await supabase
+          .from('premium_users')
+          .delete()
+          .eq('user_id', userId);
+
+        if (error) throw error;
+      }
+
+      // Update local state optimistically without refetching
+      setUsers(prevUsers =>
+        prevUsers.map(u =>
+          u.id === userId ? { ...u, isPremium } : u
+        )
+      );
+
+      return true;
+    } catch (error) {
+      console.error('Error toggling premium status:', error);
+      return false;
+    }
+  };
+
   return {
     users,
     loading,
     refreshUsers: fetchUsers,
     toggleAdmin,
+    togglePremium,
   };
 }

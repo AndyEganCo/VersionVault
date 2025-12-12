@@ -6,9 +6,11 @@ import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { BetaBanner } from '@/components/beta-banner';
 import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks';
+import { useAuth } from '@/contexts/auth-context';
 import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks/hooks';
 
 export function Dashboard() {
+  const { isPremium } = useAuth();
   const { updates } = useRecentUpdates();
   const { trackedIds, refreshTracking } = useTrackedSoftware();
 
@@ -35,8 +37,8 @@ export function Dashboard() {
       />
       <div className="space-y-12">
         <TrackedSoftware refreshTracking={refreshTracking} trackedIds={trackedIds} />
-        {/* Ad placement - will be hidden for premium subscribers in future */}
-        <AdBanner />
+        {/* Ad placement - hidden for premium subscribers */}
+        <AdBanner show={!isPremium} />
         <RecentUpdates refreshTracking={refreshTracking} trackedIds={trackedIds} />
       </div>
     </PageLayout>
