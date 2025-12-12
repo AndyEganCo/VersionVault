@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import type { Software } from './types';
+import type { Software } from '../types';
 
 export async function updateSoftwareVersion(
   id: string, 

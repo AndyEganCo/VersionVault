@@ -13,9 +13,9 @@ import { Pencil, Trash2, Check, FileText, ArrowUpDown, ArrowUp, ArrowDown, Exter
 import { EditSoftwareDialog } from './edit-software-dialog';
 import { DeleteSoftwareDialog } from './delete-software-dialog';
 import type { Software } from '@/lib/software/types';
-import { updateSoftware } from '@/lib/software/admin';
+import { updateSoftware } from '@/lib/software/api/admin';
 import { toast } from 'sonner';
-import { addVersionHistory } from '@/lib/software/api';
+import { addVersionHistory } from '@/lib/software/api/api';
 import { formatDate } from '@/lib/date';
 import { ReleaseNotesDialog } from './release-notes-dialog';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';

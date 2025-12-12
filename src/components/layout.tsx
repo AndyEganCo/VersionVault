@@ -4,6 +4,7 @@ import { ModeToggle } from '@/components/mode-toggle';
 import { Terminal, Menu, User, Bell, LogOut, FileText, Moon, Sun } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from './ui/button';
+import { Badge } from './ui/badge';
 import { Link, NavLink } from 'react-router-dom';
 import { PageContainer } from './layout/page-container';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
@@ -28,6 +29,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Link to="/" className="flex items-center gap-2">
               <Terminal className="h-5 w-5" />
               <span className="font-semibold">VersionVault</span>
+              <Badge variant="outline" className="text-blue-500 border-blue-500/50">
+                BETA
+              </Badge>
             </Link>
 
             {/* Desktop Navigation */}

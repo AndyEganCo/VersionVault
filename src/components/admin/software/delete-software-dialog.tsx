@@ -10,7 +10,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { deleteSoftware } from '@/lib/software/admin';
+import { deleteSoftware } from '@/lib/software/api/admin';
 import type { Software } from '@/lib/software/types';
 
 type DeleteSoftwareDialogProps = {

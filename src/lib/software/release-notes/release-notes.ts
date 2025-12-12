@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { ReleaseNote } from './types';
+import type { ReleaseNote } from '../types';
 
 /**
  * Compare two version strings (semantic versioning)

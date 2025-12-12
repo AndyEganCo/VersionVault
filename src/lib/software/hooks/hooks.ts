@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { getAllSoftwareWithVersions } from './queries';
-import { getTrackedSoftware } from './tracking';
+import { getAllSoftwareWithVersions } from '../queries/queries';
+import { getTrackedSoftware } from '../utils/tracking';
 import { toast } from 'sonner';
-import type { Software } from './types';
+import type { Software } from '../types';
 
 export function useSoftwareList() {
   const [software, setSoftware] = useState<Software[]>([]);

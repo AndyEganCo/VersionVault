@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { useSoftwareList } from '@/lib/software/hooks';
-import { toggleSoftwareTracking } from '@/lib/software/tracking';
+import { useSoftwareList } from '@/lib/software/hooks/hooks';
+import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
 import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
