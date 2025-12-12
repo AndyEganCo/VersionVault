@@ -6,7 +6,7 @@ import { Home } from '@/pages/home';
 import { Login } from '@/pages/login';
 import { Software } from '@/pages/software';
 import { SoftwareRequests } from '@/pages/software-requests';
-import { UserLayout } from '@/components/layouts/user-layout';
+import { UserLayout } from '@/components/layout/user-layout';
 import { UserProfile } from '@/pages/user/profile';
 import { UserSettings } from '@/pages/user/settings';
 import { UserNotifications } from '@/pages/user/notifications';

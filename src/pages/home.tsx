@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { Navigate } from 'react-router-dom';
-import { useSoftwareList } from '@/lib/software/hooks';
+import { useSoftwareList } from '@/lib/software/hooks/hooks';
 import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

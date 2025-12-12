@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { addVersionHistory, getVersionHistory, deleteVersionHistory } from '@/lib/software/api';
+import { addVersionHistory, getVersionHistory, deleteVersionHistory } from '@/lib/software/api/api';
 import type { Software } from '@/lib/software/types';
 import { Plus, Upload, Link as LinkIcon, Loader2, Check, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { extractVersionsFromURL, extractVersionsFromPDF, type ExtractedVersion } from '@/lib/software/release-notes/extractor';

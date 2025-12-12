@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { Software } from './types';
+import type { Software } from '../types';
 import { toast } from 'sonner';
 
 type SubscriptionCallback = (software: Software) => void;

@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { softwareCategories } from '@/data/software-categories';
 import { toast } from 'sonner';
-import { updateSoftware } from '@/lib/software/admin';
+import { updateSoftware } from '@/lib/software/api/admin';
 import type { Software } from '@/lib/software/types';
 
 type EditSoftwareDialogProps = {
