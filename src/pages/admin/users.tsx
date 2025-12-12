@@ -20,12 +20,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Shield, ShieldOff } from 'lucide-react';
+import { Shield, ShieldOff, Crown } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function AdminUsers() {
   const { user } = useAuth();
-  const { users, loading, toggleAdmin } = useUsers();
+  const { users, loading, toggleAdmin, togglePremium } = useUsers();
 
   const handleToggleAdmin = async (userId: string, currentIsAdmin: boolean) => {
     // Prevent removing last admin
@@ -52,6 +52,22 @@ export function AdminUsers() {
         );
       } else {
         toast.error('Failed to update admin status');
+      }
+    }
+  };
+
+  const handleTogglePremium = async (userId: string, currentIsPremium: boolean) => {
+    const action = currentIsPremium ? 'remove premium status from' : 'grant premium status to';
+    if (confirm(`Are you sure you want to ${action} this user?`)) {
+      const success = await togglePremium(userId, !currentIsPremium);
+      if (success) {
+        toast.success(
+          currentIsPremium
+            ? 'Premium status removed'
+            : 'Premium status granted'
+        );
+      } else {
+        toast.error('Failed to update premium status');
       }
     }
   };
@@ -108,35 +124,54 @@ export function AdminUsers() {
                       {new Date(userItem.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      {userItem.isAdmin ? (
-                        <Badge className="bg-blue-500">
-                          <Shield className="h-3 w-3 mr-1" />
-                          Admin
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">User</Badge>
-                      )}
+                      <div className="flex gap-2">
+                        {userItem.isAdmin ? (
+                          <Badge className="bg-blue-500">
+                            <Shield className="h-3 w-3 mr-1" />
+                            Admin
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">User</Badge>
+                        )}
+                        {userItem.isPremium && (
+                          <Badge className="bg-amber-500">
+                            <Crown className="h-3 w-3 mr-1" />
+                            Premium
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant={userItem.isAdmin ? 'destructive' : 'default'}
-                        onClick={() => handleToggleAdmin(userItem.id, userItem.isAdmin)}
-                        disabled={userItem.id === user.id}
-                        className="flex items-center gap-1 ml-auto"
-                      >
-                        {userItem.isAdmin ? (
-                          <>
-                            <ShieldOff className="h-4 w-4" />
-                            Remove Admin
-                          </>
-                        ) : (
-                          <>
-                            <Shield className="h-4 w-4" />
-                            Make Admin
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          size="sm"
+                          variant={userItem.isAdmin ? 'destructive' : 'default'}
+                          onClick={() => handleToggleAdmin(userItem.id, userItem.isAdmin)}
+                          disabled={userItem.id === user.id}
+                          className="flex items-center gap-1"
+                        >
+                          {userItem.isAdmin ? (
+                            <>
+                              <ShieldOff className="h-4 w-4" />
+                              Remove Admin
+                            </>
+                          ) : (
+                            <>
+                              <Shield className="h-4 w-4" />
+                              Make Admin
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={userItem.isPremium ? 'outline' : 'default'}
+                          onClick={() => handleTogglePremium(userItem.id, userItem.isPremium)}
+                          className="flex items-center gap-1"
+                        >
+                          <Crown className="h-4 w-4" />
+                          {userItem.isPremium ? 'Remove Premium' : 'Make Premium'}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
