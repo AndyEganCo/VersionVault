@@ -124,7 +124,7 @@ export function AdminUsers() {
                       {new Date(userItem.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center">
                         {userItem.isAdmin ? (
                           <Badge className="bg-blue-500">
                             <Shield className="h-3 w-3 mr-1" />
@@ -133,45 +133,41 @@ export function AdminUsers() {
                         ) : (
                           <Badge variant="secondary">User</Badge>
                         )}
-                        {userItem.isPremium && (
-                          <Badge className="bg-amber-500">
-                            <Crown className="h-3 w-3 mr-1" />
-                            Premium
-                          </Badge>
-                        )}
+                        <button
+                          onClick={() => handleTogglePremium(userItem.id, userItem.isPremium)}
+                          className="transition-colors hover:scale-110 transition-transform"
+                          title={userItem.isPremium ? 'Remove Premium' : 'Make Premium'}
+                        >
+                          <Crown
+                            className={`h-5 w-5 ${
+                              userItem.isPremium
+                                ? 'fill-amber-500 text-amber-500'
+                                : 'text-muted-foreground/30 hover:text-amber-500/50'
+                            }`}
+                          />
+                        </button>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex gap-2 justify-end">
-                        <Button
-                          size="sm"
-                          variant={userItem.isAdmin ? 'destructive' : 'default'}
-                          onClick={() => handleToggleAdmin(userItem.id, userItem.isAdmin)}
-                          disabled={userItem.id === user.id}
-                          className="flex items-center gap-1"
-                        >
-                          {userItem.isAdmin ? (
-                            <>
-                              <ShieldOff className="h-4 w-4" />
-                              Remove Admin
-                            </>
-                          ) : (
-                            <>
-                              <Shield className="h-4 w-4" />
-                              Make Admin
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={userItem.isPremium ? 'outline' : 'default'}
-                          onClick={() => handleTogglePremium(userItem.id, userItem.isPremium)}
-                          className="flex items-center gap-1"
-                        >
-                          <Crown className="h-4 w-4" />
-                          {userItem.isPremium ? 'Remove Premium' : 'Make Premium'}
-                        </Button>
-                      </div>
+                      <Button
+                        size="sm"
+                        variant={userItem.isAdmin ? 'destructive' : 'default'}
+                        onClick={() => handleToggleAdmin(userItem.id, userItem.isAdmin)}
+                        disabled={userItem.id === user.id}
+                        className="flex items-center gap-1"
+                      >
+                        {userItem.isAdmin ? (
+                          <>
+                            <ShieldOff className="h-4 w-4" />
+                            Remove Admin
+                          </>
+                        ) : (
+                          <>
+                            <Shield className="h-4 w-4" />
+                            Make Admin
+                          </>
+                        )}
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))
