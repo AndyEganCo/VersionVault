@@ -57,18 +57,15 @@ export function AdminUsers() {
   };
 
   const handleTogglePremium = async (userId: string, currentIsPremium: boolean) => {
-    const action = currentIsPremium ? 'remove premium status from' : 'grant premium status to';
-    if (confirm(`Are you sure you want to ${action} this user?`)) {
-      const success = await togglePremium(userId, !currentIsPremium);
-      if (success) {
-        toast.success(
-          currentIsPremium
-            ? 'Premium status removed'
-            : 'Premium status granted'
-        );
-      } else {
-        toast.error('Failed to update premium status');
-      }
+    const success = await togglePremium(userId, !currentIsPremium);
+    if (success) {
+      toast.success(
+        currentIsPremium
+          ? 'Premium status removed'
+          : 'Premium status granted'
+      );
+    } else {
+      toast.error('Failed to update premium status');
     }
   };
 
