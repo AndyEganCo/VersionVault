@@ -109,7 +109,13 @@ export function useUsers() {
         if (error) throw error;
       }
 
-      await fetchUsers();
+      // Update local state optimistically without refetching
+      setUsers(prevUsers =>
+        prevUsers.map(u =>
+          u.id === userId ? { ...u, isPremium } : u
+        )
+      );
+
       return true;
     } catch (error) {
       console.error('Error toggling premium status:', error);
