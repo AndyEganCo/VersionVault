@@ -33,7 +33,7 @@ export function BetaBanner() {
           When we officially launch, a small subscription fee will apply to support ongoing development.
           Have feedback?{' '}
           <Link to="/requests" className="font-semibold underline hover:text-blue-600 transition-colors">
-            Click here to request features or software you'd like to see included.
+            Click the user menu to request features or software you'd like to see included.
           </Link>
         </AlertDescription>
         <Button
