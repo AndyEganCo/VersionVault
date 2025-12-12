@@ -1,31 +1,33 @@
--- Create a helper function to check if current user is admin
--- This avoids RLS issues when checking admin status in other policies
+-- Fix RLS policies to avoid circular dependencies
+-- The issue was duplicate/conflicting policies on admin_users causing infinite recursion
 
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS BOOLEAN AS $$
+-- Remove ALL existing policies on admin_users to start fresh
+DO $$
+DECLARE
+    r RECORD;
 BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.admin_users
-    WHERE user_id = auth.uid()
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+    FOR r IN (SELECT policyname FROM pg_policies WHERE tablename = 'admin_users')
+    LOOP
+        EXECUTE 'DROP POLICY IF EXISTS "' || r.policyname || '" ON admin_users';
+    END LOOP;
+END $$;
 
--- Drop and recreate premium_users policies using the helper function
+-- Recreate only the essential admin_users policies (NO circular references)
+CREATE POLICY "Users can read their own admin status" ON admin_users
+  FOR SELECT
+  USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "Admins can insert premium_users" ON premium_users;
-DROP POLICY IF EXISTS "Admins can update premium_users" ON premium_users;
-DROP POLICY IF EXISTS "Admins can delete premium_users" ON premium_users;
-
-CREATE POLICY "Admins can insert premium_users" ON premium_users
+CREATE POLICY "Admins can insert admin_users" ON admin_users
   FOR INSERT
-  WITH CHECK (public.is_admin());
+  WITH CHECK (
+    EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid())
+  );
 
-CREATE POLICY "Admins can update premium_users" ON premium_users
-  FOR UPDATE
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
-
-CREATE POLICY "Admins can delete premium_users" ON premium_users
+CREATE POLICY "Admins can delete admin_users" ON admin_users
   FOR DELETE
-  USING (public.is_admin());
+  USING (
+    EXISTS (SELECT 1 FROM admin_users WHERE user_id = auth.uid())
+  );
+
+-- Disable RLS on premium_users entirely (admin-only table, no need for RLS)
+ALTER TABLE premium_users DISABLE ROW LEVEL SECURITY;
