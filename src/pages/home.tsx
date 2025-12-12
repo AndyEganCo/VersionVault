@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { BetaBanner } from '@/components/beta-banner';
-import { ExternalLink, Search } from 'lucide-react';
+import { ExternalLink, Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
 import type { Software } from '@/lib/software/types';
 
 export function Home() {
@@ -36,44 +36,209 @@ export function Home() {
 
   return (
     <div className="flex flex-col px-4 py-8">
-      <div className="mx-auto max-w-6xl w-full space-y-12">
+      <div className="mx-auto max-w-6xl w-full space-y-16">
         {/* Hero Section */}
-        <div className="text-center space-y-6">
+        <div className="text-center space-y-6 pt-8">
           <div className="space-y-4">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-              Welcome to VersionVault
+            <h1 className="text-4xl font-bold tracking-tight sm:text-6xl bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+              Never Miss a Software Update
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Track and manage software versions with ease. Stay up-to-date with the latest releases.
+            <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
+              Track the software you care about and receive automatic email notifications when new versions are released.
+              Stay current without the constant checking.
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
-            <Button asChild size="lg">
+            <Button asChild size="lg" className="text-lg px-8 py-6">
               <Link to="/signup">
-                Get Started
+                Get Started Free
               </Link>
             </Button>
-            <Button asChild variant="outline" size="lg">
+            <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6">
               <Link to="/login">
                 Sign In
               </Link>
             </Button>
           </div>
+
+          <p className="text-sm text-muted-foreground">
+            Get started free. No credit card required.
+          </p>
         </div>
 
         {/* Beta Banner */}
         <BetaBanner />
 
+        {/* Features Section */}
+        <div className="space-y-8">
+          <div className="text-center space-y-2">
+            <h2 className="text-3xl font-bold">How VersionVault Helps You</h2>
+            <p className="text-muted-foreground">
+              Everything you need to stay on top of your software stack
+            </p>
+          </div>
+
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {/* Email Notifications */}
+            <Card className="border-2">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Mail className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl">Email Digests</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Get beautiful email summaries of version updates on <strong>your schedule</strong> - daily, weekly, or monthly.
+                  Only for the software you're tracking.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* AI-Powered Tracking */}
+            <Card className="border-2">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Sparkles className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl">AI-Powered</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Our AI automatically detects version updates from official websites,
+                  so you get accurate information directly from the source.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Growing Catalog */}
+            <Card className="border-2">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Search className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl">{software.length}+ Apps Tracked</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  From development tools to creative software, we track popular applications across all categories.
+                  Don't see one? Request it!
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Time Saving */}
+            <Card className="border-2">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Clock className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl">Save Time</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Stop manually checking websites for updates. Let VersionVault do the work while you
+                  focus on what matters.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Customizable Notifications */}
+            <Card className="border-2">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <Bell className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl">Your Preferences</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  Choose your email frequency, timezone preferences, and which software to track.
+                  Complete control over your notifications.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Version History */}
+            <Card className="border-2">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-lg">
+                    <History className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl">Version History</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground">
+                  View complete version history and release notes for all tracked software.
+                  Never wonder when an update was released.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* How It Works */}
+        <div className="space-y-8 bg-muted/30 rounded-lg p-8 md:p-12">
+          <div className="text-center space-y-2">
+            <h2 className="text-3xl font-bold">How It Works</h2>
+            <p className="text-muted-foreground">Get started in three simple steps</p>
+          </div>
+
+          <div className="grid gap-8 md:grid-cols-3">
+            <div className="text-center space-y-3">
+              <div className="mx-auto w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xl font-bold">
+                1
+              </div>
+              <h3 className="text-xl font-semibold">Browse & Select</h3>
+              <p className="text-muted-foreground">
+                Search our growing catalog and click "Track" on the software you use
+              </p>
+            </div>
+
+            <div className="text-center space-y-3">
+              <div className="mx-auto w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xl font-bold">
+                2
+              </div>
+              <h3 className="text-xl font-semibold">Set Your Preferences</h3>
+              <p className="text-muted-foreground">
+                Choose your email frequency - daily updates, weekly summaries, or monthly digests
+              </p>
+            </div>
+
+            <div className="text-center space-y-3">
+              <div className="mx-auto w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xl font-bold">
+                3
+              </div>
+              <h3 className="text-xl font-semibold">Stay Informed</h3>
+              <p className="text-muted-foreground">
+                Receive beautiful email notifications when your tracked software releases new versions
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Software Browse Section */}
         {!softwareLoading && software.length > 0 && (
           <div className="space-y-6">
             <div className="text-center">
-              <h2 className="text-2xl font-semibold mb-2">
-                Browse {software.length} Software Applications
+              <h2 className="text-3xl font-bold mb-2">
+                Explore {software.length}+ Tracked Applications
               </h2>
-              <p className="text-muted-foreground">
-                Search and explore software you can start tracking
+              <p className="text-muted-foreground text-lg">
+                Preview our catalog and see what you can start tracking today
               </p>
             </div>
 
@@ -135,15 +300,22 @@ export function Home() {
               </div>
             )}
 
-            <div className="text-center pt-4">
-              <p className="text-sm text-muted-foreground mb-4">
-                Sign up to start tracking software and get notified of updates
-              </p>
-              <Button asChild>
-                <Link to="/signup">
-                  Create Free Account
-                </Link>
-              </Button>
+            <div className="text-center pt-8">
+              <div className="bg-primary/5 rounded-lg p-8 space-y-4">
+                <h3 className="text-2xl font-bold">Ready to Stay Updated?</h3>
+                <p className="text-muted-foreground max-w-2xl mx-auto">
+                  Join VersionVault today and never miss another important software update.
+                  Start tracking your favorite applications in seconds.
+                </p>
+                <Button asChild size="lg" className="text-lg px-8 py-6">
+                  <Link to="/signup">
+                    Create Your Free Account
+                  </Link>
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  No credit card required • Start free • Upgrade anytime
+                </p>
+              </div>
             </div>
           </div>
         )}
