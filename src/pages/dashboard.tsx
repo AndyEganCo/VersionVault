@@ -1,6 +1,7 @@
 import { RecentUpdates } from '@/components/recent-updates';
 import { Metrics } from '@/components/dashboard/metrics';
 import { TrackedSoftware } from '@/components/dashboard/tracked-software';
+import { AdBanner } from '@/components/dashboard/ad-banner';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks';
@@ -31,6 +32,8 @@ export function Dashboard() {
       />
       <div className="space-y-12">
         <TrackedSoftware refreshTracking={refreshTracking} trackedIds={trackedIds} />
+        {/* Ad placement - will be hidden for premium subscribers in future */}
+        <AdBanner />
         <RecentUpdates refreshTracking={refreshTracking} trackedIds={trackedIds} />
       </div>
     </PageLayout>
