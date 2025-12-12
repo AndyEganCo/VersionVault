@@ -5,7 +5,6 @@ import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { BetaBanner } from '@/components/beta-banner';
 import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks';
-=======
 import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks/hooks';
 
 export function Dashboard() {
