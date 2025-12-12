@@ -36,10 +36,10 @@ export function Dashboard() {
         thisWeeksUpdates={thisWeeksUpdates}
       />
       <div className="space-y-12">
-        <TrackedSoftware refreshTracking={refreshTracking} trackedIds={trackedIds} />
+        <RecentUpdates refreshTracking={refreshTracking} trackedIds={trackedIds} />
         {/* Ad placement - hidden for premium subscribers */}
         <AdBanner show={!isPremium} />
-        <RecentUpdates refreshTracking={refreshTracking} trackedIds={trackedIds} />
+        <TrackedSoftware refreshTracking={refreshTracking} trackedIds={trackedIds} />
       </div>
     </PageLayout>
   );
