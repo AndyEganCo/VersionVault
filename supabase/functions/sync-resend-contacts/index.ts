@@ -112,12 +112,14 @@ serve(async (req) => {
       errors: [],
     }
 
-    // Get or create audience ID (you may want to configure this)
+    // Get or create audience ID (required for Resend Audiences API)
     const audienceId = Deno.env.get('RESEND_AUDIENCE_ID')
 
     if (!audienceId) {
-      console.log('⚠️  No RESEND_AUDIENCE_ID configured. Contacts will be created without audience.')
+      throw new Error('RESEND_AUDIENCE_ID environment variable is required')
     }
+
+    console.log(`📋 Syncing ${authUsers.users.length} users to audience ${audienceId}`)
 
     // Sync each user
     for (const user of authUsers.users) {
@@ -126,25 +128,38 @@ serve(async (req) => {
       const settings = settingsMap.get(user.id)
 
       try {
-        // Prepare contact data
-        const contactData: any = {
-          email: user.email,
-          first_name: user.user_metadata?.first_name || '',
-          last_name: user.user_metadata?.last_name || '',
-          unsubscribed: settings?.email_notifications === false,
+        // Add contact to audience using Resend REST API
+        const response = await fetch(`https://api.resend.com/audiences/${audienceId}/contacts`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: user.email,
+            first_name: user.user_metadata?.first_name || '',
+            last_name: user.user_metadata?.last_name || '',
+            unsubscribed: settings?.email_notifications === false,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.text()
+          throw new Error(`Resend API error: ${response.status} - ${errorData}`)
         }
 
-        // Create or update contact in Resend
-        if (audienceId) {
-          // Add to specific audience
-          await resend.contacts.create({
-            audienceId: audienceId,
-            ...contactData,
+        const data = await response.json()
+
+        // Update sync tracking in Supabase
+        await supabase
+          .from('resend_contact_sync')
+          .update({
+            sync_status: 'synced',
+            resend_contact_id: data.id,
+            last_synced_at: new Date().toISOString(),
+            last_error: null,
           })
-        } else {
-          // Create contact without audience (requires Resend Contacts API)
-          await resend.contacts.create(contactData)
-        }
+          .eq('user_id', user.id)
 
         result.synced++
         console.log(`✅ Synced ${user.email}`)
@@ -155,6 +170,16 @@ serve(async (req) => {
           email: user.email!,
           error: error.message,
         })
+
+        // Update sync tracking with error
+        await supabase
+          .from('resend_contact_sync')
+          .update({
+            sync_status: 'failed',
+            last_error: error.message,
+          })
+          .eq('user_id', user.id)
+
         console.error(`❌ Failed to sync ${user.email}: ${error.message}`)
       }
     }
