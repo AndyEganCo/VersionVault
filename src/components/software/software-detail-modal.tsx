@@ -17,8 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getVersionHistory } from '@/lib/software/api';
-import { toggleSoftwareTracking } from '@/lib/software/tracking';
+import { getVersionHistory } from '@/lib/software/api/api';
+import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
 import { formatDate, formatRelativeDate } from '@/lib/date';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';

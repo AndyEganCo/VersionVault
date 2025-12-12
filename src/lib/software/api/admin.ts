@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import type { Software } from './types';
+import type { Software } from '../types';
 
 type NewSoftware = {
   id: string;

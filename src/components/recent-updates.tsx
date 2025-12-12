@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { UpdateList } from './recent-updates/update-list';
-import { useRecentUpdates } from '@/lib/software/hooks';
+import { useRecentUpdates } from '@/lib/software/hooks/hooks';
 
 interface RecentUpdatesProps {
   refreshTracking: () => Promise<void>;

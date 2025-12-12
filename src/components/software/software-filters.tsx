@@ -8,7 +8,7 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import type { SortOption } from '@/types/software';
-import { getCategories } from '@/lib/software/queries';
+import { getCategories } from '@/lib/software/queries/queries';
 
 interface SoftwareFiltersProps {
   search: string;

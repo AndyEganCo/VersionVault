@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getVersionHistory } from "@/lib/software/api";
+import { getVersionHistory } from "@/lib/software/api/api";
 import { formatDate } from "@/lib/date";
 import type { VersionHistory } from "@/lib/software/types";
 

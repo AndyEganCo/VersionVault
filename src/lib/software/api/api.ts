@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { Software, SoftwareUpdate } from './types';
+import { Software, SoftwareUpdate } from '../types';
 import { toast } from 'sonner';
 
 interface ApiResponse<T> {
