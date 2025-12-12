@@ -3,6 +3,7 @@ import { Metrics } from '@/components/dashboard/metrics';
 import { TrackedSoftware } from '@/components/dashboard/tracked-software';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
+import { BetaBanner } from '@/components/beta-banner';
 import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks';
 
 export function Dashboard() {
@@ -25,6 +26,7 @@ export function Dashboard() {
         title="Dashboard"
         description="Monitor your software updates and activity"
       />
+      <BetaBanner />
       <Metrics
         trackedCount={trackedCount}
         thisWeeksUpdates={thisWeeksUpdates}

@@ -8,6 +8,7 @@ import { SoftwareDetailModal } from '@/components/software/software-detail-modal
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { BetaBanner } from '@/components/beta-banner';
 import { ExternalLink, Search } from 'lucide-react';
 import type { Software } from '@/lib/software/types';
 
@@ -59,6 +60,9 @@ export function Home() {
             </Button>
           </div>
         </div>
+
+        {/* Beta Banner */}
+        <BetaBanner />
 
         {/* Software Browse Section */}
         {!softwareLoading && software.length > 0 && (
