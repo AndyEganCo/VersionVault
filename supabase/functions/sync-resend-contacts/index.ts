@@ -121,8 +121,12 @@ serve(async (req) => {
 
     console.log(`📋 Syncing ${authUsers.users.length} users to audience ${audienceId}`)
 
-    // Sync each user
-    for (const user of authUsers.users) {
+    // Helper function to delay between requests (rate limiting)
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+    // Sync each user with rate limiting (max 2 requests/second = 500ms delay)
+    for (let i = 0; i < authUsers.users.length; i++) {
+      const user = authUsers.users[i]
       if (!user.email) continue
 
       const settings = settingsMap.get(user.id)
@@ -181,6 +185,11 @@ serve(async (req) => {
           .eq('user_id', user.id)
 
         console.error(`❌ Failed to sync ${user.email}: ${error.message}`)
+      }
+
+      // Rate limit: Wait 600ms between requests (allows ~1.6 req/sec, safely under 2 req/sec limit)
+      if (i < authUsers.users.length - 1) {
+        await delay(600)
       }
     }
 
