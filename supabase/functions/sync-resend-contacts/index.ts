@@ -84,17 +84,37 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const resend = new Resend(resendApiKey)
 
-    // Get all users with their settings
-    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers()
+    // Get only PENDING syncs (users that need to be synced)
+    const { data: pendingSyncs, error: syncError } = await supabase
+      .from('resend_contact_sync')
+      .select('user_id, email')
+      .eq('sync_status', 'pending')
 
-    if (authError) {
-      throw new Error(`Failed to fetch users: ${authError.message}`)
+    if (syncError) {
+      throw new Error(`Failed to fetch pending syncs: ${syncError.message}`)
     }
 
-    // Get user settings
+    if (!pendingSyncs || pendingSyncs.length === 0) {
+      console.log('✅ No pending syncs found')
+      return new Response(
+        JSON.stringify({
+          totalUsers: 0,
+          synced: 0,
+          failed: 0,
+          errors: []
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log(`📋 Found ${pendingSyncs.length} pending syncs`)
+
+    // Get user settings for pending users only
+    const userIds = pendingSyncs.map(s => s.user_id)
     const { data: userSettings, error: settingsError } = await supabase
       .from('user_settings')
       .select('user_id, email_notifications, notification_frequency, timezone')
+      .in('user_id', userIds)
 
     if (settingsError) {
       throw new Error(`Failed to fetch user settings: ${settingsError.message}`)
@@ -105,8 +125,20 @@ serve(async (req) => {
       (userSettings || []).map(s => [s.user_id, s])
     )
 
+    // Get user metadata from auth.users for the pending users
+    const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers()
+
+    if (authError) {
+      throw new Error(`Failed to fetch users: ${authError.message}`)
+    }
+
+    // Create map of user metadata
+    const userMetadataMap = new Map(
+      authUsers.map(u => [u.id, u.user_metadata])
+    )
+
     const result: SyncResult = {
-      totalUsers: authUsers.users.length,
+      totalUsers: pendingSyncs.length,
       synced: 0,
       failed: 0,
       errors: [],
@@ -119,17 +151,18 @@ serve(async (req) => {
       throw new Error('RESEND_AUDIENCE_ID environment variable is required')
     }
 
-    console.log(`📋 Syncing ${authUsers.users.length} users to audience ${audienceId}`)
+    console.log(`📋 Syncing ${pendingSyncs.length} pending users to audience ${audienceId}`)
 
     // Helper function to delay between requests (rate limiting)
     const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-    // Sync each user with rate limiting (max 2 requests/second = 500ms delay)
-    for (let i = 0; i < authUsers.users.length; i++) {
-      const user = authUsers.users[i]
-      if (!user.email) continue
+    // Sync each pending user with rate limiting (max 2 requests/second = 500ms delay)
+    for (let i = 0; i < pendingSyncs.length; i++) {
+      const pendingSync = pendingSyncs[i]
+      if (!pendingSync.email) continue
 
-      const settings = settingsMap.get(user.id)
+      const settings = settingsMap.get(pendingSync.user_id)
+      const userMetadata = userMetadataMap.get(pendingSync.user_id) || {}
 
       try {
         // Add contact to audience using Resend REST API
@@ -140,9 +173,9 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            email: user.email,
-            first_name: user.user_metadata?.first_name || '',
-            last_name: user.user_metadata?.last_name || '',
+            email: pendingSync.email,
+            first_name: userMetadata.first_name || '',
+            last_name: userMetadata.last_name || '',
             unsubscribed: settings?.email_notifications === false,
           }),
         })
@@ -163,15 +196,15 @@ serve(async (req) => {
             last_synced_at: new Date().toISOString(),
             last_error: null,
           })
-          .eq('user_id', user.id)
+          .eq('user_id', pendingSync.user_id)
 
         result.synced++
-        console.log(`✅ Synced ${user.email}`)
+        console.log(`✅ Synced ${pendingSync.email}`)
 
       } catch (error) {
         result.failed++
         result.errors.push({
-          email: user.email!,
+          email: pendingSync.email,
           error: error.message,
         })
 
@@ -182,13 +215,13 @@ serve(async (req) => {
             sync_status: 'failed',
             last_error: error.message,
           })
-          .eq('user_id', user.id)
+          .eq('user_id', pendingSync.user_id)
 
-        console.error(`❌ Failed to sync ${user.email}: ${error.message}`)
+        console.error(`❌ Failed to sync ${pendingSync.email}: ${error.message}`)
       }
 
       // Rate limit: Wait 600ms between requests (allows ~1.6 req/sec, safely under 2 req/sec limit)
-      if (i < authUsers.users.length - 1) {
+      if (i < pendingSyncs.length - 1) {
         await delay(600)
       }
     }
