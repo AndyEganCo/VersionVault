@@ -93,10 +93,10 @@ export function useUsers() {
   const togglePremium = async (userId: string, isPremium: boolean) => {
     try {
       if (isPremium) {
-        // Add to premium_users
+        // Add to premium_users (use upsert to avoid duplicate key errors)
         const { error } = await supabase
           .from('premium_users')
-          .insert([{ user_id: userId }]);
+          .upsert([{ user_id: userId }], { onConflict: 'user_id', ignoreDuplicates: true });
 
         if (error) throw error;
       } else {
