@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { BetaBanner } from '@/components/beta-banner';
-import { ExternalLink, Search, Mail, Bell, Sparkles, Clock, Check } from 'lucide-react';
+import { ExternalLink, Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
 import type { Software } from '@/lib/software/types';
 
 export function Home() {
@@ -63,7 +63,7 @@ export function Home() {
           </div>
 
           <p className="text-sm text-muted-foreground">
-            Free forever. No credit card required.
+            Get started free. No credit card required.
           </p>
         </div>
 
@@ -116,14 +116,14 @@ export function Home() {
               </CardContent>
             </Card>
 
-            {/* 200+ Applications */}
+            {/* Growing Catalog */}
             <Card className="border-2">
               <CardHeader>
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-primary/10 rounded-lg">
                     <Search className="h-6 w-6 text-primary" />
                   </div>
-                  <CardTitle className="text-xl">200+ Apps Tracked</CardTitle>
+                  <CardTitle className="text-xl">{software.length}+ Apps Tracked</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
@@ -170,20 +170,20 @@ export function Home() {
               </CardContent>
             </Card>
 
-            {/* Free to Use */}
+            {/* Version History */}
             <Card className="border-2">
               <CardHeader>
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-primary/10 rounded-lg">
-                    <Check className="h-6 w-6 text-primary" />
+                    <History className="h-6 w-6 text-primary" />
                   </div>
-                  <CardTitle className="text-xl">Free Forever</CardTitle>
+                  <CardTitle className="text-xl">Version History</CardTitle>
                 </div>
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground">
-                  All core features are completely free. Track unlimited software and receive
-                  email notifications at no cost.
+                  View complete version history and release notes for all tracked software.
+                  Never wonder when an update was released.
                 </p>
               </CardContent>
             </Card>
@@ -204,7 +204,7 @@ export function Home() {
               </div>
               <h3 className="text-xl font-semibold">Browse & Select</h3>
               <p className="text-muted-foreground">
-                Search our catalog of 200+ applications and click "Track" on the ones you use
+                Search our growing catalog and click "Track" on the software you use
               </p>
             </div>
 
@@ -313,7 +313,7 @@ export function Home() {
                   </Link>
                 </Button>
                 <p className="text-xs text-muted-foreground">
-                  No credit card required • Free forever • Cancel anytime
+                  No credit card required • Start free • Upgrade anytime
                 </p>
               </div>
             </div>
