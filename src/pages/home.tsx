@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Navigate } from 'react-router-dom';
 import { useSoftwareList } from '@/lib/software/hooks/hooks';
 import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
+import { AdBanner } from '@/components/dashboard/ad-banner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -154,6 +155,9 @@ export function Home() {
             software={selectedSoftware}
           />
         )}
+
+        {/* Ad at bottom of page */}
+        <AdBanner />
       </div>
     </div>
   );
