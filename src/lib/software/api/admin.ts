@@ -47,6 +47,21 @@ export async function deleteSoftware(id: string): Promise<void> {
     throw versionError;
   }
 
+  // Delete all tracked_software records for this software
+  const { error: trackingError } = await supabase
+    .from('tracked_software')
+    .delete()
+    .eq('software_id', id);
+
+  if (trackingError) {
+    console.error('Error deleting tracked software records:', {
+      message: trackingError.message,
+      code: trackingError.code,
+      details: trackingError.details,
+    });
+    throw trackingError;
+  }
+
   // Then delete the software itself
   const { error } = await supabase
     .from('software')
