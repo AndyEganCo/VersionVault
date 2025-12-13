@@ -41,6 +41,7 @@ export interface NewsletterLogRow {
   email_type: string;
   subject: string | null;
   software_updates: SoftwareUpdateSummary[];
+  new_software?: NewSoftwareSummary[];
   resend_id: string | null;
   status: LogStatus;
   opened_at: string | null;
@@ -96,6 +97,15 @@ export interface SoftwareUpdateSummary {
   update_type: 'major' | 'minor' | 'patch';
 }
 
+export interface NewSoftwareSummary {
+  software_id: string;
+  name: string;
+  manufacturer: string;
+  category: string;
+  initial_version: string;
+  added_date: string;
+}
+
 export interface SponsorData {
   name: string;
   tagline: string | null;
@@ -107,6 +117,7 @@ export interface SponsorData {
 
 export interface NewsletterPayload {
   updates: SoftwareUpdateSummary[];
+  newSoftware?: NewSoftwareSummary[];
   sponsor?: SponsorData | null;
   all_quiet_message?: string;
   unsubscribe_token?: string;
@@ -117,6 +128,7 @@ export interface WeeklyDigestProps {
   userName: string;
   userEmail: string;
   updates: SoftwareUpdateSummary[];
+  newSoftware?: NewSoftwareSummary[];
   sponsor?: SponsorData | null;
   unsubscribeUrl: string;
   preferencesUrl: string;
