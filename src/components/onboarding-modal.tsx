@@ -164,18 +164,15 @@ export function OnboardingModal() {
   const canContinueFromStep1 = name.trim().length >= 2;
   const canContinueFromStep2 = manualTrackedCount >= 1;
 
+  const handleClose = () => {
+    // Mark as complete so it doesn't show again
+    localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
+    setIsOpen(false);
+  };
+
   return (
-    <Dialog
-      open={isOpen}
-      onOpenChange={() => {
-        // Prevent closing - onboarding is required
-      }}
-    >
-      <DialogContent
-        className="sm:max-w-2xl max-h-[85vh] overflow-y-auto"
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-      >
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         {/* Step 1: Welcome + Name */}
         {currentStep === 1 && (
           <>
