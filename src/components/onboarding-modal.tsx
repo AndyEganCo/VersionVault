@@ -148,18 +148,25 @@ export function OnboardingModal() {
 
     setLoading(true);
     try {
-      // Save display name and mark onboarding as complete
-      const { error: nameError } = await supabase
+      // Save display name to auth user metadata
+      const { error: metadataError } = await supabase.auth.updateUser({
+        data: { display_name: name }
+      });
+
+      if (metadataError) {
+        console.error('Error saving user metadata:', metadataError);
+        throw metadataError;
+      }
+
+      // Mark onboarding as complete in public.users
+      const { error: onboardingError } = await supabase
         .from('users')
-        .update({
-          display_name: name,
-          show_onboarding: false
-        })
+        .update({ show_onboarding: false })
         .eq('id', user.id);
 
-      if (nameError) {
-        console.error('Error saving display name:', nameError);
-        throw nameError;
+      if (onboardingError) {
+        console.error('Error updating onboarding status:', onboardingError);
+        throw onboardingError;
       }
 
       // Save digest frequency
@@ -188,19 +195,23 @@ export function OnboardingModal() {
   const canContinueFromStep1 = name.trim().length >= 2;
   const canContinueFromStep2 = manualTrackedCount >= 1;
 
-  const handleClose = () => {
+  const handleClose = async () => {
     // Mark onboarding as dismissed (won't show again)
     if (user) {
-      supabase
-        .from('users')
-        .update({
-          display_name: name.trim() || 'User',
-          show_onboarding: false
-        })
-        .eq('id', user.id)
-        .then(() => {
-          console.log('Onboarding dismissed');
+      // Save display name to auth metadata if they entered one
+      if (name.trim()) {
+        await supabase.auth.updateUser({
+          data: { display_name: name.trim() }
         });
+      }
+
+      // Mark onboarding as complete
+      await supabase
+        .from('users')
+        .update({ show_onboarding: false })
+        .eq('id', user.id);
+
+      console.log('Onboarding dismissed');
     }
     setIsOpen(false);
   };
