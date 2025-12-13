@@ -589,6 +589,22 @@ export function AdminNewsletter() {
       // Get active sponsor
       const activeSponsor = sponsors.find(s => s.is_active);
 
+      // Get new software added in the last 7 days
+      const { data: newSoftwareData } = await supabase
+        .from('software')
+        .select('id, name, manufacturer, category, current_version, created_at')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .order('created_at', { ascending: false });
+
+      const newSoftware = (newSoftwareData || []).map(s => ({
+        software_id: s.id,
+        name: s.name,
+        manufacturer: s.manufacturer,
+        category: s.category,
+        initial_version: s.current_version || 'N/A',
+        added_date: s.created_at,
+      }));
+
       // Add to queue
       const { error: queueError } = await supabase
         .from('newsletter_queue')
@@ -598,6 +614,7 @@ export function AdminNewsletter() {
           email_type: 'weekly_digest',
           payload: {
             updates: sampleUpdates,
+            newSoftware: newSoftware.length > 0 ? newSoftware : undefined,
             sponsor: activeSponsor ? {
               name: activeSponsor.name,
               tagline: activeSponsor.tagline,
