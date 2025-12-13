@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Package, Bell, CheckCircle2, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Sparkles, Package, Bell, CheckCircle2, Loader2, User, Globe } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { getSoftwareList } from '@/lib/software/api/api';
 import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
@@ -10,16 +12,31 @@ import { Software } from '@/lib/software/types';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
 
 const ONBOARDING_STORAGE_KEY = 'versionvault-onboarding-complete';
 
 type Step = 1 | 2 | 3 | 4;
+
+// Common US timezones
+const TIMEZONES = [
+  { value: 'America/New_York', label: 'Eastern Time (ET)' },
+  { value: 'America/Chicago', label: 'Central Time (CT)' },
+  { value: 'America/Denver', label: 'Mountain Time (MT)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
+  { value: 'America/Anchorage', label: 'Alaska Time (AKT)' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HT)' },
+  { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
+];
 
 export function OnboardingModal() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
+
+  // Step 1 state
+  const [name, setName] = useState('');
 
   // Step 2 state
   const [software, setSoftware] = useState<Software[]>([]);
@@ -28,6 +45,7 @@ export function OnboardingModal() {
 
   // Step 3 state
   const [selectedFrequency, setSelectedFrequency] = useState<NotificationFrequency>('weekly');
+  const [selectedTimezone, setSelectedTimezone] = useState('America/New_York');
 
   useEffect(() => {
     // Check if onboarding was completed
@@ -106,11 +124,27 @@ export function OnboardingModal() {
 
     setLoading(true);
     try {
+      // Save display name to users table
+      const { error: nameError } = await supabase
+        .from('users')
+        .update({ display_name: name })
+        .eq('id', user.id);
+
+      if (nameError) {
+        console.error('Error saving display name:', nameError);
+        throw nameError;
+      }
+
       // Save digest frequency
       await updateUserSettings(user.id, 'notificationFrequency', selectedFrequency);
 
+      // Save timezone
+      await updateUserSettings(user.id, 'timezone', selectedTimezone);
+
       // Mark onboarding as complete
       localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
+
+      toast.success('Setup complete! Welcome to VersionVault.');
 
       // Close modal
       setIsOpen(false);
@@ -122,31 +156,32 @@ export function OnboardingModal() {
     }
   };
 
-  const handleDismiss = () => {
-    localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
-    setIsOpen(false);
-  };
-
   // Don't count VersionVault in the manual tracking requirement
   const manualTrackedCount = versionVaultId
     ? Array.from(trackedIds).filter(id => id !== versionVaultId).length
     : trackedIds.size;
 
+  const canContinueFromStep1 = name.trim().length >= 2;
   const canContinueFromStep2 = manualTrackedCount >= 1;
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) {
-        handleDismiss();
-      }
-    }}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-        {/* Step 1: Welcome */}
+    <Dialog
+      open={isOpen}
+      onOpenChange={() => {
+        // Prevent closing - onboarding is required
+      }}
+    >
+      <DialogContent
+        className="sm:max-w-2xl max-h-[85vh] overflow-y-auto"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
+        {/* Step 1: Welcome + Name */}
         {currentStep === 1 && (
           <>
             <DialogHeader>
               <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/10">
-                <Sparkles className="h-8 w-8 text-blue-500" />
+                <User className="h-8 w-8 text-blue-500" />
               </div>
               <DialogTitle className="text-center text-2xl">
                 Welcome to VersionVault!
@@ -156,6 +191,23 @@ export function OnboardingModal() {
               <p className="text-center text-muted-foreground">
                 Let's get you set up in just a few quick steps.
               </p>
+
+              <div className="space-y-2">
+                <Label htmlFor="name">What should we call you?</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="Enter your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoFocus
+                  minLength={2}
+                />
+                <p className="text-xs text-muted-foreground">
+                  We'll use this to personalize your experience.
+                </p>
+              </div>
+
               <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
                 <p className="text-sm">
                   <strong>Here's the quick version:</strong>
@@ -166,16 +218,10 @@ export function OnboardingModal() {
                   <li>Choose daily, weekly, or monthly digests</li>
                 </ul>
               </div>
-              <p className="text-sm text-center text-muted-foreground">
-                Send any feedback or request software that isn't there and I'll add it.
-              </p>
             </div>
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" onClick={handleDismiss}>
-                Skip Setup
-              </Button>
-              <Button onClick={handleNext}>
-                Let's Get Started
+            <div className="flex justify-center">
+              <Button onClick={handleNext} disabled={!canContinueFromStep1}>
+                Continue
               </Button>
             </div>
           </>
@@ -245,10 +291,7 @@ export function OnboardingModal() {
                 {manualTrackedCount === 0 && ' (track at least 1 to continue)'}
               </p>
             </div>
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" onClick={handleDismiss}>
-                Skip
-              </Button>
+            <div className="flex justify-center">
               <Button onClick={handleNext} disabled={!canContinueFromStep2}>
                 Continue
               </Button>
@@ -256,7 +299,7 @@ export function OnboardingModal() {
           </>
         )}
 
-        {/* Step 3: Digest Frequency */}
+        {/* Step 3: Digest Frequency + Timezone */}
         {currentStep === 3 && (
           <>
             <DialogHeader>
@@ -264,46 +307,68 @@ export function OnboardingModal() {
                 <Bell className="h-8 w-8 text-purple-500" />
               </div>
               <DialogTitle className="text-center text-2xl">
-                How Often Should We Email You?
+                Email Preferences
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <p className="text-center text-muted-foreground">
-                Choose how frequently you'd like to receive update notifications.
-              </p>
-
+            <div className="space-y-6 py-4">
+              {/* Frequency Selection */}
               <div className="space-y-3">
-                {[
-                  { value: 'daily' as NotificationFrequency, label: 'Daily', desc: 'Get updates every day' },
-                  { value: 'weekly' as NotificationFrequency, label: 'Weekly', desc: 'Updates once a week (recommended)' },
-                  { value: 'monthly' as NotificationFrequency, label: 'Monthly', desc: 'Monthly digest of updates' },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => setSelectedFrequency(option.value)}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                      selectedFrequency === option.value
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{option.label}</p>
-                        <p className="text-sm text-muted-foreground">{option.desc}</p>
+                <Label>How often should we email you?</Label>
+                <div className="space-y-2">
+                  {[
+                    { value: 'daily' as NotificationFrequency, label: 'Daily', desc: 'Get updates every day' },
+                    { value: 'weekly' as NotificationFrequency, label: 'Weekly', desc: 'Updates once a week (recommended)' },
+                    { value: 'monthly' as NotificationFrequency, label: 'Monthly', desc: 'Monthly digest of updates' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setSelectedFrequency(option.value)}
+                      className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                        selectedFrequency === option.value
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{option.label}</p>
+                          <p className="text-sm text-muted-foreground">{option.desc}</p>
+                        </div>
+                        {selectedFrequency === option.value && (
+                          <CheckCircle2 className="h-5 w-5 text-primary" />
+                        )}
                       </div>
-                      {selectedFrequency === option.value && (
-                        <CheckCircle2 className="h-5 w-5 text-primary" />
-                      )}
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Timezone Selection */}
+              <div className="space-y-3">
+                <Label htmlFor="timezone">
+                  <div className="flex items-center gap-2">
+                    <Globe className="h-4 w-4" />
+                    <span>Your Timezone</span>
+                  </div>
+                </Label>
+                <select
+                  id="timezone"
+                  value={selectedTimezone}
+                  onChange={(e) => setSelectedTimezone(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {TIMEZONES.map((tz) => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  We'll send emails based on your timezone.
+                </p>
               </div>
             </div>
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" onClick={handleDismiss}>
-                Skip
-              </Button>
+            <div className="flex justify-center">
               <Button onClick={handleNext}>
                 Continue
               </Button>
@@ -319,7 +384,7 @@ export function OnboardingModal() {
                 <CheckCircle2 className="h-8 w-8 text-green-500" />
               </div>
               <DialogTitle className="text-center text-2xl">
-                You're All Set!
+                You're All Set, {name}!
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -339,6 +404,13 @@ export function OnboardingModal() {
                   <p className="font-medium text-sm mb-2">🔔 Email Digest</p>
                   <p className="text-sm text-muted-foreground">
                     {selectedFrequency.charAt(0).toUpperCase() + selectedFrequency.slice(1)} updates
+                  </p>
+                </div>
+
+                <div className="rounded-lg border bg-muted/50 p-4">
+                  <p className="font-medium text-sm mb-2">🌍 Timezone</p>
+                  <p className="text-sm text-muted-foreground">
+                    {TIMEZONES.find(tz => tz.value === selectedTimezone)?.label}
                   </p>
                 </div>
               </div>
