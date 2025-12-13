@@ -98,8 +98,8 @@ export function useUsers() {
           .from('premium_users')
           .insert([{ user_id: userId }]);
 
-        // Ignore duplicate key errors (user already premium)
-        if (error && error.code !== '23505') throw error;
+        // Ignore duplicate key errors (user already premium) - code 23505 or PGRST09
+        if (error && error.code !== '23505' && error.code !== 'PGRST09') throw error;
       } else {
         // Remove from premium_users
         const { error } = await supabase
