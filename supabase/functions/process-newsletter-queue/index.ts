@@ -211,6 +211,7 @@ serve(async (req) => {
             email_type: item.email_type,
             subject,
             software_updates: item.payload.updates || [],
+            new_software: item.payload.newSoftware || [],
             resend_id: emailData?.id,
             status: 'sent',
           })
@@ -290,6 +291,8 @@ function generateEmailContent(item: any): { subject: string; html: string; text:
   const updates = item.payload.updates || []
   const updateCount = updates.length
   const hasUpdates = updateCount > 0
+  const newSoftware = item.payload.newSoftware || []
+  const newSoftwareCount = newSoftware.length
   const sponsor = item.payload.sponsor
   const allQuietMessage = item.payload.all_quiet_message
   const trackedCount = item.payload.tracked_count || 0
@@ -329,6 +332,8 @@ function generateEmailContent(item: any): { subject: string; html: string; text:
     userName,
     updates,
     hasUpdates,
+    newSoftware,
+    newSoftwareCount,
     sponsor,
     allQuietMessage,
     trackedCount,
@@ -342,6 +347,8 @@ function generateEmailContent(item: any): { subject: string; html: string; text:
     userName,
     updates,
     hasUpdates,
+    newSoftware,
+    newSoftwareCount,
     allQuietMessage,
     trackedCount,
     digestLabel,
@@ -353,7 +360,7 @@ function generateEmailContent(item: any): { subject: string; html: string; text:
 
 // Generate HTML email content
 function generateHtmlEmail(data: any): string {
-  const { userName, updates, hasUpdates, sponsor, allQuietMessage, trackedCount, userId, digestLabel, timePeriod } = data
+  const { userName, updates, hasUpdates, newSoftware, newSoftwareCount, sponsor, allQuietMessage, trackedCount, userId, digestLabel, timePeriod } = data
 
   const updateCards = updates.map((u: any) => `
     <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
@@ -374,6 +381,21 @@ function generateHtmlEmail(data: any): string {
           ${u.release_notes.length > 2 ? `<div style="font-size: 12px; color: #525252; font-style: italic;">+${u.release_notes.length - 2} more changes</div>` : ''}
         </div>
       ` : ''}
+    </div>
+  `).join('')
+
+  const newSoftwareCards = newSoftware.map((s: any) => `
+    <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 16px; font-weight: 600; color: #ffffff;">${s.name}</span>
+        <span style="font-size: 10px; font-weight: 600; color: #ffffff; background-color: #8b5cf6; padding: 3px 8px; border-radius: 4px;">NEW</span>
+      </div>
+      <div style="font-size: 13px; color: #a3a3a3; margin: 4px 0 12px 0;">${s.manufacturer} • ${s.category}</div>
+      <div style="font-size: 14px; font-family: monospace;">
+        <span style="color: #737373;">Version: </span>
+        <span style="color: #8b5cf6; font-weight: 600;">${s.initial_version}</span>
+      </div>
+      <div style="font-size: 12px; color: #525252; margin-top: 4px;">Added ${formatDate(s.added_date)}</div>
     </div>
   `).join('')
 
@@ -446,6 +468,15 @@ function generateHtmlEmail(data: any): string {
       </div>
     `}
 
+    ${newSoftwareCount > 0 ? `
+      <!-- New Software -->
+      <div style="padding: 24px 24px 0 24px;">
+        <div style="font-size: 18px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">🆕 New Software Added</div>
+        <div style="font-size: 13px; color: #a3a3a3; margin-bottom: 16px;">${newSoftwareCount} new ${newSoftwareCount === 1 ? 'app' : 'apps'} added to VersionVault ${timePeriod}</div>
+        ${newSoftwareCards}
+      </div>
+    ` : ''}
+
     ${sponsorHtml}
 
     <!-- Footer -->
@@ -468,7 +499,7 @@ function generateHtmlEmail(data: any): string {
 
 // Generate plain text email content
 function generateTextEmail(data: any): string {
-  const { userName, updates, hasUpdates, allQuietMessage, trackedCount, digestLabel, timePeriod } = data
+  const { userName, updates, hasUpdates, newSoftware, newSoftwareCount, allQuietMessage, trackedCount, digestLabel, timePeriod } = data
 
   let text = `>_ VersionVault - ${digestLabel}\n\n`
   text += `Hey ${userName},\n\n`
@@ -495,6 +526,18 @@ function generateTextEmail(data: any): string {
     text += `${allQuietMessage || "All quiet on the version front."}\n\n`
     text += `Watching ${trackedCount} app${trackedCount === 1 ? '' : 's'} for you.\n\n`
     text += `Open Dashboard: ${VERSIONVAULT_URL}/dashboard\n\n`
+  }
+
+  if (newSoftwareCount > 0) {
+    text += `🆕 NEW SOFTWARE ADDED\n\n`
+    text += `${newSoftwareCount} new ${newSoftwareCount === 1 ? 'app' : 'apps'} added to VersionVault ${timePeriod}:\n\n`
+
+    for (const s of newSoftware) {
+      text += `${s.name} (NEW)\n`
+      text += `${s.manufacturer} • ${s.category}\n`
+      text += `Version: ${s.initial_version}\n`
+      text += `Added ${formatDate(s.added_date)}\n\n`
+    }
   }
 
   text += `---\n`

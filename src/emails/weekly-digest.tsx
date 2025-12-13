@@ -11,6 +11,7 @@ import {
 import { Header } from './components/header';
 import { Footer } from './components/footer';
 import { UpdateCard } from './components/update-card';
+import { NewSoftwareCard } from './components/new-software-card';
 import { SponsorBlock } from './components/sponsor-block';
 import type { WeeklyDigestProps } from '../lib/newsletter/types';
 
@@ -18,12 +19,14 @@ export default function WeeklyDigest({
   userName,
   userEmail: _userEmail,
   updates,
+  newSoftware,
   sponsor,
   unsubscribeUrl,
   preferencesUrl,
   dashboardUrl,
 }: WeeklyDigestProps) {
   const updateCount = updates.length;
+  const newSoftwareCount = newSoftware?.length || 0;
   const previewText = updateCount > 0
     ? `${updateCount} update${updateCount === 1 ? '' : 's'} for your tracked software this week`
     : 'Your weekly software update digest';
@@ -69,6 +72,22 @@ export default function WeeklyDigest({
                   View all in dashboard →
                 </Link>
               </Text>
+            </Section>
+          )}
+
+          {/* New Software Section */}
+          {newSoftwareCount > 0 && (
+            <Section style={newSoftwareSection}>
+              <Text style={sectionHeading}>
+                🆕 New Software Added
+              </Text>
+              <Text style={sectionSubheading}>
+                {newSoftwareCount} new {newSoftwareCount === 1 ? 'app' : 'apps'} added to VersionVault this week
+              </Text>
+
+              {newSoftware!.map((software, index) => (
+                <NewSoftwareCard key={index} software={software} />
+              ))}
             </Section>
           )}
 
@@ -136,6 +155,24 @@ WeeklyDigest.PreviewProps = {
       release_date: '2025-12-01',
       release_notes: ['Complete UI redesign', 'New effects engine', 'Improved MIDI mapping'],
       update_type: 'major' as const,
+    },
+  ],
+  newSoftware: [
+    {
+      software_id: '4',
+      name: 'Companion',
+      manufacturer: 'Bitfocus',
+      category: 'Control Software',
+      initial_version: '3.2.0',
+      added_date: '2025-12-08',
+    },
+    {
+      software_id: '5',
+      name: 'TouchDesigner',
+      manufacturer: 'Derivative',
+      category: 'Visual Programming',
+      initial_version: '2023.11760',
+      added_date: '2025-12-07',
     },
   ],
   sponsor: {
@@ -217,4 +254,21 @@ const emptySubtext: React.CSSProperties = {
   fontSize: '14px',
   color: '#737373',
   margin: '0',
+};
+
+const newSoftwareSection: React.CSSProperties = {
+  padding: '24px 24px 0 24px',
+};
+
+const sectionHeading: React.CSSProperties = {
+  fontSize: '18px',
+  fontWeight: '600',
+  color: '#ffffff',
+  margin: '0 0 4px 0',
+};
+
+const sectionSubheading: React.CSSProperties = {
+  fontSize: '13px',
+  color: '#a3a3a3',
+  margin: '0 0 16px 0',
 };

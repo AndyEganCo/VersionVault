@@ -2,7 +2,7 @@
 // Generates personalized newsletter content for each user
 
 import { supabase } from '@/lib/supabase';
-import type { SoftwareUpdateSummary, SponsorData, NewsletterPayload } from './types';
+import type { SoftwareUpdateSummary, SponsorData, NewsletterPayload, NewSoftwareSummary } from './types';
 import { isNewerVersion, getUpdateType } from './version-compare';
 import { getRandomAllQuietMessage, MAX_UPDATES_PER_EMAIL } from './index';
 
@@ -206,19 +206,53 @@ export async function getActiveSponsor(): Promise<SponsorData | null> {
 }
 
 /**
+ * Get newly added software in the time period
+ */
+export async function getNewSoftware(
+  sinceDays: number = 7
+): Promise<NewSoftwareSummary[]> {
+  // Calculate the date cutoff
+  const sinceDate = new Date();
+  sinceDate.setDate(sinceDate.getDate() - sinceDays);
+
+  // Get software added in the time period
+  const { data: newSoftware, error } = await supabase
+    .from('software')
+    .select('id, name, manufacturer, category, current_version, created_at')
+    .gte('created_at', sinceDate.toISOString())
+    .order('created_at', { ascending: false });
+
+  if (error || !newSoftware) {
+    console.error('Failed to fetch new software:', error);
+    return [];
+  }
+
+  return newSoftware.map(software => ({
+    software_id: software.id,
+    name: software.name,
+    manufacturer: software.manufacturer,
+    category: software.category,
+    initial_version: software.current_version || 'N/A',
+    added_date: software.created_at,
+  }));
+}
+
+/**
  * Generate full newsletter payload for a user
  */
 export async function generateNewsletterPayload(
   userId: string,
   sinceDays: number = 7
 ): Promise<NewsletterPayload> {
-  const [digest, sponsor] = await Promise.all([
+  const [digest, sponsor, newSoftware] = await Promise.all([
     generateUserDigest(userId, sinceDays),
     getActiveSponsor(),
+    getNewSoftware(sinceDays),
   ]);
 
   return {
     updates: digest.updates,
+    newSoftware: newSoftware.length > 0 ? newSoftware : undefined,
     sponsor,
     all_quiet_message: digest.allQuietMessage,
   };
