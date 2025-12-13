@@ -127,7 +127,7 @@ export async function addVersionHistory(softwareId: string, data: {
       .select('id')
       .eq('software_id', softwareId)
       .eq('version', data.version)
-      .single();
+      .maybeSingle();
 
     const notesArray = typeof data.notes === 'string'
       ? data.notes.split('\n').filter(Boolean)
