@@ -5,7 +5,7 @@ import { AdBanner } from '@/components/dashboard/ad-banner';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { BetaBanner } from '@/components/beta-banner';
-import { WelcomeBox } from '@/components/welcome-box';
+import { OnboardingModal } from '@/components/onboarding-modal';
 import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks';
 import { useAuth } from '@/contexts/auth-context';
 import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks/hooks';
@@ -31,7 +31,7 @@ export function Dashboard() {
         title="Dashboard"
         description="Monitor your software updates and activity"
       />
-      <WelcomeBox />
+      <OnboardingModal />
       <BetaBanner />
       <Metrics
         trackedCount={trackedCount}
