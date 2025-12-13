@@ -48,13 +48,26 @@ export function OnboardingModal() {
   const [selectedTimezone, setSelectedTimezone] = useState('America/New_York');
 
   useEffect(() => {
-    // Only show for new users (flag set in auth-callback)
-    const isNewUser = localStorage.getItem('versionvault-new-user');
-    const onboardingComplete = localStorage.getItem(ONBOARDING_STORAGE_KEY);
+    const checkOnboarding = async () => {
+      if (!user) return;
 
-    if (isNewUser === 'true' && !onboardingComplete && user) {
-      setIsOpen(true);
-    }
+      // Check if user has completed onboarding by checking if they have a display_name
+      const { data: userData } = await supabase
+        .from('users')
+        .select('display_name')
+        .eq('id', user.id)
+        .single();
+
+      // Only show for new users who haven't completed onboarding
+      const isNewUser = localStorage.getItem('versionvault-new-user');
+      const hasDisplayName = userData?.display_name && userData.display_name.trim().length > 0;
+
+      if (isNewUser === 'true' && !hasDisplayName) {
+        setIsOpen(true);
+      }
+    };
+
+    checkOnboarding();
   }, [user]);
 
   useEffect(() => {
@@ -157,9 +170,7 @@ export function OnboardingModal() {
       // Save timezone
       await updateUserSettings(user.id, 'timezone', selectedTimezone);
 
-      // Mark onboarding as complete
-      localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
-      // Clear new user flag
+      // Clear new user flag (onboarding complete is tracked by display_name in DB)
       localStorage.removeItem('versionvault-new-user');
 
       toast.success('Setup complete! Welcome to VersionVault.');
@@ -183,8 +194,16 @@ export function OnboardingModal() {
   const canContinueFromStep2 = manualTrackedCount >= 1;
 
   const handleClose = () => {
-    // Mark as complete so it doesn't show again
-    localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
+    // If dismissed without completing, set a placeholder display_name so it doesn't show again
+    if (user && (!name || name.trim().length < 2)) {
+      supabase
+        .from('users')
+        .update({ display_name: 'User' })
+        .eq('id', user.id)
+        .then(() => {
+          console.log('Set default display name for dismissed onboarding');
+        });
+    }
     // Clear new user flag
     localStorage.removeItem('versionvault-new-user');
     setIsOpen(false);
