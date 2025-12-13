@@ -48,9 +48,11 @@ export function OnboardingModal() {
   const [selectedTimezone, setSelectedTimezone] = useState('America/New_York');
 
   useEffect(() => {
-    // Check if onboarding was completed
-    const isComplete = localStorage.getItem(ONBOARDING_STORAGE_KEY);
-    if (!isComplete && user) {
+    // Only show for new users (flag set in auth-callback)
+    const isNewUser = localStorage.getItem('versionvault-new-user');
+    const onboardingComplete = localStorage.getItem(ONBOARDING_STORAGE_KEY);
+
+    if (isNewUser === 'true' && !onboardingComplete && user) {
       setIsOpen(true);
     }
   }, [user]);
@@ -67,6 +69,20 @@ export function OnboardingModal() {
     try {
       const allSoftware = await getSoftwareList();
 
+      // Load existing tracked software for this user
+      let existingTrackedIds = new Set<string>();
+      if (user) {
+        const { data: tracked } = await supabase
+          .from('tracked_software')
+          .select('software_id')
+          .eq('user_id', user.id);
+
+        if (tracked) {
+          existingTrackedIds = new Set(tracked.map(t => t.software_id));
+          setTrackedIds(existingTrackedIds);
+        }
+      }
+
       // Find VersionVault
       const vv = allSoftware.find(s =>
         s.name.toLowerCase().includes('versionvault') ||
@@ -75,10 +91,10 @@ export function OnboardingModal() {
 
       if (vv) {
         setVersionVaultId(vv.id);
-        // Auto-track VersionVault
-        if (user) {
+        // Auto-track VersionVault if not already tracked
+        if (user && !existingTrackedIds.has(vv.id)) {
           await toggleSoftwareTracking(user.id, vv.id, true);
-          setTrackedIds(new Set([vv.id]));
+          setTrackedIds(prev => new Set([...prev, vv.id]));
         }
       }
 
@@ -143,6 +159,8 @@ export function OnboardingModal() {
 
       // Mark onboarding as complete
       localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
+      // Clear new user flag
+      localStorage.removeItem('versionvault-new-user');
 
       toast.success('Setup complete! Welcome to VersionVault.');
 
@@ -167,6 +185,8 @@ export function OnboardingModal() {
   const handleClose = () => {
     // Mark as complete so it doesn't show again
     localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
+    // Clear new user flag
+    localStorage.removeItem('versionvault-new-user');
     setIsOpen(false);
   };
 
