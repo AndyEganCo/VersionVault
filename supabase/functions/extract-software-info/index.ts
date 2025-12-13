@@ -1565,7 +1565,30 @@ serve(async (req) => {
       versionContent = versionContent.substring(0, 30000)
     }
 
+    // CRITICAL: Also limit mainWebsiteContent to prevent token limit errors
+    // Main website content is primarily used for manufacturer/category extraction
+    // which is typically found at the top of the page
+    const MAX_MAIN_CONTENT = 15000 // Conservative limit to stay within API token limits
+    if (mainWebsiteContent.length > MAX_MAIN_CONTENT) {
+      console.log(`📏 Truncating main website content from ${mainWebsiteContent.length} to ${MAX_MAIN_CONTENT} chars`)
+
+      // Try smart extraction first if we have a product name
+      if (name && mainWebsiteContent.length > 1000) {
+        const smartResult = extractSmartContent(mainWebsiteContent, name, MAX_MAIN_CONTENT)
+        mainWebsiteContent = smartResult.content
+        console.log(`  ✅ Used smart extraction (found product: ${smartResult.foundProduct})`)
+      } else {
+        // Otherwise just take the beginning (manufacturer/category usually at top)
+        mainWebsiteContent = mainWebsiteContent.substring(0, MAX_MAIN_CONTENT)
+        console.log(`  ✅ Used simple truncation`)
+      }
+    }
+
     // Log what we're actually sending to the AI
+    console.log(`\n=== FINAL CONTENT SIZES AFTER LIMITING ===`)
+    console.log(`Version content: ${versionContent.length} chars`)
+    console.log(`Main website content: ${mainWebsiteContent.length} chars`)
+    console.log(`Total: ${versionContent.length + mainWebsiteContent.length} chars (~${Math.ceil((versionContent.length + mainWebsiteContent.length) / 4)} tokens estimated)`)
     console.log(`\n=== VERSION CONTENT BEING SENT TO AI (first 1000 chars) ===`)
     console.log(versionContent.substring(0, 1000))
     console.log(`\n=== MAIN WEBSITE CONTENT BEING SENT TO AI (first 1000 chars) ===`)
