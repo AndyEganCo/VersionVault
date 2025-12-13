@@ -319,6 +319,22 @@ serve(async (req) => {
         // Show all updates (no limit)
         const hasUpdates = updates.length > 0
 
+        // Get new software added in the time period
+        const { data: newSoftwareData } = await supabase
+          .from('software')
+          .select('id, name, manufacturer, category, current_version, created_at')
+          .gte('created_at', sinceDate.toISOString())
+          .order('created_at', { ascending: false })
+
+        const newSoftware = (newSoftwareData || []).map(s => ({
+          software_id: s.id,
+          name: s.name,
+          manufacturer: s.manufacturer,
+          category: s.category,
+          initial_version: s.current_version || 'N/A',
+          added_date: s.created_at,
+        }))
+
         // Generate idempotency key
         const today = new Date().toISOString().split('T')[0]
         const idempotencyKey = `${sub.user_id}-${frequency}_digest-${today}`
@@ -330,6 +346,7 @@ serve(async (req) => {
         const emailType = hasUpdates ? `${frequency}_digest` : 'all_quiet'
         const payload = {
           updates: updates,
+          newSoftware: newSoftware.length > 0 ? newSoftware : undefined,
           sponsor: sponsorData,
           all_quiet_message: hasUpdates ? undefined : ALL_QUIET_MESSAGES[Math.floor(Math.random() * ALL_QUIET_MESSAGES.length)],
           tracked_count: trackedSoftware.length,
