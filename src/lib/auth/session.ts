@@ -14,21 +14,16 @@ export async function getActiveSession(): Promise<Session | null> {
 
 export async function clearSession(): Promise<void> {
   try {
-    // First clear all auth-related local storage
+    // Clear all auth-related local storage
     const authKeys = [
       'versionvault.auth.token',
       'supabase.auth.token'
     ];
     authKeys.forEach(key => localStorage.removeItem(key));
-    
-    // Then clear session state
-    await supabase.auth.signOut();
-    
-    // Finally sign out globally
-    const { error } = await supabase.auth.signOut({ 
-      scope: 'global' 
-    });
-    
+
+    // Sign out from local session
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+
     if (error) throw error;
   } catch (error) {
     console.error('Error clearing session:', error);
