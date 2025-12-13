@@ -14,8 +14,6 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
-const ONBOARDING_STORAGE_KEY = 'versionvault-onboarding-complete';
-
 type Step = 1 | 2 | 3 | 4;
 
 // Common US timezones
@@ -48,11 +46,23 @@ export function OnboardingModal() {
   const [selectedTimezone, setSelectedTimezone] = useState('America/New_York');
 
   useEffect(() => {
-    // Check if onboarding was completed
-    const isComplete = localStorage.getItem(ONBOARDING_STORAGE_KEY);
-    if (!isComplete && user) {
-      setIsOpen(true);
-    }
+    const checkOnboarding = async () => {
+      if (!user) return;
+
+      // Check if user should see onboarding (stored in database)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('show_onboarding')
+        .eq('id', user.id)
+        .single();
+
+      // Only show if show_onboarding is true
+      if (userData?.show_onboarding === true) {
+        setIsOpen(true);
+      }
+    };
+
+    checkOnboarding();
   }, [user]);
 
   useEffect(() => {
@@ -67,6 +77,20 @@ export function OnboardingModal() {
     try {
       const allSoftware = await getSoftwareList();
 
+      // Load existing tracked software for this user
+      let existingTrackedIds = new Set<string>();
+      if (user) {
+        const { data: tracked } = await supabase
+          .from('tracked_software')
+          .select('software_id')
+          .eq('user_id', user.id);
+
+        if (tracked) {
+          existingTrackedIds = new Set(tracked.map(t => t.software_id));
+          setTrackedIds(existingTrackedIds);
+        }
+      }
+
       // Find VersionVault
       const vv = allSoftware.find(s =>
         s.name.toLowerCase().includes('versionvault') ||
@@ -75,10 +99,10 @@ export function OnboardingModal() {
 
       if (vv) {
         setVersionVaultId(vv.id);
-        // Auto-track VersionVault
-        if (user) {
+        // Auto-track VersionVault if not already tracked
+        if (user && !existingTrackedIds.has(vv.id)) {
           await toggleSoftwareTracking(user.id, vv.id, true);
-          setTrackedIds(new Set([vv.id]));
+          setTrackedIds(prev => new Set([...prev, vv.id]));
         }
       }
 
@@ -124,10 +148,13 @@ export function OnboardingModal() {
 
     setLoading(true);
     try {
-      // Save display name to users table
+      // Save display name and mark onboarding as complete
       const { error: nameError } = await supabase
         .from('users')
-        .update({ display_name: name })
+        .update({
+          display_name: name,
+          show_onboarding: false
+        })
         .eq('id', user.id);
 
       if (nameError) {
@@ -140,9 +167,6 @@ export function OnboardingModal() {
 
       // Save timezone
       await updateUserSettings(user.id, 'timezone', selectedTimezone);
-
-      // Mark onboarding as complete
-      localStorage.setItem(ONBOARDING_STORAGE_KEY, 'true');
 
       toast.success('Setup complete! Welcome to VersionVault.');
 
@@ -164,18 +188,26 @@ export function OnboardingModal() {
   const canContinueFromStep1 = name.trim().length >= 2;
   const canContinueFromStep2 = manualTrackedCount >= 1;
 
+  const handleClose = () => {
+    // Mark onboarding as dismissed (won't show again)
+    if (user) {
+      supabase
+        .from('users')
+        .update({
+          display_name: name.trim() || 'User',
+          show_onboarding: false
+        })
+        .eq('id', user.id)
+        .then(() => {
+          console.log('Onboarding dismissed');
+        });
+    }
+    setIsOpen(false);
+  };
+
   return (
-    <Dialog
-      open={isOpen}
-      onOpenChange={() => {
-        // Prevent closing - onboarding is required
-      }}
-    >
-      <DialogContent
-        className="sm:max-w-2xl max-h-[85vh] overflow-y-auto"
-        onPointerDownOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
-      >
+    <Dialog open={isOpen} onOpenChange={handleClose}>
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         {/* Step 1: Welcome + Name */}
         {currentStep === 1 && (
           <>
