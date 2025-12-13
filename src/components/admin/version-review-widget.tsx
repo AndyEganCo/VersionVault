@@ -45,7 +45,7 @@ export function VersionReviewWidget() {
           )
         `)
         .eq('requires_manual_review', true)
-        .order('checked_at', { ascending: false })
+        .order('detected_at', { ascending: false })
         .limit(10);
 
       if (error) throw error;
