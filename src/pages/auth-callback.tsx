@@ -32,10 +32,7 @@ export function AuthCallback() {
           // Successfully verified and logged in
           setStatus('success');
 
-          // Mark as new user for welcome box
-          localStorage.setItem('versionvault-new-user', 'true');
-
-          // Redirect to dashboard
+          // Redirect to dashboard (onboarding modal will show based on DB flag)
           setTimeout(() => {
             navigate('/dashboard', { replace: true });
           }, 1500);

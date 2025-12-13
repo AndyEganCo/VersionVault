@@ -14,8 +14,6 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
-const ONBOARDING_STORAGE_KEY = 'versionvault-onboarding-complete';
-
 type Step = 1 | 2 | 3 | 4;
 
 // Common US timezones
@@ -51,18 +49,15 @@ export function OnboardingModal() {
     const checkOnboarding = async () => {
       if (!user) return;
 
-      // Check if user has completed onboarding by checking if they have a display_name
+      // Check if user should see onboarding (stored in database)
       const { data: userData } = await supabase
         .from('users')
-        .select('display_name')
+        .select('show_onboarding')
         .eq('id', user.id)
         .single();
 
-      // Only show for new users who haven't completed onboarding
-      const isNewUser = localStorage.getItem('versionvault-new-user');
-      const hasDisplayName = userData?.display_name && userData.display_name.trim().length > 0;
-
-      if (isNewUser === 'true' && !hasDisplayName) {
+      // Only show if show_onboarding is true
+      if (userData?.show_onboarding === true) {
         setIsOpen(true);
       }
     };
@@ -153,10 +148,13 @@ export function OnboardingModal() {
 
     setLoading(true);
     try {
-      // Save display name to users table
+      // Save display name and mark onboarding as complete
       const { error: nameError } = await supabase
         .from('users')
-        .update({ display_name: name })
+        .update({
+          display_name: name,
+          show_onboarding: false
+        })
         .eq('id', user.id);
 
       if (nameError) {
@@ -169,9 +167,6 @@ export function OnboardingModal() {
 
       // Save timezone
       await updateUserSettings(user.id, 'timezone', selectedTimezone);
-
-      // Clear new user flag (onboarding complete is tracked by display_name in DB)
-      localStorage.removeItem('versionvault-new-user');
 
       toast.success('Setup complete! Welcome to VersionVault.');
 
@@ -194,18 +189,19 @@ export function OnboardingModal() {
   const canContinueFromStep2 = manualTrackedCount >= 1;
 
   const handleClose = () => {
-    // If dismissed without completing, set a placeholder display_name so it doesn't show again
-    if (user && (!name || name.trim().length < 2)) {
+    // Mark onboarding as dismissed (won't show again)
+    if (user) {
       supabase
         .from('users')
-        .update({ display_name: 'User' })
+        .update({
+          display_name: name.trim() || 'User',
+          show_onboarding: false
+        })
         .eq('id', user.id)
         .then(() => {
-          console.log('Set default display name for dismissed onboarding');
+          console.log('Onboarding dismissed');
         });
     }
-    // Clear new user flag
-    localStorage.removeItem('versionvault-new-user');
     setIsOpen(false);
   };
 
