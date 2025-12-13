@@ -11,7 +11,7 @@ const corsHeaders = {
 
 const BATCH_SIZE = 100
 const MAX_RETRY_ATTEMPTS = 3
-const VERSIONVAULT_FROM = 'VersionVault <digest@versionvault.dev>'
+const VERSIONVAULT_FROM = 'VersionVault <digest@updates.versionvault.dev>'
 const VERSIONVAULT_URL = 'https://versionvault.dev'
 
 interface ProcessResult {
