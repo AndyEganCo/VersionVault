@@ -96,7 +96,7 @@ export function useUsers() {
         // Add to premium_users (use upsert to avoid duplicate key errors)
         const { error } = await supabase
           .from('premium_users')
-          .upsert([{ user_id: userId }], { onConflict: 'user_id', ignoreDuplicates: true });
+          .upsert([{ user_id: userId }], { onConflict: 'user_id' });
 
         if (error) throw error;
       } else {
