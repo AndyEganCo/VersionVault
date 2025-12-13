@@ -214,17 +214,23 @@ serve(async (req) => {
                 updateData.release_date = version.releaseDate
               }
 
-              await supabase
+              const { error: updateError } = await supabase
                 .from('software_version_history')
                 .update(updateData)
                 .eq('id', existing.id)
+
+              if (updateError) {
+                console.error(`  ❌ Failed to update version ${normalizedVersion}: ${updateError.message}`)
+                throw updateError
+              }
             } else {
               // Insert new version - use provided date or current date if null
               const releaseDate = (version.releaseDate && version.releaseDate !== 'null')
                 ? version.releaseDate
                 : new Date().toISOString()
 
-              await supabase
+              const now = new Date().toISOString()
+              const { error: insertError } = await supabase
                 .from('software_version_history')
                 .insert({
                   software_id: software.id,
@@ -233,9 +239,15 @@ serve(async (req) => {
                   notes: notesArray,
                   type: version.type,
                   newsletter_verified: true,  // Auto-verify new versions for newsletters
-                  verified_at: new Date().toISOString(),
-                  created_at: new Date().toISOString()
+                  verified_at: now,
+                  detected_at: now,
+                  created_at: now
                 })
+
+              if (insertError) {
+                console.error(`  ❌ Failed to insert version ${normalizedVersion}: ${insertError.message}`)
+                throw insertError
+              }
 
               versionsAdded++
             }
