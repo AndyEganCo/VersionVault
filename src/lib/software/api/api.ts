@@ -204,7 +204,13 @@ export async function addVersionHistory(softwareId: string, data: {
 
     return true;
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error adding version history:', error);
+    console.error('Error details:', {
+      softwareId,
+      version: data.version,
+      errorMessage
+    });
     return false;
   }
 }
