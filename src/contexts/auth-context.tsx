@@ -128,8 +128,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) throw error;
       },
       signOut: async () => {
-        const { error } = await supabase.auth.signOut({ scope: 'local' });
-        if (error) throw error;
+        try {
+          // Attempt to sign out via API
+          await supabase.auth.signOut({ scope: 'local' });
+        } catch (error) {
+          // If sign out fails (e.g., session already invalid), just log it
+          // We'll still clear local state and redirect
+          console.warn('Sign out API call failed, clearing local state:', error);
+        }
+
+        // Always clear local storage and state, even if API call failed
+        localStorage.clear();
+        setUser(null);
+        setIsAdmin(false);
+        setIsPremium(false);
         navigate('/login');
       }
     }}>

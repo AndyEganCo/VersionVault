@@ -14,21 +14,37 @@ export async function getActiveSession(): Promise<Session | null> {
 
 export async function clearSession(): Promise<void> {
   try {
-    // Clear all auth-related local storage
-    const authKeys = [
-      'versionvault.auth.token',
-      'supabase.auth.token'
-    ];
-    authKeys.forEach(key => localStorage.removeItem(key));
-
-    // Sign out from local session
-    const { error } = await supabase.auth.signOut({ scope: 'local' });
-
-    if (error) throw error;
+    // Attempt to sign out via API
+    await supabase.auth.signOut({ scope: 'local' });
   } catch (error) {
-    console.error('Error clearing session:', error);
-    throw new Error('Failed to sign out completely');
+    // If sign out fails, just log it - we'll still clear local state
+    console.warn('Sign out API call failed, forcing local clear:', error);
   }
+
+  // Always clear all storage, even if API call failed
+  // This ensures user can recover from stuck sessions
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+  } catch (storageError) {
+    console.error('Error clearing storage:', storageError);
+  }
+}
+
+/**
+ * Force logout - clears all local auth state without making API calls.
+ * Use this when the session is corrupted or the user is stuck logged in.
+ * Can be called from browser console: window.forceLogout()
+ */
+export function forceLogout(): void {
+  console.log('[Auth] Force logout initiated');
+
+  // Clear all storage
+  localStorage.clear();
+  sessionStorage.clear();
+
+  // Reload the page to reset auth state
+  window.location.href = '/login';
 }
 
 export async function verifySession(): Promise<boolean> {
