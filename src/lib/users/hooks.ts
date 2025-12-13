@@ -93,12 +93,13 @@ export function useUsers() {
   const togglePremium = async (userId: string, isPremium: boolean) => {
     try {
       if (isPremium) {
-        // Add to premium_users (use upsert to avoid duplicate key errors)
+        // Add to premium_users
         const { error } = await supabase
           .from('premium_users')
-          .upsert([{ user_id: userId }], { onConflict: 'user_id' });
+          .insert([{ user_id: userId }]);
 
-        if (error) throw error;
+        // Ignore duplicate key errors (user already premium)
+        if (error && error.code !== '23505') throw error;
       } else {
         // Remove from premium_users
         const { error } = await supabase
