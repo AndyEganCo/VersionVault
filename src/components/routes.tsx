@@ -15,6 +15,8 @@ import { AdminSoftware } from '@/pages/admin/software';
 import { AdminUsers } from '@/pages/admin/users';
 import { AdminNewsletter } from '@/pages/admin/newsletter';
 import { Unsubscribe } from '@/pages/unsubscribe';
+import { VerifyEmail } from '@/pages/verify-email';
+import { AuthCallback } from '@/pages/auth-callback';
 
 export function Routes() {
   return (
@@ -23,6 +25,8 @@ export function Routes() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/unsubscribe" element={<Unsubscribe />} />
 
       {/* Protected routes */}
