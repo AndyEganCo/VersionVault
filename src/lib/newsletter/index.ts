@@ -6,8 +6,8 @@ export * from './queue';
 export * from './generate-digest';
 
 // Constants
-export const VERSIONVAULT_EMAIL = 'digest@versionvault.dev';
-export const VERSIONVAULT_FROM = 'VersionVault <digest@versionvault.dev>';
+export const VERSIONVAULT_EMAIL = 'digest@updates.versionvault.dev';
+export const VERSIONVAULT_FROM = 'VersionVault <digest@updates.versionvault.dev>';
 export const VERSIONVAULT_URL = 'https://versionvault.dev';
 
 export const DEFAULT_TIMEZONE = 'America/New_York';
