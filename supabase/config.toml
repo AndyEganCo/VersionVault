@@ -1,0 +1,36 @@
+# Supabase Configuration
+# This file is for local development configuration
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+
+# Email Templates Configuration
+[auth.email.template.confirm_signup]
+subject = "Confirm Your Email"
+content_path = "./supabase/templates/confirm-signup.html"
+
+[auth.email.template.invite]
+subject = "You've Been Invited to VersionVault"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.magic_link]
+subject = "Your Magic Link to Sign In"
+content_path = "./supabase/templates/magic-link.html"
+
+[auth.email.template.change_email]
+subject = "Confirm Your New Email Address"
+content_path = "./supabase/templates/change-email.html"
+
+[auth.email.template.recovery]
+subject = "Reset Your Password"
+content_path = "./supabase/templates/reset-password.html"
+
+[auth.email.template.reauthentication]
+subject = "Confirm It's You"
+content_path = "./supabase/templates/reauthentication.html"
