@@ -40,6 +40,17 @@ import {
   type Anomaly
 } from '../_shared/anomaly-detection.ts'
 
+import {
+  fetchWithRetry,
+  type FetchResult
+} from '../_shared/fetch-with-retry.ts'
+
+import {
+  detectBotBlocker,
+  logBotBlocking,
+  type BlockerDetection
+} from '../_shared/bot-blocker-handler.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -377,7 +388,7 @@ async function fetchWebpageContent(
   maxChars: number = 30000,
   useBrowserless: boolean = false,
   strategy?: ScrapingStrategy
-): Promise<{ content: string; method: string }> {
+): Promise<{ content: string; method: string; blockerDetected?: BlockerDetection }> {
   try {
     console.log(`Fetching webpage: ${url}`)
     if (strategy) {
@@ -386,55 +397,56 @@ async function fetchWebpageContent(
       console.log(`🌐 Using Browserless (passive rendering)`)
     }
 
-    let html: string
-    let method: string = 'static'
+    // Check if this is a known difficult domain
+    const urlObj = new URL(url)
+    const isKnownDifficult = urlObj.hostname.includes('adobe.com') ||
+                            urlObj.hostname.includes('helpx.adobe') ||
+                            urlObj.hostname.includes('autodesk.com') ||
+                            urlObj.hostname.includes('apple.com')
 
-    // Priority 1: Interactive scraping with strategy (Phase 3)
+    if (isKnownDifficult) {
+      console.warn('⚠️ Known difficult domain detected - using enhanced bot blocking protection')
+    }
+
+    // Determine starting method based on strategy and useBrowserless flag
+    let startingMethod: 'static' | 'browserless' | 'browserless-extended' | 'interactive' = 'static'
+
     if (strategy && (strategy.releaseNotesSelectors || strategy.expandSelectors || strategy.customScript)) {
-      console.log('🎯 Attempting interactive scraping...')
-      html = await fetchWithInteraction(url, strategy)
-
-      // If interactive scraping returned good content, use it
-      if (html && html.length > 2000) {
-        console.log(`✅ Interactive scraping successful: ${html.length} chars`)
-        method = 'interactive'
-      } else {
-        console.log(`⚠️ Interactive scraping returned little content (${html?.length || 0} chars), trying Browserless...`)
-        html = await fetchWithBrowserless(url)
-        method = html && html.length > 100 ? 'browserless' : 'static'
-      }
+      startingMethod = 'interactive'
+    } else if (useBrowserless || isKnownDifficult) {
+      startingMethod = isKnownDifficult ? 'browserless-extended' : 'browserless'
     }
-    // Priority 2: Browserless for JavaScript pages
-    else if (useBrowserless) {
-      html = await fetchWithBrowserless(url)
-      method = 'browserless'
 
-      if (!html) {
-        console.warn('Browserless failed, falling back to regular fetch')
-        const response = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (compatible; VersionVault/1.0; +https://versionvault.dev)',
-          },
-        })
-        html = await response.text()
-        method = 'static'
-      }
+    console.log(`🔄 Using bot blocking protection with starting method: ${startingMethod}`)
+
+    // Use fetchWithRetry with bot blocking protection
+    const result = await fetchWithRetry(url, {
+      browserlessApiKey: Deno.env.get('BROWSERLESS_API_KEY'),
+      startingMethod,
+      retryConfig: {
+        maxAttempts: isKnownDifficult ? 5 : 4,
+        baseDelay: isKnownDifficult ? 3000 : 2000,
+        rotateUserAgent: true,
+        escalateMethods: true,
+      },
+    })
+
+    const html = result.html
+    const method = result.method
+
+    // Log bot blocking detection
+    if (result.blockerDetected?.isBlocked) {
+      console.warn(`⚠️ Bot blocker detected: ${result.blockerDetected.blockerType}`)
+      console.warn(`Confidence: ${result.blockerDetected.confidence}%`)
+      console.warn(`Message: ${result.blockerDetected.message}`)
+      console.warn(`Suggestion: ${result.blockerDetected.suggestedAction}`)
     }
-    // Priority 3: Static fetch
-    else {
-      // Regular fetch for static pages
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; VersionVault/1.0; +https://versionvault.dev)',
-        },
-      })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      html = await response.text()
-      method = 'static'
+    // Log success
+    if (result.success) {
+      console.log(`✅ Successfully fetched using method: ${method} after ${result.attempts} attempt(s)`)
+    } else {
+      console.error(`❌ Fetch failed after ${result.attempts} attempts`)
     }
 
     console.log(`📄 Raw HTML fetched: ${html.length} characters`)
@@ -444,7 +456,11 @@ async function fetchWebpageContent(
       const jsonContent = extractAppleAppStoreJSON(html)
       if (jsonContent) {
         console.log(`✅ Using Apple App Store structured JSON (${jsonContent.length} chars)`)
-        return { content: jsonContent, method: 'apple_json' }
+        return {
+          content: jsonContent,
+          method: 'apple_json',
+          blockerDetected: result.blockerDetected?.isBlocked ? result.blockerDetected : undefined
+        }
       } else {
         console.log('⚠️ Apple App Store JSON extraction failed, falling back to text extraction')
       }
@@ -550,7 +566,11 @@ async function fetchWebpageContent(
     console.log(content.substring(0, 500))
     console.log('--- END PREVIEW ---')
 
-    return { content, method }
+    return {
+      content,
+      method,
+      blockerDetected: result.blockerDetected?.isBlocked ? result.blockerDetected : undefined
+    }
   } catch (error) {
     console.error(`Error fetching ${url}:`, error)
     return { content: '', method: 'error' }
@@ -1514,6 +1534,14 @@ serve(async (req) => {
         versionContent = versionResult.content
         mainWebsiteContent = mainResult.content
         fetchMethod = versionResult.method
+
+        // Track bot blocker detection
+        if (versionResult.blockerDetected) {
+          console.log(`\n🚫 Bot blocker detected during initial fetch:`)
+          console.log(`  Type: ${versionResult.blockerDetected.blockerType}`)
+          console.log(`  Confidence: ${versionResult.blockerDetected.confidence}%`)
+          console.log(`  Message: ${versionResult.blockerDetected.message}`)
+        }
       }
 
       console.log(`\n=== INITIAL CONTENT LENGTHS ===`)
