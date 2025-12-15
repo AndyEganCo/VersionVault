@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { RequestSoftwareModal } from '@/components/software/request-software-modal';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -356,16 +357,15 @@ export function OnboardingModal() {
                     <p className="text-sm text-muted-foreground">
                       Can't find your software?
                     </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        window.open('mailto:contact@andyegan.co?subject=Software Request for VersionVault', '_blank');
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Request Software
-                    </Button>
+                    <RequestSoftwareModal
+                      trigger={
+                        <Button variant="outline" size="sm">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Request Software
+                        </Button>
+                      }
+                      onSuccess={loadSoftware}
+                    />
                   </div>
                 </>
               )}
