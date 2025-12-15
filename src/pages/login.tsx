@@ -14,15 +14,25 @@ export function Login() {
           </p>
         </div>
         <AuthForm mode="signin" />
-        <p className="text-center text-sm text-muted-foreground">
-          Don't have an account?{' '}
-          <Link 
-            to="/signup" 
-            className="text-primary underline-offset-4 hover:underline"
-          >
-            Sign up
-          </Link>
-        </p>
+        <div className="space-y-4">
+          <p className="text-center text-sm">
+            <Link
+              to="/forgot-password"
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </p>
+          <p className="text-center text-sm text-muted-foreground">
+            Don't have an account?{' '}
+            <Link
+              to="/signup"
+              className="text-primary underline-offset-4 hover:underline"
+            >
+              Sign up
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

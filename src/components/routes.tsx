@@ -17,6 +17,8 @@ import { AdminNewsletter } from '@/pages/admin/newsletter';
 import { Unsubscribe } from '@/pages/unsubscribe';
 import { VerifyEmail } from '@/pages/verify-email';
 import { AuthCallback } from '@/pages/auth-callback';
+import { ForgotPassword } from '@/pages/forgot-password';
+import { ResetPassword } from '@/pages/reset-password';
 
 export function Routes() {
   return (
@@ -25,6 +27,8 @@ export function Routes() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/unsubscribe" element={<Unsubscribe />} />
