@@ -29,9 +29,9 @@ export function DeleteSoftwareDialog({ software, open, onOpenChange, onSuccess }
     setLoading(true);
     try {
       await deleteSoftware(software.id);
-      onOpenChange(false);
-      toast.success('Software deleted successfully');
       await onSuccess();
+      toast.success('Software deleted successfully');
+      onOpenChange(false);
     } catch (error) {
       console.error('Delete error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete software';
