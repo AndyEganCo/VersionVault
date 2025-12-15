@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Sparkles, Package, Bell, CheckCircle2, Loader2, User, Globe } from 'lucide-react';
+import { Sparkles, Package, Bell, CheckCircle2, Loader2, User, Globe, Search, Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { getSoftwareList } from '@/lib/software/api/api';
 import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
@@ -13,6 +13,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { RequestSoftwareModal } from '@/components/software/request-software-modal';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -40,6 +41,7 @@ export function OnboardingModal() {
   const [software, setSoftware] = useState<Software[]>([]);
   const [trackedIds, setTrackedIds] = useState<Set<string>>(new Set());
   const [versionVaultId, setVersionVaultId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Step 3 state
   const [selectedFrequency, setSelectedFrequency] = useState<NotificationFrequency>('weekly');
@@ -106,12 +108,11 @@ export function OnboardingModal() {
         }
       }
 
-      // Get popular software (filter out VersionVault, take top 10 by name)
-      const popular = allSoftware
-        .filter(s => s.id !== vv?.id)
-        .slice(0, 10);
+      // Get all software (filter out VersionVault)
+      const filteredSoftware = allSoftware
+        .filter(s => s.id !== vv?.id);
 
-      setSoftware(popular);
+      setSoftware(filteredSoftware);
     } catch (error) {
       console.error('Error loading software:', error);
       toast.error('Failed to load software catalog');
@@ -291,42 +292,82 @@ export function OnboardingModal() {
                   <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
               ) : (
-                <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
-                  {versionVaultId && (
-                    <div className="flex items-center justify-between p-3 rounded-lg border bg-green-500/5 border-green-500/20">
-                      <div className="flex-1">
-                        <p className="font-medium text-sm">VersionVault</p>
-                        <p className="text-xs text-muted-foreground">Auto-tracked ✓</p>
-                      </div>
-                      <Switch checked disabled />
-                    </div>
-                  )}
+                <>
+                  {/* Search Input */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Search software..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
 
-                  {software.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                    >
-                      <div className="flex-1 min-w-0 mr-3">
-                        <p className="font-medium text-sm truncate">{item.name}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="secondary" className="text-xs">
-                            {item.category}
-                          </Badge>
-                          {item.current_version && (
-                            <span className="text-xs text-muted-foreground">
-                              v{item.current_version}
-                            </span>
-                          )}
+                  {/* Software List */}
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                    {versionVaultId && (
+                      <div className="flex items-center justify-between p-3 rounded-lg border bg-green-500/5 border-green-500/20">
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">VersionVault</p>
+                          <p className="text-xs text-muted-foreground">Auto-tracked ✓</p>
                         </div>
+                        <Switch checked disabled />
                       </div>
-                      <Switch
-                        checked={trackedIds.has(item.id)}
-                        onCheckedChange={(checked) => handleTrackingToggle(item.id, checked)}
-                      />
-                    </div>
-                  ))}
-                </div>
+                    )}
+
+                    {software
+                      .filter((item) => {
+                        if (!searchQuery.trim()) return true;
+                        const query = searchQuery.toLowerCase();
+                        return (
+                          item.name.toLowerCase().includes(query) ||
+                          item.category?.toLowerCase().includes(query)
+                        );
+                      })
+                      .map((item) => (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                        >
+                          <div className="flex-1 min-w-0 mr-3">
+                            <p className="font-medium text-sm truncate">{item.name}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge variant="secondary" className="text-xs">
+                                {item.category}
+                              </Badge>
+                              {item.current_version && (
+                                <span className="text-xs text-muted-foreground">
+                                  v{item.current_version}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <Switch
+                            checked={trackedIds.has(item.id)}
+                            onCheckedChange={(checked) => handleTrackingToggle(item.id, checked)}
+                          />
+                        </div>
+                      ))}
+                  </div>
+
+                  {/* Request Missing Software */}
+                  <div className="rounded-lg border border-dashed border-muted-foreground/30 p-4 text-center space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Can't find your software?
+                    </p>
+                    <RequestSoftwareModal
+                      trigger={
+                        <Button variant="outline" size="sm">
+                          <Plus className="h-4 w-4 mr-2" />
+                          Request Software
+                        </Button>
+                      }
+                      onSuccess={loadSoftware}
+                    />
+                  </div>
+                </>
               )}
 
               <p className="text-sm text-center text-muted-foreground">

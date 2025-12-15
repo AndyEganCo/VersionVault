@@ -18,10 +18,17 @@ import { supabase } from '@/lib/supabase';
 
 interface RequestSoftwareModalProps {
   onSuccess?: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: React.ReactNode;
 }
 
-export function RequestSoftwareModal({ onSuccess }: RequestSoftwareModalProps): JSX.Element {
-  const [isOpen, setIsOpen] = useState<boolean>(false);
+export function RequestSoftwareModal({ onSuccess, open, onOpenChange, trigger }: RequestSoftwareModalProps): JSX.Element {
+  const [internalOpen, setInternalOpen] = useState<boolean>(false);
+
+  // Use external state if provided, otherwise use internal state
+  const isOpen = open !== undefined ? open : internalOpen;
+  const setIsOpen = onOpenChange || setInternalOpen;
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { user } = useAuth();
 
@@ -92,9 +99,16 @@ export function RequestSoftwareModal({ onSuccess }: RequestSoftwareModalProps): 
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline">Request New Software</Button>
-      </DialogTrigger>
+      {trigger && (
+        <DialogTrigger asChild>
+          {trigger}
+        </DialogTrigger>
+      )}
+      {!trigger && (
+        <DialogTrigger asChild>
+          <Button variant="outline">Request New Software</Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Request Software Tracking</DialogTitle>
