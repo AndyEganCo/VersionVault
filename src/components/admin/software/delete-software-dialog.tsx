@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -9,6 +8,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { deleteSoftware } from '@/lib/software/api/admin';
 import type { Software } from '@/lib/software/types';
@@ -54,13 +54,13 @@ export function DeleteSoftwareDialog({ software, open, onOpenChange, onSuccess }
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
+          <Button
             onClick={handleDelete}
             disabled={loading}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             {loading ? 'Deleting...' : 'Delete'}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
