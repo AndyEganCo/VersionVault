@@ -29,8 +29,7 @@ export function BetaBanner() {
       <Info className="h-4 w-4 text-blue-500" />
       <div className="flex items-start justify-between gap-4">
         <AlertDescription className="text-sm leading-relaxed">
-          Thanks for trying VersionVault Beta! This is free during our beta period.
-          Help shape the future of VersionVault!{' '}
+          Thanks for trying VersionVault Beta! Help shape the future of VersionVault!{' '}
           <Link to="/requests" className="font-semibold underline hover:text-blue-600 transition-colors">
             Request features or software you'd like to see included.
           </Link>
