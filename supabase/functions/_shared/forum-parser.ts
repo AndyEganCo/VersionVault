@@ -36,6 +36,9 @@ export async function fetchForumContent(
     // Step 1: Fetch forum index page
     const indexHtml = await fetchForumIndex(forumUrl, useBrowserless);
 
+    console.log(`📄 Fetched ${indexHtml.length} characters from forum`);
+    console.log(`HTML preview (first 500 chars): ${indexHtml.substring(0, 500)}`);
+
     if (!indexHtml || indexHtml.length < 500) {
       console.warn('⚠️ Forum index has very low content, may need Browserless');
       if (!useBrowserless) {
@@ -180,24 +183,53 @@ function parsePhpBBTopics(html: string, baseUrl: string): ForumTopic[] {
     return parsePhpBBTopicsRegex(html, baseUrl);
   }
 
-  // Find all topic rows
-  const topicRows = doc.querySelectorAll('.topiclist .row');
+  // Try multiple selector strategies for phpBB variations
+  let topicRows = doc.querySelectorAll('.topiclist .row');
+
+  if (topicRows.length === 0) {
+    console.log('No topics found with .topiclist .row, trying alternative selectors...');
+    topicRows = doc.querySelectorAll('.forumbg .topics li, .topiclist li, ul.topics li');
+  }
+
+  if (topicRows.length === 0) {
+    console.log('Still no topics with DOM selectors, trying regex fallback');
+    return parsePhpBBTopicsRegex(html, baseUrl);
+  }
+
+  console.log(`Found ${topicRows.length} potential topic rows`);
 
   for (const row of topicRows) {
     try {
-      // Find topic title and link
-      const titleLink = row.querySelector('.topictitle, a.topictitle');
-      if (!titleLink) continue;
+      // Find topic title and link - try multiple selectors
+      let titleLink = row.querySelector('.topictitle, a.topictitle');
+
+      if (!titleLink) {
+        // Try alternative selectors
+        titleLink = row.querySelector('a[href*="viewtopic"]');
+      }
+
+      if (!titleLink) {
+        console.log('Skipping row - no title link found');
+        continue;
+      }
 
       const title = titleLink.textContent?.trim() || '';
+      if (!title || title.length < 3) {
+        console.log('Skipping row - title too short or empty');
+        continue;
+      }
+
       const relativeLink = titleLink.getAttribute('href') || '';
       const link = makeAbsoluteUrl(relativeLink, baseUrl);
 
       // Check if sticky/announcement
+      const rowHtml = row.outerHTML || '';
       const classList = row.getAttribute('class') || '';
       const isSticky = classList.includes('sticky') ||
                        classList.includes('announce') ||
-                       classList.includes('global-announce');
+                       classList.includes('global-announce') ||
+                       rowHtml.includes('icon_topic_pinned') ||
+                       rowHtml.includes('icon-announce');
 
       // Find author (in .topic-poster or similar)
       const authorElem = row.querySelector('.topic-poster a, .username, .author');
@@ -207,6 +239,8 @@ function parsePhpBBTopics(html: string, baseUrl: string): ForumTopic[] {
       const repliesElem = row.querySelector('.posts, .replies');
       const repliesText = repliesElem?.textContent?.trim() || '0';
       const replies = parseInt(repliesText) || 0;
+
+      console.log(`Found topic: "${title}" (sticky: ${isSticky})`);
 
       topics.push({
         title,
@@ -220,7 +254,7 @@ function parsePhpBBTopics(html: string, baseUrl: string): ForumTopic[] {
     }
   }
 
-  console.log(`Parsed ${topics.length} phpBB topics`);
+  console.log(`Parsed ${topics.length} phpBB topics from DOM`);
   return topics;
 }
 
@@ -230,29 +264,54 @@ function parsePhpBBTopics(html: string, baseUrl: string): ForumTopic[] {
 function parsePhpBBTopicsRegex(html: string, baseUrl: string): ForumTopic[] {
   const topics: ForumTopic[] = [];
 
-  // Match: <a class="topictitle" href="./viewtopic.php?...">Title</a>
-  const topicRegex = /<a\s+[^>]*class="[^"]*topictitle[^"]*"[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/gi;
+  // Try multiple regex patterns to catch different phpBB structures
 
-  let match;
-  while ((match = topicRegex.exec(html)) !== null) {
-    const relativeLink = match[1];
-    const title = match[2].trim();
-    const link = makeAbsoluteUrl(relativeLink, baseUrl);
+  // Pattern 1: <a class="topictitle" href="...">Title</a>
+  const pattern1 = /<a\s+[^>]*class="[^"]*topictitle[^"]*"[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>/gi;
 
-    // Check for sticky in surrounding context
-    const contextStart = Math.max(0, match.index - 500);
-    const contextEnd = Math.min(html.length, match.index + 500);
-    const context = html.substring(contextStart, contextEnd);
+  // Pattern 2: <a href="./viewtopic.php?...">Title</a> (any link to viewtopic)
+  const pattern2 = /<a\s+[^>]*href="([^"]*viewtopic[^"]+)"[^>]*>([^<]+)<\/a>/gi;
 
-    const isSticky = /class="[^"]*\b(sticky|announce|global-announce)\b[^"]*"/i.test(context);
+  const patterns = [pattern1, pattern2];
 
-    topics.push({
-      title,
-      link,
-      author: '',  // Can't reliably extract with regex
-      isSticky,
-      replies: 0,
-    });
+  for (const topicRegex of patterns) {
+    let match;
+    const seenTitles = new Set<string>(); // Avoid duplicates
+
+    while ((match = topicRegex.exec(html)) !== null) {
+      const relativeLink = match[1];
+      const title = match[2].trim();
+
+      // Skip if we've already seen this title (from a different pattern)
+      if (seenTitles.has(title)) continue;
+      seenTitles.add(title);
+
+      // Skip navigation/UI links
+      if (title.length < 5 || /^(View|Post|Reply|Quote|Edit|Delete|Report)$/i.test(title)) {
+        continue;
+      }
+
+      const link = makeAbsoluteUrl(relativeLink, baseUrl);
+
+      // Check for sticky in surrounding context
+      const contextStart = Math.max(0, match.index - 500);
+      const contextEnd = Math.min(html.length, match.index + 500);
+      const context = html.substring(contextStart, contextEnd);
+
+      const isSticky = /class="[^"]*\b(sticky|announce|global-announce)\b[^"]*"/i.test(context) ||
+                       context.includes('icon_topic_pinned') ||
+                       context.includes('icon-announce');
+
+      console.log(`Regex found topic: "${title}" (sticky: ${isSticky})`);
+
+      topics.push({
+        title,
+        link,
+        author: '',  // Can't reliably extract with regex
+        isSticky,
+        replies: 0,
+      });
+    }
   }
 
   console.log(`Parsed ${topics.length} phpBB topics (regex fallback)`);

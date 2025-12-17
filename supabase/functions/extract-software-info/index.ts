@@ -1650,7 +1650,8 @@ serve(async (req) => {
       const hasVeryLowContent = versionContent.length < 500
 
       // Retry with Browserless if content is low AND we haven't already tried interactive/browserless
-      if (isLikelyJavaScriptPage && !isPDF && fetchMethod === 'static') {
+      // Only for webpages, not for RSS/forum/PDF sources
+      if (isLikelyJavaScriptPage && detectedSourceType === 'webpage' && fetchMethod === 'static') {
         console.log(`⚠️ WARNING: Low content detected (${versionContent.length} chars) - likely JavaScript-rendered page`)
         console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
 
