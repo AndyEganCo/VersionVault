@@ -9,6 +9,15 @@ export const ReleaseNoteSchema = z.object({
 
 export type ReleaseNote = z.infer<typeof ReleaseNoteSchema>;
 
+export type SourceType = 'webpage' | 'rss' | 'forum' | 'pdf';
+
+export interface ForumConfig {
+  forumType?: 'phpbb' | 'discourse' | 'generic';
+  stickyOnly?: boolean;
+  officialAuthor?: string;
+  titlePattern?: string;
+}
+
 export interface Software {
   readonly id: string;
   readonly name: string;
@@ -23,6 +32,8 @@ export interface Software {
   readonly tracked?: boolean;
   readonly release_notes?: ReleaseNote[];
   version_website?: string;
+  source_type?: SourceType;
+  forum_config?: ForumConfig;
 }
 
 export interface SoftwareUpdate {

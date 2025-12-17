@@ -1,5 +1,6 @@
 // Supabase Edge Function for AI-powered software info extraction
 // This keeps the OpenAI API key secure on the server side
+// Updated: 2024-12-17 - Fixed isPDF reference, added RSS/forum support
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { DOMParser } from 'https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts'
 // @deno-types="npm:@types/pdfjs-dist"
@@ -51,6 +52,20 @@ import {
   type BlockerDetection
 } from '../_shared/bot-blocker-handler.ts'
 
+import {
+  fetchRSSContent
+} from '../_shared/rss-parser.ts'
+
+import {
+  fetchForumContent,
+  type ForumConfig
+} from '../_shared/forum-parser.ts'
+
+import {
+  discoverReleaseUrls,
+  type SitemapUrl
+} from '../_shared/sitemap-parser.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -69,6 +84,8 @@ interface ExtractRequest {
   manufacturer?: string  // Manufacturer name (Phase 2 enhancement)
   productIdentifier?: string  // Product identifier for pattern matching (Phase 2)
   scrapingStrategy?: ScrapingStrategy  // Interactive scraping strategy (Phase 3)
+  sourceType?: 'webpage' | 'rss' | 'forum' | 'pdf'  // Source type for content extraction
+  forumConfig?: ForumConfig  // Forum configuration for forum source type
 }
 
 interface ExtractedInfo {
@@ -650,10 +667,10 @@ TASK: Extract the following information:
 5. **All Versions** (versions array): Extract EVERY version found in the content
    - Look for ALL version numbers, not just the latest
    - For EACH version found, extract:
-     * version: The version number (e.g., "1.5.0", "v2.3")
+     * version: The version number (e.g., "1.5.0", "v2.3") OR feature title (see below)
      * releaseDate: Release date in YYYY-MM-DD format - **USE NULL IF NOT FOUND, DO NOT GUESS**
      * notes: Full release notes/changelog for that version (use markdown formatting)
-     * type: "major" for X.0.0, "minor" for X.X.0, "patch" for X.X.X
+     * type: "major" for X.0.0, "minor" for X.X.0, "patch" for X.X.X, or "minor" for features
    - Include detailed release notes if available
    - If this is a dedicated release notes/changelog page, extract ALL versions listed
    - If only one version found, still return it as an array with one element
@@ -663,6 +680,13 @@ TASK: Extract the following information:
      * Pattern: "notes text vX.X.X date notes text vX.X.X date"
      * Each version's notes are the text that appears IMMEDIATELY BEFORE that version number
      * Do NOT associate a version with the notes that come AFTER it
+   - **FEATURE-BASED RELEASES** (RSS feeds, continuous deployment):
+     * If content contains entries formatted like "=== RELEASE 1: Feature Name ===" with no numeric versions
+     * Use the feature title as the "version" field (e.g., "Make in FigGov", "New image editing tools")
+     * Extract the date from "Date:" field if present
+     * Use the description/content as the release notes
+     * Set type to "minor" for all feature releases
+     * This handles software like Figma that announces features instead of numbered versions
 
 CRITICAL INSTRUCTIONS:
 - **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data or knowledge about this software
@@ -1102,6 +1126,13 @@ Extract the following information:
      * Pattern: "notes text vX.X.X date notes text vX.X.X date"
      * Each version's notes are the text that appears IMMEDIATELY BEFORE that version number
      * Do NOT associate a version with the notes that come AFTER it
+   - **FEATURE-BASED RELEASES** (RSS feeds, continuous deployment):
+     * If content contains entries formatted like "=== RELEASE 1: Feature Name ===" with no numeric versions
+     * Use the feature title as the "version" field (e.g., "Make in FigGov", "New image editing tools")
+     * Extract the date from "Date:" field if present
+     * Use the description/content as the release notes
+     * Set type to "minor" for all feature releases
+     * This handles software like Figma that announces features instead of numbered versions
 
 6. **Validation Fields** (REQUIRED):
    - **confidence**: 0-100 score for how confident you are this is correct
@@ -1452,6 +1483,51 @@ function extractFromDomain(website: string): ExtractedInfo {
   }
 }
 
+/**
+ * Auto-detect source type from URL
+ */
+function detectSourceType(url: string): 'webpage' | 'rss' | 'forum' | 'pdf' {
+  if (!url) return 'webpage';
+
+  const lowerUrl = url.toLowerCase();
+
+  // PDF detection
+  if (lowerUrl.endsWith('.pdf')) {
+    return 'pdf';
+  }
+
+  // RSS/Atom feed detection
+  if (
+    lowerUrl.includes('/feed') ||
+    lowerUrl.includes('/rss') ||
+    lowerUrl.endsWith('.xml') ||
+    lowerUrl.endsWith('.rss') ||
+    lowerUrl.endsWith('.atom') ||
+    lowerUrl.includes('feed.xml') ||
+    lowerUrl.includes('rss.xml') ||
+    lowerUrl.includes('atom.xml')
+  ) {
+    return 'rss';
+  }
+
+  // Forum detection (phpBB, Discourse, vBulletin, etc.)
+  if (
+    lowerUrl.includes('viewforum.php') ||
+    lowerUrl.includes('viewtopic.php') ||
+    lowerUrl.includes('/forums/') ||
+    lowerUrl.includes('/forum/') ||
+    lowerUrl.includes('/community/') ||
+    lowerUrl.includes('/discuss/') ||
+    lowerUrl.includes('showthread.php') ||
+    lowerUrl.includes('forumdisplay.php')
+  ) {
+    return 'forum';
+  }
+
+  // Default to webpage
+  return 'webpage';
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -1459,7 +1535,7 @@ serve(async (req) => {
   }
 
   try {
-    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy } = await req.json() as ExtractRequest
+    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy, sourceType, forumConfig } = await req.json() as ExtractRequest
 
     if (!name || !website) {
       return new Response(
@@ -1479,12 +1555,17 @@ serve(async (req) => {
     console.log(`Product Identifier: ${productIdentifier || 'none'}`)
     console.log(`Extraction Mode: ${USE_ENHANCED_EXTRACTION ? '🧠 ENHANCED (Phase 2)' : '📊 LEGACY (Original)'}`)
     console.log(`Interactive Scraping: ${scrapingStrategy ? '🎭 YES (Phase 3)' : '❌ NO'}`)
+    console.log(`Source Type: ${sourceType || 'auto-detect'}`)
     console.log(`Has provided content: ${!!content}`)
     console.log('='.repeat(60))
 
     let versionContent = ''
     let mainWebsiteContent = ''
     let fetchMethod = 'static' // Track which method was used for version content
+
+    // Determine source type (auto-detect if not provided)
+    const detectedSourceType = sourceType || detectSourceType(versionUrl)
+    console.log(`📍 Detected source type: ${detectedSourceType}`)
 
     // If content is provided directly (e.g., from PDF parsing), use it
     if (content && content.length > 100) {
@@ -1497,12 +1578,45 @@ serve(async (req) => {
         mainWebsiteContent = mainResult.content
       }
     } else if (versionUrl) {
-      // Otherwise fetch content from URLs
-      // Check if versionUrl is a PDF
-      const isPDF = versionUrl.toLowerCase().endsWith('.pdf')
+      // Route based on source type
+      if (detectedSourceType === 'rss') {
+        // RSS Feed
+        console.log(`📡 Source type: RSS feed`)
+        try {
+          versionContent = await fetchRSSContent(versionUrl)
+          fetchMethod = 'rss'
+        } catch (rssError) {
+          console.error('RSS fetch failed:', rssError)
+          versionContent = ''
+          fetchMethod = 'error'
+        }
 
-      if (isPDF) {
-        console.log(`Detected PDF URL: ${versionUrl}`)
+        // Still fetch main website for manufacturer/category info
+        if (versionUrl.toLowerCase() !== website.toLowerCase()) {
+          const mainResult = await fetchWebpageContent(website, 20000, false)
+          mainWebsiteContent = mainResult.content
+        }
+      } else if (detectedSourceType === 'forum') {
+        // Forum
+        console.log(`🗨️ Source type: Forum`)
+        console.log(`Forum config:`, forumConfig)
+        try {
+          versionContent = await fetchForumContent(versionUrl, forumConfig || {})
+          fetchMethod = 'forum'
+        } catch (forumError) {
+          console.error('Forum fetch failed:', forumError)
+          versionContent = ''
+          fetchMethod = 'error'
+        }
+
+        // Still fetch main website for manufacturer/category info
+        if (versionUrl.toLowerCase() !== website.toLowerCase()) {
+          const mainResult = await fetchWebpageContent(website, 20000, false)
+          mainWebsiteContent = mainResult.content
+        }
+      } else if (detectedSourceType === 'pdf') {
+        // PDF
+        console.log(`📄 Detected PDF URL: ${versionUrl}`)
 
         // Fetch and parse PDF content
         try {
@@ -1521,6 +1635,8 @@ serve(async (req) => {
           mainWebsiteContent = mainResult.content
         }
       } else {
+        // Regular webpage (default)
+        console.log(`🌐 Source type: Webpage`)
         // Fetch content from both URLs in parallel (try regular fetch first)
         // Phase 3: Pass scraping strategy if provided
         const [versionResult, mainResult] = await Promise.all([
@@ -1554,7 +1670,8 @@ serve(async (req) => {
       const hasVeryLowContent = versionContent.length < 500
 
       // Retry with Browserless if content is low AND we haven't already tried interactive/browserless
-      if (isLikelyJavaScriptPage && !isPDF && fetchMethod === 'static') {
+      // Only for webpages, not for RSS/forum/PDF sources
+      if (isLikelyJavaScriptPage && detectedSourceType === 'webpage' && fetchMethod === 'static') {
         console.log(`⚠️ WARNING: Low content detected (${versionContent.length} chars) - likely JavaScript-rendered page`)
         console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
 
@@ -1627,8 +1744,54 @@ serve(async (req) => {
     const stillLowContent = versionContent.length < 2000
     const noContentAtAll = versionContent.length === 0
 
+    // Try sitemap discovery if webpage content is low and this is a webpage source
+    if (stillLowContent && detectedSourceType === 'webpage' && website) {
+      console.log('\n🗺️ Low content detected, attempting sitemap discovery...')
+      try {
+        const releaseUrls = await discoverReleaseUrls(website, 3)
+
+        if (releaseUrls.length > 0) {
+          console.log(`✅ Found ${releaseUrls.length} potential release pages from sitemap`)
+
+          // Try fetching content from the best sitemap URLs
+          for (const sitemapUrl of releaseUrls) {
+            console.log(`  → Trying: ${sitemapUrl.loc} (score: ${sitemapUrl.relevanceScore})`)
+
+            try {
+              const sitemapResult = await fetchWebpageContent(sitemapUrl.loc, 30000, false)
+
+              if (sitemapResult.content.length > versionContent.length) {
+                console.log(`  ✅ Found better content (${sitemapResult.content.length} chars vs ${versionContent.length} chars)`)
+                versionContent = sitemapResult.content
+                fetchMethod = sitemapResult.method + '_sitemap'
+
+                // If we found good content, stop searching
+                if (sitemapResult.content.length >= 5000) {
+                  console.log('  🎯 Good content found, stopping sitemap search')
+                  break
+                }
+              } else {
+                console.log(`  ⏭️  Content not better than current (${sitemapResult.content.length} chars)`)
+              }
+            } catch (error) {
+              console.warn(`  ❌ Failed to fetch sitemap URL: ${error.message}`)
+            }
+          }
+        } else {
+          console.log('⚠️ No relevant URLs found in sitemap')
+        }
+      } catch (error) {
+        console.warn(`⚠️ Sitemap discovery failed: ${error.message}`)
+        // Continue with original content
+      }
+    }
+
+    // Re-check content after sitemap discovery
+    const stillLowContentAfterSitemap = versionContent.length < 2000
+    const noContentAtAllAfterSitemap = versionContent.length === 0
+
     // Detect if site is completely blocking us (0 chars even after all retries)
-    if (noContentAtAll && versionUrl) {
+    if (noContentAtAllAfterSitemap && versionUrl) {
       console.error('❌ SITE BLOCKED: No content extracted after all attempts')
       console.error('This site may be blocking automated access with:')
       console.error('  - Bot detection (Cloudflare, Akamai, etc.)')
@@ -1697,11 +1860,11 @@ serve(async (req) => {
     }
 
     // Add JavaScript page detection flag and warning (only if Browserless also failed)
-    if (stillLowContent) {
+    if (stillLowContentAfterSitemap) {
       extracted.isJavaScriptPage = true
 
       // Provide specific warning based on situation
-      if (noContentAtAll) {
+      if (noContentAtAllAfterSitemap) {
         // Site is completely blocking us
         const hostname = versionUrl ? new URL(versionUrl).hostname : 'this site'
         extracted.lowContentWarning = `⚠️ Could not extract any content from ${hostname}. This site is blocking automated access. Please manually copy the version information or use an alternative source.`

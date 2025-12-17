@@ -9,9 +9,17 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { softwareCategories } from '@/data/software-categories';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import type { SourceType, ForumConfig } from '@/lib/software/types';
 
 type AddSoftwareDialogProps = {
   open: boolean;
@@ -25,6 +33,8 @@ type FormData = {
   category: string;
   manufacturer: string;
   version_website: string;
+  source_type: SourceType;
+  forum_config: ForumConfig;
 };
 
 export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftwareDialogProps) {
@@ -34,7 +44,9 @@ export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftware
     website: '',
     category: 'Show Control',
     manufacturer: '',
-    version_website: ''
+    version_website: '',
+    source_type: 'webpage',
+    forum_config: {}
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,6 +66,10 @@ export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftware
           category: formData.category,
           manufacturer: formData.manufacturer,
           version_website: formData.version_website || null,
+          source_type: formData.source_type,
+          forum_config: formData.source_type === 'forum' && Object.keys(formData.forum_config).length > 0
+            ? formData.forum_config
+            : null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }]);
@@ -67,7 +83,9 @@ export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftware
         website: '',
         category: 'Show Control',
         manufacturer: '',
-        version_website: ''
+        version_website: '',
+        source_type: 'webpage',
+        forum_config: {}
       });
       toast.success('Software added successfully');
     } catch (error) {
@@ -84,7 +102,9 @@ export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftware
       website: '',
       category: 'Show Control',
       manufacturer: '',
-      version_website: ''
+      version_website: '',
+      source_type: 'webpage',
+      forum_config: {}
     });
     onOpenChange(false);
   };
@@ -159,6 +179,95 @@ export function AddSoftwareDialog({ open, onOpenChange, onSuccess }: AddSoftware
               placeholder="https://example.com/downloads"
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="source_type">Source Type</Label>
+            <Select
+              value={formData.source_type}
+              onValueChange={(value: SourceType) => setFormData({ ...formData, source_type: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select source type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="webpage">Webpage</SelectItem>
+                <SelectItem value="rss">RSS Feed</SelectItem>
+                <SelectItem value="forum">Forum</SelectItem>
+                <SelectItem value="pdf">PDF</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              How version information should be fetched
+            </p>
+          </div>
+          {formData.source_type === 'forum' && (
+            <div className="space-y-3 border rounded-lg p-3 bg-muted/50">
+              <div className="font-medium text-sm">Forum Configuration</div>
+              <div className="space-y-2">
+                <Label htmlFor="forumType">Forum Type</Label>
+                <Select
+                  value={formData.forum_config.forumType || 'phpbb'}
+                  onValueChange={(value) => setFormData({
+                    ...formData,
+                    forum_config: { ...formData.forum_config, forumType: value as 'phpbb' | 'discourse' | 'generic' }
+                  })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select forum type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="phpbb">phpBB</SelectItem>
+                    <SelectItem value="discourse">Discourse</SelectItem>
+                    <SelectItem value="generic">Generic</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="titlePattern">Title Pattern (Regex)</Label>
+                <Input
+                  id="titlePattern"
+                  value={formData.forum_config.titlePattern || ''}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    forum_config: { ...formData.forum_config, titlePattern: e.target.value }
+                  })}
+                  placeholder="e.g. ^Release of"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Filter topics by title pattern
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="officialAuthor">Official Author</Label>
+                <Input
+                  id="officialAuthor"
+                  value={formData.forum_config.officialAuthor || ''}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    forum_config: { ...formData.forum_config, officialAuthor: e.target.value }
+                  })}
+                  placeholder="e.g. Blackmagic"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Filter by author username
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="stickyOnly"
+                  checked={formData.forum_config.stickyOnly || false}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    forum_config: { ...formData.forum_config, stickyOnly: e.target.checked }
+                  })}
+                  className="rounded"
+                />
+                <Label htmlFor="stickyOnly" className="text-sm cursor-pointer">
+                  Sticky/Pinned topics only
+                </Label>
+              </div>
+            </div>
+          )}
           <div className="flex justify-end space-x-2">
             <Button
               type="button"

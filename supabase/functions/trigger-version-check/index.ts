@@ -109,7 +109,7 @@ serve(async (req) => {
     // Fetch all software that has a version_website configured
     const { data: softwareList, error: fetchError } = await supabase
       .from('software')
-      .select('id, name, website, version_website, current_version')
+      .select('id, name, website, version_website, current_version, source_type, forum_config')
       .not('version_website', 'is', null)
       .neq('version_website', '')
 
@@ -141,7 +141,9 @@ serve(async (req) => {
             name: software.name,
             website: software.website,
             versionUrl: software.version_website,
-            description: `Current version: ${software.current_version || 'unknown'}`
+            description: `Current version: ${software.current_version || 'unknown'}`,
+            sourceType: software.source_type || 'webpage',
+            forumConfig: software.forum_config || undefined
           })
         })
 

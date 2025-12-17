@@ -8,10 +8,17 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { softwareCategories } from '@/data/software-categories';
 import { toast } from 'sonner';
 import { updateSoftware } from '@/lib/software/api/admin';
-import type { Software } from '@/lib/software/types';
+import type { Software, SourceType, ForumConfig } from '@/lib/software/types';
 
 type EditSoftwareDialogProps = {
   software: Software | null;
@@ -36,7 +43,9 @@ export function EditSoftwareDialog({
         category: software.category,
         manufacturer: software.manufacturer,
         website: software.website,
-        version_website: software.version_website || ''
+        version_website: software.version_website || '',
+        source_type: software.source_type || 'webpage',
+        forum_config: software.forum_config || {}
       });
     }
   }, [software]);
@@ -125,6 +134,95 @@ export function EditSoftwareDialog({
               placeholder="https://example.com/versions"
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="source_type">Source Type</Label>
+            <Select
+              value={formData.source_type as SourceType || 'webpage'}
+              onValueChange={(value: SourceType) => setFormData({ ...formData, source_type: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select source type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="webpage">Webpage</SelectItem>
+                <SelectItem value="rss">RSS Feed</SelectItem>
+                <SelectItem value="forum">Forum</SelectItem>
+                <SelectItem value="pdf">PDF</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              How version information should be fetched
+            </p>
+          </div>
+          {formData.source_type === 'forum' && (
+            <div className="space-y-3 border rounded-lg p-3 bg-muted/50">
+              <div className="font-medium text-sm">Forum Configuration</div>
+              <div className="space-y-2">
+                <Label htmlFor="forumType">Forum Type</Label>
+                <Select
+                  value={(formData.forum_config as ForumConfig)?.forumType || 'phpbb'}
+                  onValueChange={(value) => setFormData({
+                    ...formData,
+                    forum_config: { ...(formData.forum_config as ForumConfig || {}), forumType: value as 'phpbb' | 'discourse' | 'generic' }
+                  })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select forum type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="phpbb">phpBB</SelectItem>
+                    <SelectItem value="discourse">Discourse</SelectItem>
+                    <SelectItem value="generic">Generic</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="titlePattern">Title Pattern (Regex)</Label>
+                <Input
+                  id="titlePattern"
+                  value={(formData.forum_config as ForumConfig)?.titlePattern || ''}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    forum_config: { ...(formData.forum_config as ForumConfig || {}), titlePattern: e.target.value }
+                  })}
+                  placeholder="e.g. ^Release of"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Filter topics by title pattern
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="officialAuthor">Official Author</Label>
+                <Input
+                  id="officialAuthor"
+                  value={(formData.forum_config as ForumConfig)?.officialAuthor || ''}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    forum_config: { ...(formData.forum_config as ForumConfig || {}), officialAuthor: e.target.value }
+                  })}
+                  placeholder="e.g. Blackmagic"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Filter by author username
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="stickyOnly"
+                  checked={(formData.forum_config as ForumConfig)?.stickyOnly || false}
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    forum_config: { ...(formData.forum_config as ForumConfig || {}), stickyOnly: e.target.checked }
+                  })}
+                  className="rounded"
+                />
+                <Label htmlFor="stickyOnly" className="text-sm cursor-pointer">
+                  Sticky/Pinned topics only
+                </Label>
+              </div>
+            </div>
+          )}
           <div className="flex justify-end space-x-2">
             <Button
               type="button"
