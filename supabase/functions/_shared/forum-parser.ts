@@ -530,30 +530,46 @@ function stripHTMLTags(html: string): string {
 }
 
 /**
+ * Decode HTML entities in URL
+ */
+function decodeHTMLEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+}
+
+/**
  * Convert relative URL to absolute
  */
 function makeAbsoluteUrl(relativeUrl: string, baseUrl: string): string {
-  if (relativeUrl.startsWith('http://') || relativeUrl.startsWith('https://')) {
-    return relativeUrl;
+  // First decode HTML entities (e.g., &amp; -> &)
+  const decodedUrl = decodeHTMLEntities(relativeUrl);
+
+  if (decodedUrl.startsWith('http://') || decodedUrl.startsWith('https://')) {
+    return decodedUrl;
   }
 
   try {
     const base = new URL(baseUrl);
 
     // Handle ./viewtopic.php style links
-    if (relativeUrl.startsWith('./')) {
-      return new URL(relativeUrl.substring(2), base.origin + base.pathname.substring(0, base.pathname.lastIndexOf('/') + 1)).href;
+    if (decodedUrl.startsWith('./')) {
+      return new URL(decodedUrl.substring(2), base.origin + base.pathname.substring(0, base.pathname.lastIndexOf('/') + 1)).href;
     }
 
     // Handle /viewtopic.php style links
-    if (relativeUrl.startsWith('/')) {
-      return new URL(relativeUrl, base.origin).href;
+    if (decodedUrl.startsWith('/')) {
+      return new URL(decodedUrl, base.origin).href;
     }
 
     // Handle viewtopic.php style links (relative to current path)
-    return new URL(relativeUrl, baseUrl).href;
+    return new URL(decodedUrl, baseUrl).href;
   } catch (e) {
-    console.warn(`Failed to make absolute URL: ${relativeUrl}`);
-    return relativeUrl;
+    console.warn(`Failed to make absolute URL: ${decodedUrl}`);
+    return decodedUrl;
   }
 }
