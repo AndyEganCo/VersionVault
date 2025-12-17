@@ -51,6 +51,15 @@ import {
   type BlockerDetection
 } from '../_shared/bot-blocker-handler.ts'
 
+import {
+  fetchRSSContent
+} from '../_shared/rss-parser.ts'
+
+import {
+  fetchForumContent,
+  type ForumConfig
+} from '../_shared/forum-parser.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -69,6 +78,8 @@ interface ExtractRequest {
   manufacturer?: string  // Manufacturer name (Phase 2 enhancement)
   productIdentifier?: string  // Product identifier for pattern matching (Phase 2)
   scrapingStrategy?: ScrapingStrategy  // Interactive scraping strategy (Phase 3)
+  sourceType?: 'webpage' | 'rss' | 'forum' | 'pdf'  // Source type for content extraction
+  forumConfig?: ForumConfig  // Forum configuration for forum source type
 }
 
 interface ExtractedInfo {
@@ -1452,6 +1463,51 @@ function extractFromDomain(website: string): ExtractedInfo {
   }
 }
 
+/**
+ * Auto-detect source type from URL
+ */
+function detectSourceType(url: string): 'webpage' | 'rss' | 'forum' | 'pdf' {
+  if (!url) return 'webpage';
+
+  const lowerUrl = url.toLowerCase();
+
+  // PDF detection
+  if (lowerUrl.endsWith('.pdf')) {
+    return 'pdf';
+  }
+
+  // RSS/Atom feed detection
+  if (
+    lowerUrl.includes('/feed') ||
+    lowerUrl.includes('/rss') ||
+    lowerUrl.endsWith('.xml') ||
+    lowerUrl.endsWith('.rss') ||
+    lowerUrl.endsWith('.atom') ||
+    lowerUrl.includes('feed.xml') ||
+    lowerUrl.includes('rss.xml') ||
+    lowerUrl.includes('atom.xml')
+  ) {
+    return 'rss';
+  }
+
+  // Forum detection (phpBB, Discourse, vBulletin, etc.)
+  if (
+    lowerUrl.includes('viewforum.php') ||
+    lowerUrl.includes('viewtopic.php') ||
+    lowerUrl.includes('/forums/') ||
+    lowerUrl.includes('/forum/') ||
+    lowerUrl.includes('/community/') ||
+    lowerUrl.includes('/discuss/') ||
+    lowerUrl.includes('showthread.php') ||
+    lowerUrl.includes('forumdisplay.php')
+  ) {
+    return 'forum';
+  }
+
+  // Default to webpage
+  return 'webpage';
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -1459,7 +1515,7 @@ serve(async (req) => {
   }
 
   try {
-    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy } = await req.json() as ExtractRequest
+    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy, sourceType, forumConfig } = await req.json() as ExtractRequest
 
     if (!name || !website) {
       return new Response(
@@ -1479,12 +1535,17 @@ serve(async (req) => {
     console.log(`Product Identifier: ${productIdentifier || 'none'}`)
     console.log(`Extraction Mode: ${USE_ENHANCED_EXTRACTION ? '🧠 ENHANCED (Phase 2)' : '📊 LEGACY (Original)'}`)
     console.log(`Interactive Scraping: ${scrapingStrategy ? '🎭 YES (Phase 3)' : '❌ NO'}`)
+    console.log(`Source Type: ${sourceType || 'auto-detect'}`)
     console.log(`Has provided content: ${!!content}`)
     console.log('='.repeat(60))
 
     let versionContent = ''
     let mainWebsiteContent = ''
     let fetchMethod = 'static' // Track which method was used for version content
+
+    // Determine source type (auto-detect if not provided)
+    const detectedSourceType = sourceType || detectSourceType(versionUrl)
+    console.log(`📍 Detected source type: ${detectedSourceType}`)
 
     // If content is provided directly (e.g., from PDF parsing), use it
     if (content && content.length > 100) {
@@ -1497,12 +1558,45 @@ serve(async (req) => {
         mainWebsiteContent = mainResult.content
       }
     } else if (versionUrl) {
-      // Otherwise fetch content from URLs
-      // Check if versionUrl is a PDF
-      const isPDF = versionUrl.toLowerCase().endsWith('.pdf')
+      // Route based on source type
+      if (detectedSourceType === 'rss') {
+        // RSS Feed
+        console.log(`📡 Source type: RSS feed`)
+        try {
+          versionContent = await fetchRSSContent(versionUrl)
+          fetchMethod = 'rss'
+        } catch (rssError) {
+          console.error('RSS fetch failed:', rssError)
+          versionContent = ''
+          fetchMethod = 'error'
+        }
 
-      if (isPDF) {
-        console.log(`Detected PDF URL: ${versionUrl}`)
+        // Still fetch main website for manufacturer/category info
+        if (versionUrl.toLowerCase() !== website.toLowerCase()) {
+          const mainResult = await fetchWebpageContent(website, 20000, false)
+          mainWebsiteContent = mainResult.content
+        }
+      } else if (detectedSourceType === 'forum') {
+        // Forum
+        console.log(`🗨️ Source type: Forum`)
+        console.log(`Forum config:`, forumConfig)
+        try {
+          versionContent = await fetchForumContent(versionUrl, forumConfig || {})
+          fetchMethod = 'forum'
+        } catch (forumError) {
+          console.error('Forum fetch failed:', forumError)
+          versionContent = ''
+          fetchMethod = 'error'
+        }
+
+        // Still fetch main website for manufacturer/category info
+        if (versionUrl.toLowerCase() !== website.toLowerCase()) {
+          const mainResult = await fetchWebpageContent(website, 20000, false)
+          mainWebsiteContent = mainResult.content
+        }
+      } else if (detectedSourceType === 'pdf') {
+        // PDF
+        console.log(`📄 Detected PDF URL: ${versionUrl}`)
 
         // Fetch and parse PDF content
         try {
@@ -1521,6 +1615,8 @@ serve(async (req) => {
           mainWebsiteContent = mainResult.content
         }
       } else {
+        // Regular webpage (default)
+        console.log(`🌐 Source type: Webpage`)
         // Fetch content from both URLs in parallel (try regular fetch first)
         // Phase 3: Pass scraping strategy if provided
         const [versionResult, mainResult] = await Promise.all([
