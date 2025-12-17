@@ -1,5 +1,6 @@
 // Supabase Edge Function for AI-powered software info extraction
 // This keeps the OpenAI API key secure on the server side
+// Updated: 2024-12-17 - Fixed isPDF reference, added RSS/forum support
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { DOMParser } from 'https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts'
 // @deno-types="npm:@types/pdfjs-dist"
