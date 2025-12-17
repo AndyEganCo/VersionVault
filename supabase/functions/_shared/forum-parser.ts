@@ -22,15 +22,17 @@ export interface ForumTopic {
 
 /**
  * Fetches forum content with topic filtering
- * Returns the first official release topic's content
+ * Returns multiple official release topics' content
  */
 export async function fetchForumContent(
   forumUrl: string,
   config: ForumConfig = {},
-  useBrowserless: boolean = false
+  useBrowserless: boolean = false,
+  maxTopics: number = 10
 ): Promise<string> {
   console.log(`🗨️ Fetching forum: ${forumUrl}`);
   console.log(`Config:`, JSON.stringify(config, null, 2));
+  console.log(`Max topics to fetch: ${maxTopics}`);
 
   try {
     // Step 1: Fetch forum index page
@@ -43,7 +45,7 @@ export async function fetchForumContent(
       console.warn('⚠️ Forum index has very low content, may need Browserless');
       if (!useBrowserless) {
         console.log('🔄 Retrying with Browserless...');
-        return await fetchForumContent(forumUrl, config, true);
+        return await fetchForumContent(forumUrl, config, true, maxTopics);
       }
     }
 
@@ -70,15 +72,45 @@ export async function fetchForumContent(
       return '';
     }
 
-    // Step 4: Fetch first topic's content (first post only)
-    console.log(`📖 Fetching content from: ${officialTopics[0].title}`);
-    const topicContent = await fetchTopicContent(
-      officialTopics[0].link,
-      forumType,
-      useBrowserless
-    );
+    // Step 4: Fetch multiple topics' content (up to maxTopics)
+    const topicsToFetch = officialTopics.slice(0, maxTopics);
+    console.log(`📖 Fetching content from ${topicsToFetch.length} topics`);
 
-    return topicContent;
+    const topicContents: Array<{ title: string; link: string; content: string }> = [];
+
+    for (const topic of topicsToFetch) {
+      try {
+        console.log(`  → Fetching: ${topic.title}`);
+        const content = await fetchTopicContent(
+          topic.link,
+          forumType,
+          useBrowserless
+        );
+
+        if (content && content.length > 0) {
+          topicContents.push({
+            title: topic.title,
+            link: topic.link,
+            content
+          });
+        } else {
+          console.warn(`  ⚠️ Empty content for topic: ${topic.title}`);
+        }
+      } catch (error) {
+        console.error(`  ❌ Failed to fetch topic "${topic.title}": ${error.message}`);
+        // Continue with other topics even if one fails
+      }
+    }
+
+    console.log(`✅ Successfully fetched ${topicContents.length} topics`);
+
+    if (topicContents.length === 0) {
+      console.warn('⚠️ No topic content could be fetched');
+      return '';
+    }
+
+    // Step 5: Format all topics for AI extraction (similar to RSS parser)
+    return formatTopicsForAI(topicContents);
   } catch (error) {
     console.error(`❌ Forum fetch failed for ${forumUrl}:`, error);
     throw error;
@@ -509,6 +541,29 @@ function cleanPostContent(text: string): string {
     .replace(/\s+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/**
+ * Format multiple forum topics for AI extraction
+ * Similar to RSS parser's formatEntriesForAI()
+ */
+function formatTopicsForAI(topics: Array<{ title: string; link: string; content: string }>): string {
+  return topics
+    .map((topic, index) => {
+      // Limit each topic to reasonable size (AI will see all topics)
+      let content = topic.content;
+      if (content.length > 3000) {
+        content = content.substring(0, 3000) + '...';
+      }
+
+      return `
+=== RELEASE ${index + 1}: ${topic.title} ===
+Link: ${topic.link}
+
+${content}
+      `.trim();
+    })
+    .join('\n\n--- NEXT RELEASE ---\n\n');
 }
 
 /**
