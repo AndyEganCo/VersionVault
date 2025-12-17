@@ -662,10 +662,10 @@ TASK: Extract the following information:
 5. **All Versions** (versions array): Extract EVERY version found in the content
    - Look for ALL version numbers, not just the latest
    - For EACH version found, extract:
-     * version: The version number (e.g., "1.5.0", "v2.3")
+     * version: The version number (e.g., "1.5.0", "v2.3") OR feature title (see below)
      * releaseDate: Release date in YYYY-MM-DD format - **USE NULL IF NOT FOUND, DO NOT GUESS**
      * notes: Full release notes/changelog for that version (use markdown formatting)
-     * type: "major" for X.0.0, "minor" for X.X.0, "patch" for X.X.X
+     * type: "major" for X.0.0, "minor" for X.X.0, "patch" for X.X.X, or "minor" for features
    - Include detailed release notes if available
    - If this is a dedicated release notes/changelog page, extract ALL versions listed
    - If only one version found, still return it as an array with one element
@@ -675,6 +675,13 @@ TASK: Extract the following information:
      * Pattern: "notes text vX.X.X date notes text vX.X.X date"
      * Each version's notes are the text that appears IMMEDIATELY BEFORE that version number
      * Do NOT associate a version with the notes that come AFTER it
+   - **FEATURE-BASED RELEASES** (RSS feeds, continuous deployment):
+     * If content contains entries formatted like "=== RELEASE 1: Feature Name ===" with no numeric versions
+     * Use the feature title as the "version" field (e.g., "Make in FigGov", "New image editing tools")
+     * Extract the date from "Date:" field if present
+     * Use the description/content as the release notes
+     * Set type to "minor" for all feature releases
+     * This handles software like Figma that announces features instead of numbered versions
 
 CRITICAL INSTRUCTIONS:
 - **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data or knowledge about this software
@@ -1114,6 +1121,13 @@ Extract the following information:
      * Pattern: "notes text vX.X.X date notes text vX.X.X date"
      * Each version's notes are the text that appears IMMEDIATELY BEFORE that version number
      * Do NOT associate a version with the notes that come AFTER it
+   - **FEATURE-BASED RELEASES** (RSS feeds, continuous deployment):
+     * If content contains entries formatted like "=== RELEASE 1: Feature Name ===" with no numeric versions
+     * Use the feature title as the "version" field (e.g., "Make in FigGov", "New image editing tools")
+     * Extract the date from "Date:" field if present
+     * Use the description/content as the release notes
+     * Set type to "minor" for all feature releases
+     * This handles software like Figma that announces features instead of numbered versions
 
 6. **Validation Fields** (REQUIRED):
    - **confidence**: 0-100 score for how confident you are this is correct
