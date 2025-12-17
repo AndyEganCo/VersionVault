@@ -61,6 +61,11 @@ import {
   type ForumConfig
 } from '../_shared/forum-parser.ts'
 
+import {
+  discoverReleaseUrls,
+  type SitemapUrl
+} from '../_shared/sitemap-parser.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -1739,8 +1744,54 @@ serve(async (req) => {
     const stillLowContent = versionContent.length < 2000
     const noContentAtAll = versionContent.length === 0
 
+    // Try sitemap discovery if webpage content is low and this is a webpage source
+    if (stillLowContent && detectedSourceType === 'webpage' && website) {
+      console.log('\n🗺️ Low content detected, attempting sitemap discovery...')
+      try {
+        const releaseUrls = await discoverReleaseUrls(website, 3)
+
+        if (releaseUrls.length > 0) {
+          console.log(`✅ Found ${releaseUrls.length} potential release pages from sitemap`)
+
+          // Try fetching content from the best sitemap URLs
+          for (const sitemapUrl of releaseUrls) {
+            console.log(`  → Trying: ${sitemapUrl.loc} (score: ${sitemapUrl.relevanceScore})`)
+
+            try {
+              const sitemapResult = await fetchWebpageContent(sitemapUrl.loc, 30000, false)
+
+              if (sitemapResult.content.length > versionContent.length) {
+                console.log(`  ✅ Found better content (${sitemapResult.content.length} chars vs ${versionContent.length} chars)`)
+                versionContent = sitemapResult.content
+                fetchMethod = sitemapResult.method + '_sitemap'
+
+                // If we found good content, stop searching
+                if (sitemapResult.content.length >= 5000) {
+                  console.log('  🎯 Good content found, stopping sitemap search')
+                  break
+                }
+              } else {
+                console.log(`  ⏭️  Content not better than current (${sitemapResult.content.length} chars)`)
+              }
+            } catch (error) {
+              console.warn(`  ❌ Failed to fetch sitemap URL: ${error.message}`)
+            }
+          }
+        } else {
+          console.log('⚠️ No relevant URLs found in sitemap')
+        }
+      } catch (error) {
+        console.warn(`⚠️ Sitemap discovery failed: ${error.message}`)
+        // Continue with original content
+      }
+    }
+
+    // Re-check content after sitemap discovery
+    const stillLowContentAfterSitemap = versionContent.length < 2000
+    const noContentAtAllAfterSitemap = versionContent.length === 0
+
     // Detect if site is completely blocking us (0 chars even after all retries)
-    if (noContentAtAll && versionUrl) {
+    if (noContentAtAllAfterSitemap && versionUrl) {
       console.error('❌ SITE BLOCKED: No content extracted after all attempts')
       console.error('This site may be blocking automated access with:')
       console.error('  - Bot detection (Cloudflare, Akamai, etc.)')
@@ -1809,11 +1860,11 @@ serve(async (req) => {
     }
 
     // Add JavaScript page detection flag and warning (only if Browserless also failed)
-    if (stillLowContent) {
+    if (stillLowContentAfterSitemap) {
       extracted.isJavaScriptPage = true
 
       // Provide specific warning based on situation
-      if (noContentAtAll) {
+      if (noContentAtAllAfterSitemap) {
         // Site is completely blocking us
         const hostname = versionUrl ? new URL(versionUrl).hostname : 'this site'
         extracted.lowContentWarning = `⚠️ Could not extract any content from ${hostname}. This site is blocking automated access. Please manually copy the version information or use an alternative source.`
