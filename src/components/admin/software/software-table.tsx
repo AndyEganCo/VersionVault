@@ -178,14 +178,21 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
 
             if (enhancedResult.ok) {
               const enhanced = await enhancedResult.json();
+              console.log('✅ Web search response for', version.version, ':', enhanced);
               if (enhanced.raw_notes && enhanced.raw_notes.length > 0) {
                 enhancedNotes = enhanced.raw_notes.join('\n');
                 structuredNotes = enhanced.structured_notes;
                 searchSources = enhanced.sources;
+                console.log('📝 Using enhanced notes for', version.version, '- sources:', searchSources?.length || 0);
+              } else {
+                console.log('⚠️ Web search returned empty notes for', version.version);
               }
+            } else {
+              const errorText = await enhancedResult.text();
+              console.error('❌ Web search HTTP error for', version.version, ':', enhancedResult.status, errorText);
             }
           } catch (error) {
-            console.log('Web search extraction failed for', version.version, '- using basic notes');
+            console.error('❌ Web search extraction failed for', version.version, ':', error);
             // Fall back to basic notes - no error shown to user
           }
 

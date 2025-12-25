@@ -138,7 +138,8 @@ export async function addVersionHistory(softwareId: string, data: {
 
     if (existing) {
       // Check if existing notes are manual
-      const isManual = existing.notes_source === 'manual';
+      // IMPORTANT: Treat NULL/undefined as 'manual' (conservative - protect existing data)
+      const isManual = !existing.notes_source || existing.notes_source === 'manual';
 
       // If existing is manual and new is auto, we need to merge
       if (isManual && data.notes_source === 'auto') {
