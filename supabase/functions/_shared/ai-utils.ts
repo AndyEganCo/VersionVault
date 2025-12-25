@@ -8,12 +8,14 @@ import type { StructuredNotes, MergeMetadata } from './types.ts'
 // Configuration
 // ============================================
 
-interface AIConfig {
+export interface AIConfig {
   web_search_enabled: boolean
   max_web_searches_per_day: number
   smart_merge_enabled: boolean
   preferred_extraction_model: string
   preferred_merge_model: string
+  preferred_parsing_model: string
+  preferred_enrichment_model: string
   web_search_domains: string[]
 }
 
@@ -33,8 +35,10 @@ export async function getAIConfig(): Promise<AIConfig> {
       web_search_enabled: true,
       max_web_searches_per_day: 500,
       smart_merge_enabled: true,
-      preferred_extraction_model: 'gpt-5',
-      preferred_merge_model: 'gpt-4o',
+      preferred_extraction_model: 'gpt-5.1',
+      preferred_merge_model: 'gpt-5-mini',
+      preferred_parsing_model: 'gpt-5-mini',
+      preferred_enrichment_model: 'gpt-5-mini',
       web_search_domains: []
     }
   }
@@ -52,8 +56,10 @@ export async function getAIConfig(): Promise<AIConfig> {
     web_search_enabled: config.web_search_enabled ?? true,
     max_web_searches_per_day: config.max_web_searches_per_day ?? 500,
     smart_merge_enabled: config.smart_merge_enabled ?? true,
-    preferred_extraction_model: config.preferred_extraction_model ?? 'gpt-5',
-    preferred_merge_model: config.preferred_merge_model ?? 'gpt-4o',
+    preferred_extraction_model: config.preferred_extraction_model ?? 'gpt-5.1',
+    preferred_merge_model: config.preferred_merge_model ?? 'gpt-5-mini',
+    preferred_parsing_model: config.preferred_parsing_model ?? 'gpt-5-mini',
+    preferred_enrichment_model: config.preferred_enrichment_model ?? 'gpt-5-mini',
     web_search_domains: config.web_search_domains ?? []
   }
 }
@@ -241,7 +247,7 @@ Return a concise, structured summary with specific details.`
     const releaseDate = releaseDateMatch ? releaseDateMatch[1] : null
 
     // Parse the response into structured notes
-    const structured = await parseIntoStructuredNotes(textContent, config.preferred_extraction_model)
+    const structured = await parseIntoStructuredNotes(textContent, config.preferred_parsing_model)
 
     // Also create raw notes array (backward compatibility)
     const rawNotes = convertStructuredToRawNotes(structured)
@@ -284,7 +290,7 @@ async function parseIntoStructuredNotes(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o', // Use cheaper model for parsing
+      model: model, // Use configured parsing model
       messages: [{
         role: 'system',
         content: `You are parsing release notes into structured sections. Extract information into these categories:
@@ -320,7 +326,7 @@ Return ONLY valid JSON. Each field should be an array of strings. Only include f
   // Track usage
   await trackAIUsage(
     'extraction',
-    'gpt-4o',
+    model,
     result.usage?.prompt_tokens || 0,
     result.usage?.completion_tokens || 0,
     0
