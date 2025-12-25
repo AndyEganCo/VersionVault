@@ -196,7 +196,8 @@ export function ReleaseNotesDialog({
         version: versionToSave,
         release_date: new Date(isoDate).toISOString(),
         notes: notes,
-        type
+        type,
+        notes_source: 'manual' // Mark as manual when edited through UI
       });
 
       if (success) {

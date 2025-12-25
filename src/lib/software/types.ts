@@ -57,6 +57,25 @@ export type SoftwareVersion = {
   changelog?: string;
 };
 
+export interface StructuredNotes {
+  new_features?: string[];
+  changes?: string[];
+  improvements?: string[];
+  bug_fixes?: string[];
+  known_issues?: string[];
+  notices?: string[];
+  compatibility?: string[];
+  upgrade_instructions?: string[];
+}
+
+export interface MergeMetadata {
+  merged_at: string;
+  had_manual_notes: boolean;
+  sources_combined: string[];
+  ai_model_used: string;
+  merge_strategy: 'full' | 'partial' | 'manual_priority';
+}
+
 export interface VersionHistory {
   readonly id: string;
   readonly software_id: string;
@@ -66,4 +85,9 @@ export interface VersionHistory {
   readonly notes: string[];
   readonly type: 'major' | 'minor' | 'patch';
   readonly release_date: string;
+  readonly notes_source?: 'manual' | 'auto' | 'merged';
+  readonly structured_notes?: StructuredNotes;
+  readonly merge_metadata?: MergeMetadata;
+  readonly search_sources?: string[];
+  readonly notes_updated_at?: string;
 }

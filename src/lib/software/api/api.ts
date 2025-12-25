@@ -119,12 +119,15 @@ export async function addVersionHistory(softwareId: string, data: {
   release_date: string;
   notes: string;
   type: 'major' | 'minor' | 'patch';
+  notes_source?: 'manual' | 'auto' | 'merged';
+  structured_notes?: any;
+  search_sources?: string[];
 }): Promise<boolean> {
   try {
     // First check if this version already exists
     const { data: existing } = await supabase
       .from('software_version_history')
-      .select('id')
+      .select('id, notes_source, notes, structured_notes')
       .eq('software_id', softwareId)
       .eq('version', data.version)
       .maybeSingle();
@@ -134,11 +137,68 @@ export async function addVersionHistory(softwareId: string, data: {
       : (Array.isArray(data.notes) ? data.notes : []);
 
     if (existing) {
-      // Update existing version - only update release_date if it's not null
+      // Check if existing notes are manual
+      const isManual = existing.notes_source === 'manual';
+
+      // If existing is manual and new is auto, we need to merge
+      if (isManual && data.notes_source === 'auto') {
+        console.log('Manual notes detected, calling merge function...');
+
+        // Call merge edge function
+        const mergeResult = await callMergeFunction(
+          existing,
+          {
+            notes: notesArray,
+            structured_notes: data.structured_notes
+          }
+        );
+
+        if (mergeResult) {
+          // Use merged result
+          const updateData: any = {
+            notes: mergeResult.raw_notes,
+            structured_notes: mergeResult.structured_notes,
+            notes_source: 'merged',
+            merge_metadata: mergeResult.merge_metadata,
+            notes_updated_at: new Date().toISOString(),
+            type: data.type
+          };
+
+          if (data.release_date && data.release_date !== 'null') {
+            updateData.release_date = data.release_date;
+          }
+
+          if (data.search_sources) {
+            updateData.search_sources = data.search_sources;
+          }
+
+          const { error } = await supabase
+            .from('software_version_history')
+            .update(updateData)
+            .eq('id', existing.id);
+
+          if (error) throw error;
+          console.log('✅ Notes merged successfully');
+          return true;
+        }
+      }
+
+      // If existing is auto or merged, safe to update
+      // Or if merge failed, just update normally
       const updateData: any = {
         notes: notesArray,
-        type: data.type
+        type: data.type,
+        notes_source: data.notes_source || 'auto',
+        notes_updated_at: new Date().toISOString()
       };
+
+      if (data.structured_notes) {
+        updateData.structured_notes = data.structured_notes;
+      }
+
+      if (data.search_sources) {
+        updateData.search_sources = data.search_sources;
+      }
 
       // Only update release_date if a valid date is provided
       if (data.release_date && data.release_date !== 'null') {
@@ -165,21 +225,33 @@ export async function addVersionHistory(softwareId: string, data: {
         : null;
 
       const now = new Date().toISOString();
+      const insertData: any = {
+        id: crypto.randomUUID(),
+        software_id: data.software_id,
+        version: data.version,
+        previous_version: softwareData?.current_version || null,
+        release_date: releaseDate,
+        notes: notesArray,
+        type: data.type,
+        notes_source: data.notes_source || 'auto',
+        notes_updated_at: now,
+        newsletter_verified: true,  // Auto-verify new versions for newsletters
+        verified_at: now,
+        detected_at: now,
+        created_at: now
+      };
+
+      if (data.structured_notes) {
+        insertData.structured_notes = data.structured_notes;
+      }
+
+      if (data.search_sources) {
+        insertData.search_sources = data.search_sources;
+      }
+
       const { error } = await supabase
         .from('software_version_history')
-        .insert({
-          id: crypto.randomUUID(),
-          software_id: data.software_id,
-          version: data.version,
-          previous_version: softwareData?.current_version || null,
-          release_date: releaseDate,
-          notes: notesArray,
-          type: data.type,
-          newsletter_verified: true,  // Auto-verify new versions for newsletters
-          verified_at: now,
-          detected_at: now,
-          created_at: now
-        });
+        .insert(insertData);
 
       if (error) throw error;
     }
@@ -245,7 +317,7 @@ export async function getVersionHistory(softwareId: string) {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('software_version_history')
-      .select('id, version, notes, type, release_date, detected_at')
+      .select('id, version, notes, type, release_date, detected_at, notes_source, structured_notes, merge_metadata, search_sources')
       .eq('software_id', softwareId);
 
     if (error) throw error;
@@ -276,5 +348,41 @@ export async function deleteVersionHistory(versionId: string): Promise<boolean> 
   } catch (error) {
     console.error('Error deleting version history:', error);
     return false;
+  }
+}
+
+/**
+ * Calls the merge edge function to intelligently combine existing and new notes
+ */
+async function callMergeFunction(
+  existingNotes: { notes: string[], structured_notes?: any, notes_source?: string },
+  newNotes: { notes: string[], structured_notes?: any }
+): Promise<any | null> {
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/merge-release-notes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`
+      },
+      body: JSON.stringify({
+        existingNotes,
+        newNotes
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Merge function failed:', response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error calling merge function:', error);
+    return null;
   }
 }

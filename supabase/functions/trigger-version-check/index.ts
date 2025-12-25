@@ -2,6 +2,7 @@
 // Triggered by cron jobs to check all software versions overnight
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { extractWithWebSearch, smartMergeNotes, getAIConfig } from '../_shared/ai-utils.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -187,6 +188,8 @@ serve(async (req) => {
 
         // Save all versions to database
         let versionsAdded = 0
+        const aiConfig = await getAIConfig()
+
         if (extracted.versions && extracted.versions.length > 0) {
           for (const version of extracted.versions) {
             // Normalize version number for consistent storage
@@ -195,20 +198,85 @@ serve(async (req) => {
             // Check if version already exists
             const { data: existing } = await supabase
               .from('software_version_history')
-              .select('id')
+              .select('id, notes_source, notes, structured_notes')
               .eq('software_id', software.id)
               .eq('version', normalizedVersion)
               .single()
 
-            const notesArray = typeof version.notes === 'string'
+            let notesArray = typeof version.notes === 'string'
               ? version.notes.split('\n').filter(Boolean)
               : (Array.isArray(version.notes) ? version.notes : [])
 
+            let structuredNotes = null
+            let searchSources: string[] = []
+            let notesSource: 'auto' | 'merged' = 'auto'
+            let mergeMetadata = null
+
+            // Try enhanced extraction with web search for new versions
+            if (!existing && aiConfig.web_search_enabled) {
+              console.log(`  🔍 Attempting web search for ${normalizedVersion}...`)
+
+              const webSearchResult = await extractWithWebSearch(
+                software.name,
+                'Unknown', // manufacturer not in current schema
+                normalizedVersion,
+                software.website,
+                []
+              )
+
+              if (webSearchResult) {
+                console.log(`  ✅ Web search found detailed notes`)
+                notesArray = webSearchResult.raw_notes
+                structuredNotes = webSearchResult.structured_notes
+                searchSources = webSearchResult.sources
+              }
+            }
+
             if (existing) {
-              // Update existing version - only update release_date if it's not null
+              // Check if existing notes are manual
+              const isManual = existing.notes_source === 'manual'
+
+              if (isManual) {
+                // Smart merge: combine manual + new auto notes
+                console.log(`  🔀 Merging manual notes with new auto-extracted notes...`)
+
+                const mergeResult = await smartMergeNotes(
+                  {
+                    notes: existing.notes || [],
+                    structured_notes: existing.structured_notes,
+                    notes_source: existing.notes_source
+                  },
+                  {
+                    structured_notes: structuredNotes || {},
+                    raw_notes: notesArray
+                  }
+                )
+
+                notesArray = mergeResult.raw_notes
+                structuredNotes = mergeResult.structured_notes
+                notesSource = 'merged'
+                mergeMetadata = mergeResult.merge_metadata
+                console.log(`  ✅ Notes merged successfully`)
+              }
+
+              // Update existing version
               const updateData: any = {
                 notes: notesArray,
-                type: version.type
+                type: version.type,
+                notes_source: notesSource,
+                notes_updated_at: new Date().toISOString()
+              }
+
+              if (structuredNotes) {
+                updateData.structured_notes = structuredNotes
+              }
+
+              if (searchSources.length > 0) {
+                updateData.search_sources = searchSources
+              }
+
+              if (mergeMetadata) {
+                updateData.merge_metadata = mergeMetadata
               }
 
               // Only update release_date if a valid date is provided
@@ -226,25 +294,37 @@ serve(async (req) => {
                 throw updateError
               }
             } else {
-              // Insert new version - use provided date or current date if null
+              // Insert new version
               const releaseDate = (version.releaseDate && version.releaseDate !== 'null')
                 ? version.releaseDate
                 : new Date().toISOString()
 
               const now = new Date().toISOString()
+              const insertData: any = {
+                software_id: software.id,
+                version: normalizedVersion,
+                release_date: releaseDate,
+                notes: notesArray,
+                type: version.type,
+                notes_source: notesSource,
+                notes_updated_at: now,
+                newsletter_verified: true,
+                verified_at: now,
+                detected_at: now,
+                created_at: now
+              }
+
+              if (structuredNotes) {
+                insertData.structured_notes = structuredNotes
+              }
+
+              if (searchSources.length > 0) {
+                insertData.search_sources = searchSources
+              }
+
               const { error: insertError } = await supabase
                 .from('software_version_history')
-                .insert({
-                  software_id: software.id,
-                  version: normalizedVersion,
-                  release_date: releaseDate,
-                  notes: notesArray,
-                  type: version.type,
-                  newsletter_verified: true,  // Auto-verify new versions for newsletters
-                  verified_at: now,
-                  detected_at: now,
-                  created_at: now
-                })
+                .insert(insertData)
 
               if (insertError) {
                 console.error(`  ❌ Failed to insert version ${normalizedVersion}: ${insertError.message}`)
