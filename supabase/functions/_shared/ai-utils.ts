@@ -184,20 +184,15 @@ export async function extractWithWebSearch(
         }],
         tool_choice: 'auto',
         include: ['web_search_call.action.sources'],
-        input: `Find the complete, official release notes for ${softwareName} version ${detectedVersion} by ${manufacturer}.
+        input: `Find the official release notes for ${softwareName} version ${detectedVersion} by ${manufacturer}.
 
-Look for detailed information about:
-- New features
-- Changes and improvements
+Extract:
+- New features and changes
 - Bug fixes
-- Known issues or problems
-- Important notices
-- Compatibility information
-- Upgrade instructions
+- Known issues and notices
+- Compatibility and upgrade info
 
-Return a comprehensive, well-structured summary of the release notes.
-Focus on accuracy and completeness.
-Include specific details, not generic descriptions.`
+Return a concise, structured summary with specific details.`
       })
     })
 
