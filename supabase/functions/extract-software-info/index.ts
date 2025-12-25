@@ -1745,8 +1745,16 @@ serve(async (req) => {
     const stillLowContent = versionContent.length < 2000
     const noContentAtAll = versionContent.length === 0
 
+    // Check if this is a known difficult domain (skip sitemap for these to save time)
+    const isKnownDifficultDomain = versionUrl && (
+      versionUrl.includes('adobe.com') ||
+      versionUrl.includes('apple.com') ||
+      versionUrl.includes('autodesk.com')
+    )
+
     // Try sitemap discovery if webpage content is low and this is a webpage source
-    if (stillLowContent && detectedSourceType === 'webpage' && website) {
+    // Skip for known difficult domains as it wastes time and rarely works
+    if (stillLowContent && detectedSourceType === 'webpage' && website && !isKnownDifficultDomain) {
       console.log('\n🗺️ Low content detected, attempting sitemap discovery...')
       try {
         const releaseUrls = await discoverReleaseUrls(website, 3)

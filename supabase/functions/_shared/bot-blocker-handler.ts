@@ -335,10 +335,8 @@ export function getBrowserlessOptions(blockerType: BlockerType, extended: boolea
       gotoOptions: {
         ...baseOptions.gotoOptions,
         waitUntil: 'networkidle0' as const, // Wait for all network activity to stop
-        timeout: 60000,
+        timeout: 60000, // Increased timeout for JavaScript challenges
       },
-      // Add additional wait time for JavaScript challenges
-      waitFor: 5000,
     }
   }
 
