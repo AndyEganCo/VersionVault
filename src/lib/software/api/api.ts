@@ -150,7 +150,7 @@ export async function addVersionHistory(softwareId: string, data: {
           existing,
           {
             notes: notesArray,
-            structured_notes: data.structured_notes
+            structured_notes: data.structured_notes || {} // Ensure we always pass an object
           }
         );
 

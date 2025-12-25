@@ -459,7 +459,7 @@ Only include sections that have content.`
 // ============================================
 
 function formatNotesForMerge(notes: any): string {
-  if (notes.structured_notes) {
+  if (notes.structured_notes && typeof notes.structured_notes === 'object' && Object.keys(notes.structured_notes).length > 0) {
     return Object.entries(notes.structured_notes)
       .map(([section, items]) => {
         const sectionTitle = section.replace(/_/g, ' ').toUpperCase()
