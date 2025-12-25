@@ -46,4 +46,4 @@ verify_jwt = false
 
 [functions.trigger-version-check]
 verify_jwt = false
-request_timeout = 1800  # 30 minutes (Pro tier max) - needed for processing many software items
+# Note: Pro tier automatically gets higher timeout limits (no config needed)
