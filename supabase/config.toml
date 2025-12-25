@@ -35,3 +35,15 @@ content_path = "./supabase/templates/reset-password.html"
 [auth.email.template.reauthentication]
 subject = "Confirm It's You"
 content_path = "./supabase/templates/reauthentication.html"
+
+# Edge Functions Configuration
+# Disable JWT verification for client-accessible functions
+[functions.merge-release-notes]
+verify_jwt = false
+
+[functions.extract-with-web-search]
+verify_jwt = false
+
+[functions.trigger-version-check]
+verify_jwt = false
+# Note: Pro tier automatically gets higher timeout limits (no config needed)

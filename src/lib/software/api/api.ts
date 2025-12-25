@@ -119,12 +119,15 @@ export async function addVersionHistory(softwareId: string, data: {
   release_date: string;
   notes: string;
   type: 'major' | 'minor' | 'patch';
+  notes_source?: 'manual' | 'auto' | 'merged';
+  structured_notes?: any;
+  search_sources?: string[];
 }): Promise<boolean> {
   try {
     // First check if this version already exists
     const { data: existing } = await supabase
       .from('software_version_history')
-      .select('id')
+      .select('id, notes_source, notes, structured_notes, search_sources')
       .eq('software_id', softwareId)
       .eq('version', data.version)
       .maybeSingle();
@@ -134,11 +137,76 @@ export async function addVersionHistory(softwareId: string, data: {
       : (Array.isArray(data.notes) ? data.notes : []);
 
     if (existing) {
-      // Update existing version - only update release_date if it's not null
+      // Check if existing notes have meaningful content
+      const existingHasContent = existing.notes &&
+        Array.isArray(existing.notes) &&
+        existing.notes.length > 0 &&
+        existing.notes.some(note => note && note.trim().length > 20); // At least 20 chars of content
+
+      // ALWAYS merge when existing has content, to preserve quality information
+      // The AI merge will intelligently decide what to keep/combine
+      if (existingHasContent && data.notes_source === 'auto') {
+        console.log('📝 Existing notes found, calling smart merge to preserve quality...');
+
+        // Call merge edge function
+        const mergeResult = await callMergeFunction(
+          existing,
+          {
+            notes: notesArray,
+            structured_notes: data.structured_notes || {} // Ensure we always pass an object
+          }
+        );
+
+        if (mergeResult) {
+          // Use merged result
+          const updateData: any = {
+            notes: mergeResult.raw_notes,
+            structured_notes: mergeResult.structured_notes,
+            notes_source: 'merged',
+            merge_metadata: mergeResult.merge_metadata,
+            notes_updated_at: new Date().toISOString(),
+            type: data.type
+          };
+
+          if (data.release_date && data.release_date !== 'null') {
+            updateData.release_date = data.release_date;
+          }
+
+          if (data.search_sources) {
+            updateData.search_sources = data.search_sources;
+          }
+
+          const { error } = await supabase
+            .from('software_version_history')
+            .update(updateData)
+            .eq('id', existing.id);
+
+          if (error) throw error;
+          console.log('✅ Notes merged successfully - quality preserved');
+          return true;
+        } else {
+          console.log('⚠️ Merge failed, keeping existing notes');
+          // Merge failed - keep existing notes instead of blindly overwriting
+          return true;
+        }
+      }
+
+      // Only overwrite if existing has no content OR new notes are manual
+      // This prevents losing quality information
       const updateData: any = {
         notes: notesArray,
-        type: data.type
+        type: data.type,
+        notes_source: data.notes_source || 'auto',
+        notes_updated_at: new Date().toISOString()
       };
+
+      if (data.structured_notes) {
+        updateData.structured_notes = data.structured_notes;
+      }
+
+      if (data.search_sources) {
+        updateData.search_sources = data.search_sources;
+      }
 
       // Only update release_date if a valid date is provided
       if (data.release_date && data.release_date !== 'null') {
@@ -165,21 +233,33 @@ export async function addVersionHistory(softwareId: string, data: {
         : null;
 
       const now = new Date().toISOString();
+      const insertData: any = {
+        id: crypto.randomUUID(),
+        software_id: data.software_id,
+        version: data.version,
+        previous_version: softwareData?.current_version || null,
+        release_date: releaseDate,
+        notes: notesArray,
+        type: data.type,
+        notes_source: data.notes_source || 'auto',
+        notes_updated_at: now,
+        newsletter_verified: true,  // Auto-verify new versions for newsletters
+        verified_at: now,
+        detected_at: now,
+        created_at: now
+      };
+
+      if (data.structured_notes) {
+        insertData.structured_notes = data.structured_notes;
+      }
+
+      if (data.search_sources) {
+        insertData.search_sources = data.search_sources;
+      }
+
       const { error } = await supabase
         .from('software_version_history')
-        .insert({
-          id: crypto.randomUUID(),
-          software_id: data.software_id,
-          version: data.version,
-          previous_version: softwareData?.current_version || null,
-          release_date: releaseDate,
-          notes: notesArray,
-          type: data.type,
-          newsletter_verified: true,  // Auto-verify new versions for newsletters
-          verified_at: now,
-          detected_at: now,
-          created_at: now
-        });
+        .insert(insertData);
 
       if (error) throw error;
     }
@@ -245,7 +325,7 @@ export async function getVersionHistory(softwareId: string) {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('software_version_history')
-      .select('id, version, notes, type, release_date, detected_at')
+      .select('id, version, notes, type, release_date, detected_at, notes_source, structured_notes, merge_metadata, search_sources')
       .eq('software_id', softwareId);
 
     if (error) throw error;
@@ -255,6 +335,59 @@ export async function getVersionHistory(softwareId: string) {
 
     return sorted;
   });
+}
+
+/**
+ * Check if a version needs web search (hasn't been searched yet or has low quality notes)
+ * Returns true if web search should be performed, false if we can skip it
+ */
+export async function shouldPerformWebSearch(
+  softwareId: string,
+  version: string
+): Promise<boolean> {
+  try {
+    const { data: existing } = await supabase
+      .from('software_version_history')
+      .select('search_sources, notes, structured_notes')
+      .eq('software_id', softwareId)
+      .eq('version', version)
+      .maybeSingle();
+
+    if (!existing) {
+      // Version doesn't exist yet, definitely search
+      return true;
+    }
+
+    // If we already have search sources with good coverage (10+ sources), skip search
+    if (existing.search_sources && existing.search_sources.length >= 10) {
+      console.log(`⏭️  Skipping web search for ${version} - already have ${existing.search_sources.length} sources`);
+      return false;
+    }
+
+    // If we have structured notes with multiple sections, probably good enough
+    if (existing.structured_notes &&
+        typeof existing.structured_notes === 'object' &&
+        Object.keys(existing.structured_notes).length >= 3) {
+      console.log(`⏭️  Skipping web search for ${version} - already have ${Object.keys(existing.structured_notes).length} structured sections`);
+      return false;
+    }
+
+    // If we have comprehensive raw notes (5+ lines), might be good enough
+    if (existing.notes &&
+        Array.isArray(existing.notes) &&
+        existing.notes.length >= 5 &&
+        !existing.notes.some(note => note.includes('No specific release notes'))) {
+      console.log(`⏭️  Skipping web search for ${version} - already have ${existing.notes.length} detailed notes`);
+      return false;
+    }
+
+    // Otherwise, do the search
+    return true;
+  } catch (error) {
+    console.error('Error checking if web search needed:', error);
+    // On error, default to searching to be safe
+    return true;
+  }
 }
 
 /**
@@ -276,5 +409,41 @@ export async function deleteVersionHistory(versionId: string): Promise<boolean> 
   } catch (error) {
     console.error('Error deleting version history:', error);
     return false;
+  }
+}
+
+/**
+ * Calls the merge edge function to intelligently combine existing and new notes
+ */
+async function callMergeFunction(
+  existingNotes: { notes: string[], structured_notes?: any, notes_source?: string },
+  newNotes: { notes: string[], structured_notes?: any }
+): Promise<any | null> {
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    const response = await fetch(`${supabaseUrl}/functions/v1/merge-release-notes`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseAnonKey}`
+      },
+      body: JSON.stringify({
+        existingNotes,
+        newNotes
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Merge function failed:', response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error calling merge function:', error);
+    return null;
   }
 }

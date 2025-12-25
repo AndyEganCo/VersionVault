@@ -15,7 +15,7 @@ import { DeleteSoftwareDialog } from './delete-software-dialog';
 import type { Software } from '@/lib/software/types';
 import { updateSoftware } from '@/lib/software/api/admin';
 import { toast } from 'sonner';
-import { addVersionHistory } from '@/lib/software/api/api';
+import { addVersionHistory, shouldPerformWebSearch } from '@/lib/software/api/api';
 import { formatDate } from '@/lib/date';
 import { ReleaseNotesDialog } from './release-notes-dialog';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
@@ -138,14 +138,132 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
 
       // Save ALL versions to database if available
       let savedCount = 0;
+      let versionsNeedingSearch: any[] = [];
+      let versionsToSkip: any[] = [];
+
       if (extracted.versions && extracted.versions.length > 0) {
+        // Smart selection: Search up to 2 versions that need enhancement
+        // Priority: Latest versions first, then fill in gaps in older versions
+
         for (const version of extracted.versions) {
+          if (versionsNeedingSearch.length < 2) {
+            // Check if this version needs web search
+            const needsSearch = await shouldPerformWebSearch(software.id, version.version);
+            if (needsSearch) {
+              versionsNeedingSearch.push(version);
+            } else {
+              versionsToSkip.push(version);
+              console.log(`⏭️ Version ${version.version} already has good notes, will check next version`);
+            }
+          } else {
+            // Already have 2 to search, add rest to skip list
+            versionsToSkip.push(version);
+          }
+        }
+
+        console.log(`📊 Search plan: ${versionsNeedingSearch.length} to enhance, ${versionsToSkip.length} to skip`);
+
+        // Process versions that need web search enhancement (in parallel!)
+        const enhancementPromises = versionsNeedingSearch.map(async (version) => {
+          // These versions definitely need search (already checked above)
+          let enhancedNotes = version.notes;
+          let structuredNotes = undefined;
+          let searchSources = undefined;
+          let enhancedReleaseDate = version.releaseDate; // Start with extracted date
+
+          console.log(`🔍 Performing web search for ${version.version}...`);
+
+          // Call enhanced extraction edge function for better notes
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout for web search
+
+            const enhancedResult = await fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-with-web-search`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+                },
+                body: JSON.stringify({
+                  softwareName: software.name,
+                  manufacturer: software.manufacturer || 'Unknown',
+                  version: version.version,
+                  websiteUrl: software.website,
+                  additionalDomains: []
+                }),
+                signal: controller.signal
+              }
+            );
+
+            clearTimeout(timeoutId);
+
+            if (enhancedResult.ok) {
+              const enhanced = await enhancedResult.json();
+              console.log('✅ Web search response for', version.version, ':', enhanced);
+              if (enhanced.raw_notes && enhanced.raw_notes.length > 0) {
+                enhancedNotes = enhanced.raw_notes.join('\n');
+                structuredNotes = enhanced.structured_notes;
+                searchSources = enhanced.sources;
+                // Use web search release date if found, otherwise keep original
+                if (enhanced.release_date) {
+                  enhancedReleaseDate = enhanced.release_date;
+                  console.log('📅 Found release date:', enhanced.release_date);
+                }
+                console.log('📝 Using enhanced notes for', version.version, '- sources:', searchSources?.length || 0);
+              } else {
+                console.log('⚠️ Web search returned empty notes for', version.version);
+              }
+            } else {
+              const errorText = await enhancedResult.text();
+              console.error('❌ Web search HTTP error for', version.version, ':', enhancedResult.status, errorText);
+            }
+          } catch (error) {
+            console.error('❌ Web search extraction failed for', version.version, ':', error);
+            // Fall back to basic notes - no error shown to user
+          }
+
+          return {
+            version: version.version,
+            releaseDate: enhancedReleaseDate, // Use enhanced date if found via web search
+            notes: enhancedNotes,
+            type: version.type,
+            structuredNotes,
+            searchSources
+          };
+        });
+
+        // Wait for all web searches to complete in parallel
+        const enhancedVersions = await Promise.all(enhancementPromises);
+
+        // Save enhanced versions to database
+        for (const versionData of enhancedVersions) {
+          const success = await addVersionHistory(software.id, {
+            software_id: software.id,
+            version: versionData.version,
+            release_date: versionData.releaseDate,
+            notes: versionData.notes,
+            type: versionData.type,
+            notes_source: 'auto', // Mark as auto-generated
+            structured_notes: versionData.structuredNotes,
+            search_sources: versionData.searchSources
+          });
+
+          if (success) {
+            savedCount++;
+          }
+        }
+
+        // Process skipped versions WITHOUT web search (already have good notes or not priority)
+        for (const version of versionsToSkip) {
           const success = await addVersionHistory(software.id, {
             software_id: software.id,
             version: version.version,
             release_date: version.releaseDate,
             notes: version.notes,
-            type: version.type
+            type: version.type,
+            notes_source: 'auto'
           });
 
           if (success) {
@@ -159,10 +277,19 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
       // Show appropriate message
       if (savedCount > 0) {
         // Successfully extracted multiple versions
-        toast.success(
-          `✅ Version extraction complete!\n\nFound and saved ${savedCount} version${savedCount > 1 ? 's' : ''}:\n${extracted.versions!.slice(0, 3).map(v => v.version).join(', ')}${extracted.versions!.length > 3 ? ` and ${extracted.versions!.length - 3} more` : ''}`,
-          { id: loadingToast, duration: 7000 }
-        );
+        const searchCount = versionsNeedingSearch?.length || 0;
+        const skipCount = versionsToSkip?.length || 0;
+
+        let message = `✅ Version extraction complete!\n\n`;
+        message += `Found and saved ${savedCount} version${savedCount > 1 ? 's' : ''}\n`;
+        if (searchCount > 0) {
+          message += `🔍 Enhanced ${searchCount} with web search\n`;
+        }
+        if (skipCount > 0) {
+          message += `💰 Skipped ${skipCount} (already have good notes)`;
+        }
+
+        toast.success(message, { id: loadingToast, duration: 7000 });
       } else if (extracted.currentVersion) {
         // Only got latest version, no full version history
         if (extracted.isJavaScriptPage && extracted.lowContentWarning) {
