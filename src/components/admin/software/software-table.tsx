@@ -138,33 +138,39 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
 
       // Save ALL versions to database if available
       let savedCount = 0;
-      if (extracted.versions && extracted.versions.length > 0) {
-        // Only do web search for the latest 2 versions to avoid timeouts and rate limits
-        const versionsToEnhance = extracted.versions.slice(0, 2);
-        const olderVersions = extracted.versions.slice(2);
+      let versionsNeedingSearch: any[] = [];
+      let versionsToSkip: any[] = [];
 
-        // Process latest versions with web search enhancement (in parallel!)
-        const enhancementPromises = versionsToEnhance.map(async (version) => {
-          // Try to get enhanced notes via web search for new versions
+      if (extracted.versions && extracted.versions.length > 0) {
+        // Smart selection: Search up to 2 versions that need enhancement
+        // Priority: Latest versions first, then fill in gaps in older versions
+
+        for (const version of extracted.versions) {
+          if (versionsNeedingSearch.length < 2) {
+            // Check if this version needs web search
+            const needsSearch = await shouldPerformWebSearch(software.id, version.version);
+            if (needsSearch) {
+              versionsNeedingSearch.push(version);
+            } else {
+              versionsToSkip.push(version);
+              console.log(`⏭️ Version ${version.version} already has good notes, will check next version`);
+            }
+          } else {
+            // Already have 2 to search, add rest to skip list
+            versionsToSkip.push(version);
+          }
+        }
+
+        console.log(`📊 Search plan: ${versionsNeedingSearch.length} to enhance, ${versionsToSkip.length} to skip`);
+
+        // Process versions that need web search enhancement (in parallel!)
+        const enhancementPromises = versionsNeedingSearch.map(async (version) => {
+          // These versions definitely need search (already checked above)
           let enhancedNotes = version.notes;
           let structuredNotes = undefined;
           let searchSources = undefined;
 
-          // Check if we need to perform web search for this version
-          const needsSearch = await shouldPerformWebSearch(software.id, version.version);
-
-          if (!needsSearch) {
-            // Already have good notes, skip web search to save money/time
-            console.log(`💰 Saving costs: skipping web search for ${version.version}`);
-            return {
-              version: version.version,
-              releaseDate: version.releaseDate,
-              notes: enhancedNotes,
-              type: version.type,
-              structuredNotes,
-              searchSources
-            };
-          }
+          console.log(`🔍 Performing web search for ${version.version}...`);
 
           // Call enhanced extraction edge function for better notes
           try {
@@ -243,8 +249,8 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
           }
         }
 
-        // Process older versions WITHOUT web search (much faster)
-        for (const version of olderVersions) {
+        // Process skipped versions WITHOUT web search (already have good notes or not priority)
+        for (const version of versionsToSkip) {
           const success = await addVersionHistory(software.id, {
             software_id: software.id,
             version: version.version,
@@ -265,10 +271,19 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
       // Show appropriate message
       if (savedCount > 0) {
         // Successfully extracted multiple versions
-        toast.success(
-          `✅ Version extraction complete!\n\nFound and saved ${savedCount} version${savedCount > 1 ? 's' : ''}:\n${extracted.versions!.slice(0, 2).map(v => v.version).join(', ')}${extracted.versions!.length > 2 ? ` and ${extracted.versions!.length - 2} more` : ''}`,
-          { id: loadingToast, duration: 7000 }
-        );
+        const searchCount = versionsNeedingSearch?.length || 0;
+        const skipCount = versionsToSkip?.length || 0;
+
+        let message = `✅ Version extraction complete!\n\n`;
+        message += `Found and saved ${savedCount} version${savedCount > 1 ? 's' : ''}\n`;
+        if (searchCount > 0) {
+          message += `🔍 Enhanced ${searchCount} with web search\n`;
+        }
+        if (skipCount > 0) {
+          message += `💰 Skipped ${skipCount} (already have good notes)`;
+        }
+
+        toast.success(message, { id: loadingToast, duration: 7000 });
       } else if (extracted.currentVersion) {
         // Only got latest version, no full version history
         if (extracted.isJavaScriptPage && extracted.lowContentWarning) {
