@@ -21,6 +21,36 @@ export interface ForumTopic {
 }
 
 /**
+ * Check if URL is a single topic page (vs. forum index)
+ */
+function isTopicUrl(url: string): boolean {
+  const lowerUrl = url.toLowerCase();
+
+  // phpBB style: viewtopic.php?...
+  if (lowerUrl.includes('viewtopic.php')) {
+    return true;
+  }
+
+  // vMix style: /posts/t12345-Topic-Name
+  if (lowerUrl.match(/\/posts\/t\d+/)) {
+    return true;
+  }
+
+  // vBulletin style: showthread.php?...
+  if (lowerUrl.includes('showthread.php')) {
+    return true;
+  }
+
+  // Discourse style: /t/topic-name/12345
+  if (lowerUrl.match(/\/t\/[^/]+\/\d+/)) {
+    return true;
+  }
+
+  // Default: assume it's an index
+  return false;
+}
+
+/**
  * Fetches forum content with topic filtering
  * Returns multiple official release topics' content
  */
@@ -35,6 +65,27 @@ export async function fetchForumContent(
   console.log(`Max topics to fetch: ${maxTopics}`);
 
   try {
+    // SPECIAL CASE: If URL is already a single topic (not an index), fetch posts directly
+    const isSingleTopic = isTopicUrl(forumUrl);
+    if (isSingleTopic) {
+      console.log(`🎯 URL is a single topic, fetching posts directly from this page`);
+
+      const html = await fetchForumIndex(forumUrl, useBrowserless);
+      const forumType = config.forumType || detectForumType(forumUrl, html);
+      console.log(`Detected forum type: ${forumType}`);
+
+      // Extract ALL posts from this single topic
+      const content = await fetchTopicContent(forumUrl, forumType, useBrowserless);
+
+      if (!content || content.length === 0) {
+        console.warn('⚠️ No content extracted from topic');
+        return '';
+      }
+
+      console.log(`✅ Extracted ${content.length} characters from single topic`);
+      return content;
+    }
+
     // Step 1: Fetch forum index page
     const indexHtml = await fetchForumIndex(forumUrl, useBrowserless);
 
