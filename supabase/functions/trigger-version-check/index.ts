@@ -452,11 +452,35 @@ serve(async (req) => {
       }
     }
 
-    // Process all software concurrently to maximize throughput and minimize execution time
-    console.log(`📊 Processing ${softwareList.length} software items concurrently`)
+    // Process software in batches to avoid rate limits
+    // Batch size: 3 items at a time
+    // Delay: 15 seconds between batches
+    const BATCH_SIZE = 3
+    const BATCH_DELAY_MS = 15000 // 15 seconds
 
-    // Process all items in parallel using Promise.all
-    const allResults = await Promise.all(softwareList.map(processSoftware))
+    console.log(`📊 Processing ${softwareList.length} software items in batches of ${BATCH_SIZE}`)
+    console.log(`⏱️  Estimated time: ~${Math.ceil(softwareList.length / BATCH_SIZE) * (BATCH_DELAY_MS / 1000)} seconds`)
+
+    const allResults: VersionCheckResult[] = []
+
+    // Process in batches
+    for (let i = 0; i < softwareList.length; i += BATCH_SIZE) {
+      const batch = softwareList.slice(i, i + BATCH_SIZE)
+      const batchNumber = Math.floor(i / BATCH_SIZE) + 1
+      const totalBatches = Math.ceil(softwareList.length / BATCH_SIZE)
+
+      console.log(`\n🔄 Processing batch ${batchNumber}/${totalBatches} (${batch.length} items)`)
+
+      // Process batch in parallel
+      const batchResults = await Promise.all(batch.map(processSoftware))
+      allResults.push(...batchResults)
+
+      // Add delay between batches (except after the last batch)
+      if (i + BATCH_SIZE < softwareList.length) {
+        console.log(`⏸️  Waiting ${BATCH_DELAY_MS / 1000}s before next batch to avoid rate limits...`)
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS))
+      }
+    }
 
     // Aggregate results and count new versions
     for (const result of allResults) {
