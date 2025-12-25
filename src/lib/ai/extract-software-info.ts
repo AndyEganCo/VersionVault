@@ -38,33 +38,53 @@ export async function extractSoftwareInfo(
 
     console.log(`Extracting info for: ${name}`);
 
-    const response = await fetch(edgeFunctionUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseAnonKey}`,
-      },
-      body: JSON.stringify({
-        name,
-        website,
-        versionUrl,
-        description
-      })
-    });
+    // Add timeout to prevent hanging requests (2.5 minutes = 150 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 150000);
 
-    if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+    try {
+      const response = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({
+          name,
+          website,
+          versionUrl,
+          description
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
+      }
+
+      const extracted = await response.json() as ExtractedSoftwareInfo;
+
+      // Validate the response
+      if (!extracted.manufacturer || !extracted.category) {
+        throw new Error('Invalid response from server');
+      }
+
+      console.log('Extraction successful:', extracted);
+      return extracted;
+
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+
+      // Check if it was a timeout
+      if (fetchError.name === 'AbortError') {
+        console.error('Request timed out after 150 seconds');
+        throw new Error('Request timed out - the page may be taking too long to load');
+      }
+
+      throw fetchError;
     }
-
-    const extracted = await response.json() as ExtractedSoftwareInfo;
-
-    // Validate the response
-    if (!extracted.manufacturer || !extracted.category) {
-      throw new Error('Invalid response from server');
-    }
-
-    console.log('Extraction successful:', extracted);
-    return extracted;
 
   } catch (error) {
     console.error('Error extracting software info:', error);

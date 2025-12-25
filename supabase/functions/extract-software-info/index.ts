@@ -437,12 +437,13 @@ async function fetchWebpageContent(
     console.log(`🔄 Using bot blocking protection with starting method: ${startingMethod}`)
 
     // Use fetchWithRetry with bot blocking protection
+    // REDUCED RETRIES: To prevent 504 timeouts, use fewer attempts for difficult domains
     const result = await fetchWithRetry(url, {
       browserlessApiKey: Deno.env.get('BROWSERLESS_API_KEY'),
       startingMethod,
       retryConfig: {
-        maxAttempts: isKnownDifficult ? 5 : 4,
-        baseDelay: isKnownDifficult ? 3000 : 2000,
+        maxAttempts: isKnownDifficult ? 2 : 3, // Reduced from 5 and 4 to prevent timeouts
+        baseDelay: isKnownDifficult ? 2000 : 1500, // Reduced delays
         rotateUserAgent: true,
         escalateMethods: true,
       },
