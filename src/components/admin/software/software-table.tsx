@@ -140,12 +140,53 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
       let savedCount = 0;
       if (extracted.versions && extracted.versions.length > 0) {
         for (const version of extracted.versions) {
+          // Try to get enhanced notes via web search for new versions
+          let enhancedNotes = version.notes;
+          let structuredNotes = undefined;
+          let searchSources = undefined;
+
+          // Call enhanced extraction edge function for better notes
+          try {
+            const enhancedResult = await fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-with-web-search`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+                },
+                body: JSON.stringify({
+                  softwareName: software.name,
+                  manufacturer: software.manufacturer || 'Unknown',
+                  version: version.version,
+                  websiteUrl: software.website,
+                  additionalDomains: []
+                })
+              }
+            );
+
+            if (enhancedResult.ok) {
+              const enhanced = await enhancedResult.json();
+              if (enhanced.raw_notes && enhanced.raw_notes.length > 0) {
+                enhancedNotes = enhanced.raw_notes.join('\n');
+                structuredNotes = enhanced.structured_notes;
+                searchSources = enhanced.sources;
+              }
+            }
+          } catch (error) {
+            console.log('Web search extraction failed, using basic notes:', error);
+            // Fall back to basic notes - no error shown to user
+          }
+
           const success = await addVersionHistory(software.id, {
             software_id: software.id,
             version: version.version,
             release_date: version.releaseDate,
-            notes: version.notes,
-            type: version.type
+            notes: enhancedNotes,
+            type: version.type,
+            notes_source: 'auto', // Mark as auto-generated
+            structured_notes: structuredNotes,
+            search_sources: searchSources
           });
 
           if (success) {
