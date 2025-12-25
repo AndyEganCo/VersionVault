@@ -191,7 +191,44 @@ serve(async (req) => {
         const aiConfig = await getAIConfig()
 
         if (extracted.versions && extracted.versions.length > 0) {
+          // Progressive enhancement: Select up to 2 versions that need web search
+          // Priority: Latest versions first, then fill in gaps in older versions
+          // Mimics manual "Check for New Version" button behavior
+          const versionsNeedingSearch: any[] = []
+          const versionsToSkip: any[] = []
+
           for (const version of extracted.versions) {
+            const normalizedVersion = normalizeVersion(version.version, software.name)
+
+            if (versionsNeedingSearch.length < 2) {
+              // Check if version already exists and has good notes
+              const { data: existing } = await supabase
+                .from('software_version_history')
+                .select('search_sources, structured_notes')
+                .eq('software_id', software.id)
+                .eq('version', normalizedVersion)
+                .maybeSingle()
+
+              const needsSearch = !existing ||
+                (!existing.search_sources || existing.search_sources.length < 10) &&
+                (!existing.structured_notes || Object.keys(existing.structured_notes || {}).length < 3)
+
+              if (needsSearch) {
+                versionsNeedingSearch.push(version)
+              } else {
+                versionsToSkip.push(version)
+                console.log(`  💰 Skipping ${normalizedVersion} - already has good notes`)
+              }
+            } else {
+              // Already have 2 to search, skip the rest
+              versionsToSkip.push(version)
+            }
+          }
+
+          console.log(`  📊 Search plan: ${versionsNeedingSearch.length} to enhance, ${versionsToSkip.length} to skip`)
+
+          // Process versions that need web search
+          for (const version of versionsNeedingSearch) {
             // Normalize version number for consistent storage
             const normalizedVersion = normalizeVersion(version.version, software.name)
 
@@ -201,7 +238,7 @@ serve(async (req) => {
               .select('id, notes_source, notes, structured_notes, search_sources')
               .eq('software_id', software.id)
               .eq('version', normalizedVersion)
-              .single()
+              .maybeSingle()
 
             let notesArray = typeof version.notes === 'string'
               ? version.notes.split('\n').filter(Boolean)
@@ -212,18 +249,9 @@ serve(async (req) => {
             let notesSource: 'auto' | 'merged' = 'auto'
             let mergeMetadata = null
 
-            // Check if we should perform web search (avoid redundant searches)
-            const shouldSearch = !existing ||
-              (!existing.search_sources || existing.search_sources.length < 10) &&
-              (!existing.structured_notes || Object.keys(existing.structured_notes || {}).length < 3)
-
-            // Try enhanced extraction with web search for new or incomplete versions
-            if (shouldSearch && aiConfig.web_search_enabled) {
-              if (!existing) {
-                console.log(`  🔍 New version detected, performing web search for ${normalizedVersion}...`)
-              } else {
-                console.log(`  🔍 Existing notes incomplete, performing web search for ${normalizedVersion}...`)
-              }
+            // Perform web search for this version (already determined it needs it)
+            if (aiConfig.web_search_enabled) {
+              console.log(`  🔍 Performing web search for ${normalizedVersion}...`)
 
               const webSearchResult = await extractWithWebSearch(
                 software.name,
@@ -239,10 +267,6 @@ serve(async (req) => {
                 structuredNotes = webSearchResult.structured_notes
                 searchSources = webSearchResult.sources
               }
-            } else if (existing?.search_sources && existing.search_sources.length >= 10) {
-              console.log(`  💰 Skipping web search - already have ${existing.search_sources.length} sources`)
-            } else if (existing?.structured_notes && Object.keys(existing.structured_notes).length >= 3) {
-              console.log(`  💰 Skipping web search - already have ${Object.keys(existing.structured_notes).length} structured sections`)
             }
 
             if (existing) {
@@ -351,7 +375,54 @@ serve(async (req) => {
             }
           }
 
-          console.log(`  📦 Added ${versionsAdded} new versions (${extracted.versions.length} total found)`)
+          // Process skipped versions WITHOUT web search (already have good notes or not priority)
+          for (const version of versionsToSkip) {
+            const normalizedVersion = normalizeVersion(version.version, software.name)
+
+            // Check if version already exists
+            const { data: existing } = await supabase
+              .from('software_version_history')
+              .select('id')
+              .eq('software_id', software.id)
+              .eq('version', normalizedVersion)
+              .maybeSingle()
+
+            // Only insert if it doesn't exist (no web search, no update needed)
+            if (!existing) {
+              const notesArray = typeof version.notes === 'string'
+                ? version.notes.split('\n').filter(Boolean)
+                : (Array.isArray(version.notes) ? version.notes : [])
+
+              const releaseDate = (version.releaseDate && version.releaseDate !== 'null')
+                ? version.releaseDate
+                : new Date().toISOString()
+
+              const now = new Date().toISOString()
+              const insertData: any = {
+                software_id: software.id,
+                version: normalizedVersion,
+                release_date: releaseDate,
+                notes: notesArray,
+                type: version.type,
+                notes_source: 'auto',
+                notes_updated_at: now,
+                newsletter_verified: true,
+                verified_at: now,
+                detected_at: now,
+                created_at: now
+              }
+
+              const { error: insertError } = await supabase
+                .from('software_version_history')
+                .insert(insertData)
+
+              if (!insertError) {
+                versionsAdded++
+              }
+            }
+          }
+
+          console.log(`  📦 Processed ${versionsAdded} new versions (${extracted.versions.length} total found, ${versionsNeedingSearch.length} enhanced with web search)`)
         }
 
         return {
