@@ -308,6 +308,13 @@ Return ONLY valid JSON. Each field should be an array of strings. Only include f
   })
 
   const result = await response.json()
+
+  // Check if response is valid
+  if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+    console.error('Invalid OpenAI response in parseIntoStructuredNotes:', result)
+    return {} as StructuredNotes
+  }
+
   const parsed = JSON.parse(result.choices[0].message.content)
 
   // Track usage
@@ -416,6 +423,25 @@ Only include sections that have content.`
     })
 
     const result = await response.json()
+
+    // Check if response is valid
+    if (!result.choices || !result.choices[0] || !result.choices[0].message) {
+      console.error('Invalid OpenAI response in smartMergeNotes:', result)
+      // Fallback: return existing notes unchanged
+      return {
+        structured_notes: existingNotes.structured_notes || {},
+        raw_notes: existingNotes.notes || [],
+        notes_source: 'merged',
+        merge_metadata: {
+          merged_at: new Date().toISOString(),
+          had_manual_notes: existingNotes.notes_source === 'manual',
+          sources_combined: [existingNotes.notes_source || 'unknown', 'auto'],
+          ai_model_used: 'fallback-error',
+          merge_strategy: 'keep-existing'
+        }
+      }
+    }
+
     const merged: StructuredNotes = JSON.parse(result.choices[0].message.content)
 
     // Track usage
