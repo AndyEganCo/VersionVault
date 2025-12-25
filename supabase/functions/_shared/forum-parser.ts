@@ -448,7 +448,9 @@ function filterOfficialTopics(topics: ForumTopic[], config: ForumConfig): ForumT
 }
 
 /**
- * Fetch topic content (first post only)
+ * Fetch topic content (ALL posts, reversed so newest first)
+ * This is especially useful for changelog threads where each post
+ * represents a new version, with the newest versions at the bottom
  */
 async function fetchTopicContent(
   topicUrl: string,
@@ -469,7 +471,8 @@ async function fetchTopicContent(
 }
 
 /**
- * Extract first post from phpBB topic
+ * Extract ALL posts from phpBB topic (for changelog threads)
+ * Returns posts in REVERSE order (newest first)
  */
 function extractPhpBBFirstPost(html: string): string {
   const parser = new DOMParser();
@@ -479,34 +482,79 @@ function extractPhpBBFirstPost(html: string): string {
     return extractPhpBBFirstPostRegex(html);
   }
 
-  // Find first post's content
-  const firstPost = doc.querySelector('.post .content, .postbody .content');
+  // Find ALL posts' content (not just the first one)
+  const postElements = doc.querySelectorAll('.post .content, .postbody .content');
 
-  if (!firstPost) {
-    console.warn('Could not find first post with DOM parser, trying regex');
+  if (postElements.length === 0) {
+    console.warn('Could not find any posts with DOM parser, trying regex');
     return extractPhpBBFirstPostRegex(html);
   }
 
-  return cleanPostContent(firstPost.textContent || '');
+  console.log(`Found ${postElements.length} posts in thread`);
+
+  // Extract content from all posts
+  const posts: string[] = [];
+  for (const postElement of postElements) {
+    const content = cleanPostContent(postElement.textContent || '');
+    if (content.length > 50) { // Only include posts with substantial content
+      posts.push(content);
+    }
+  }
+
+  // REVERSE the order so newest posts come first
+  posts.reverse();
+
+  // Limit to first 20 posts (newest)
+  const limitedPosts = posts.slice(0, 20);
+  console.log(`Extracted ${limitedPosts.length} posts (newest first)`);
+
+  // Join all posts with separators
+  return limitedPosts.map((post, index) => {
+    return `=== POST ${index + 1} ===\n${post}`;
+  }).join('\n\n--- NEXT POST ---\n\n');
 }
 
 /**
- * Fallback regex-based phpBB first post extraction
+ * Fallback regex-based phpBB ALL posts extraction
+ * Returns posts in REVERSE order (newest first)
  */
 function extractPhpBBFirstPostRegex(html: string): string {
-  // Match: <div class="content">...</div> (first occurrence)
-  const contentMatch = html.match(/<div[^>]+class="[^"]*\bcontent\b[^"]*"[^>]*>(.*?)<\/div>/is);
+  // Match: ALL <div class="content">...</div> occurrences
+  const contentRegex = /<div[^>]+class="[^"]*\bcontent\b[^"]*"[^>]*>(.*?)<\/div>/gis;
 
-  if (!contentMatch) {
-    console.warn('Could not extract first post content');
+  const posts: string[] = [];
+  let match;
+
+  while ((match = contentRegex.exec(html)) !== null) {
+    const content = cleanPostContent(stripHTMLTags(match[1]));
+    if (content.length > 50) { // Only include posts with substantial content
+      posts.push(content);
+    }
+  }
+
+  if (posts.length === 0) {
+    console.warn('Could not extract any post content');
     return '';
   }
 
-  return cleanPostContent(stripHTMLTags(contentMatch[1]));
+  console.log(`Regex extracted ${posts.length} posts`);
+
+  // REVERSE the order so newest posts come first
+  posts.reverse();
+
+  // Limit to first 20 posts (newest)
+  const limitedPosts = posts.slice(0, 20);
+  console.log(`Using ${limitedPosts.length} posts (newest first)`);
+
+  // Join all posts with separators
+  return limitedPosts.map((post, index) => {
+    return `=== POST ${index + 1} ===\n${post}`;
+  }).join('\n\n--- NEXT POST ---\n\n');
 }
 
 /**
- * Extract first post from Discourse topic
+ * Extract ALL posts from Discourse topic (for changelog threads)
+ * Returns posts in REVERSE order (newest first)
  */
 function extractDiscourseFirstPost(html: string): string {
   const parser = new DOMParser();
@@ -514,14 +562,36 @@ function extractDiscourseFirstPost(html: string): string {
 
   if (!doc) return '';
 
-  const firstPost = doc.querySelector('.topic-post:first-child .cooked, .post-stream .cooked:first-child');
+  // Find ALL posts' content
+  const postElements = doc.querySelectorAll('.topic-post .cooked, .post-stream .cooked');
 
-  if (!firstPost) {
-    console.warn('Could not find first Discourse post');
+  if (postElements.length === 0) {
+    console.warn('Could not find any Discourse posts');
     return '';
   }
 
-  return cleanPostContent(firstPost.textContent || '');
+  console.log(`Found ${postElements.length} Discourse posts in thread`);
+
+  // Extract content from all posts
+  const posts: string[] = [];
+  for (const postElement of postElements) {
+    const content = cleanPostContent(postElement.textContent || '');
+    if (content.length > 50) { // Only include posts with substantial content
+      posts.push(content);
+    }
+  }
+
+  // REVERSE the order so newest posts come first
+  posts.reverse();
+
+  // Limit to first 20 posts (newest)
+  const limitedPosts = posts.slice(0, 20);
+  console.log(`Extracted ${limitedPosts.length} Discourse posts (newest first)`);
+
+  // Join all posts with separators
+  return limitedPosts.map((post, index) => {
+    return `=== POST ${index + 1} ===\n${post}`;
+  }).join('\n\n--- NEXT POST ---\n\n');
 }
 
 /**
