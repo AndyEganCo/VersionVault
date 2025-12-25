@@ -646,12 +646,84 @@ function extractDiscourseFirstPost(html: string): string {
 }
 
 /**
- * Generic first post extraction
+ * Extract ALL posts from generic forum (for changelog threads)
+ * Returns posts in REVERSE order (newest first)
+ * Tries common post container patterns
  */
 function extractGenericFirstPost(html: string): string {
-  // Strip HTML and return first 5000 characters
-  const text = stripHTMLTags(html);
-  return cleanPostContent(text.substring(0, 5000));
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  if (!doc) {
+    // Fallback: strip HTML and return first chunk
+    console.warn('Could not parse HTML for generic forum');
+    const text = stripHTMLTags(html);
+    return cleanPostContent(text.substring(0, 5000));
+  }
+
+  // Try common post container selectors for various forum types
+  const postSelectors = [
+    // YAF (Yet Another Forum) / vMix forums
+    '.post', '.message', '.postbody', '.post-content',
+    '.messageContent', '.forumPost',
+    // Generic patterns
+    '[class*="post"]', '[class*="message"]', '[class*="comment"]',
+    'article', '.entry', '.item',
+  ];
+
+  let postElements: any[] = [];
+
+  for (const selector of postSelectors) {
+    try {
+      const elements = doc.querySelectorAll(selector);
+      if (elements.length > 0) {
+        console.log(`Found ${elements.length} elements with selector: ${selector}`);
+        // Use the selector that finds the most elements
+        if (elements.length > postElements.length) {
+          postElements = Array.from(elements);
+        }
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+
+  if (postElements.length === 0) {
+    console.warn('Could not find any post elements with generic selectors');
+    // Fallback: strip HTML and return first chunk
+    const text = stripHTMLTags(html);
+    return cleanPostContent(text.substring(0, 5000));
+  }
+
+  console.log(`Found ${postElements.length} posts in generic forum`);
+
+  // Extract content from all posts
+  const posts: string[] = [];
+  for (const postElement of postElements) {
+    const content = cleanPostContent(postElement.textContent || '');
+    if (content.length > 50) { // Only include posts with substantial content
+      posts.push(content);
+    }
+  }
+
+  if (posts.length === 0) {
+    console.warn('No substantial post content found');
+    // Fallback: strip HTML and return first chunk
+    const text = stripHTMLTags(html);
+    return cleanPostContent(text.substring(0, 5000));
+  }
+
+  // REVERSE the order so newest posts come first
+  posts.reverse();
+
+  // Limit to first 20 posts (newest)
+  const limitedPosts = posts.slice(0, 20);
+  console.log(`Extracted ${limitedPosts.length} generic forum posts (newest first)`);
+
+  // Join all posts with separators
+  return limitedPosts.map((post, index) => {
+    return `=== POST ${index + 1} ===\n${post}`;
+  }).join('\n\n--- NEXT POST ---\n\n');
 }
 
 /**
