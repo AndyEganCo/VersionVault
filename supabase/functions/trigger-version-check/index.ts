@@ -453,13 +453,16 @@ serve(async (req) => {
     }
 
     // Process software in batches to avoid rate limits
-    // Batch size: 2 items at a time (conservative to avoid rate limits)
-    // Delay: 30 seconds between batches (ensures TPM limit reset)
-    const BATCH_SIZE = 2
-    const BATCH_DELAY_MS = 30000 // 30 seconds
+    // Optimized for Supabase Pro tier (30 min timeout, 30K TPM limit)
+    // Batch size: 5 items at a time (balanced throughput)
+    // Delay: 20 seconds between batches (allows TPM to reset)
+    // Can handle 100+ software items in ~7 minutes, 200+ in ~14 minutes
+    const BATCH_SIZE = 5
+    const BATCH_DELAY_MS = 20000 // 20 seconds
 
     console.log(`📊 Processing ${softwareList.length} software items in batches of ${BATCH_SIZE}`)
-    console.log(`⏱️  Estimated time: ~${Math.ceil(softwareList.length / BATCH_SIZE) * (BATCH_DELAY_MS / 1000)} seconds`)
+    console.log(`⏱️  Estimated time: ~${Math.ceil(softwareList.length / BATCH_SIZE) * (BATCH_DELAY_MS / 1000 + 10)} seconds`)
+    console.log(`🔧 Pro tier: 30-minute timeout allows scaling to 200+ software items`)
 
     const allResults: VersionCheckResult[] = []
 
