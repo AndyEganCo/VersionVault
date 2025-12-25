@@ -367,13 +367,19 @@ ${formatNotesForMerge(existingNotes)}
 NEW AUTO-EXTRACTED NOTES (from official release notes via web search):
 ${formatNotesForMerge(newNotes)}
 
+CRITICAL QUALITY RULES:
+1. If NEW notes contain placeholder text like "No specific release notes", "No release notes found", "Not available", or similar non-informative content, IGNORE them completely and keep EXISTING notes
+2. If NEW notes have less specific information than EXISTING notes, prefer EXISTING notes
+3. Only use NEW notes if they contain actual, specific release information
+
 Create a comprehensive merged version that:
 1. Includes ALL unique information from both sources
 2. Removes exact duplicates
 3. Combines similar items intelligently
 4. Preserves manual annotations (mark them with [Manual] prefix if not in official notes)
-5. Organizes into sections: new_features, changes, improvements, bug_fixes, known_issues, notices, compatibility, upgrade_instructions
-6. Maintains clarity and readability
+5. Prioritizes quality over recency - keep the most informative content
+6. Organizes into sections: new_features, changes, improvements, bug_fixes, known_issues, notices, compatibility, upgrade_instructions
+7. Maintains clarity and readability
 
 Return ONLY valid JSON with these section fields (as arrays of strings).
 Only include sections that have content.`

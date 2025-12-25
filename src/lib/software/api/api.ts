@@ -137,13 +137,16 @@ export async function addVersionHistory(softwareId: string, data: {
       : (Array.isArray(data.notes) ? data.notes : []);
 
     if (existing) {
-      // Check if existing notes are manual
-      // IMPORTANT: Treat NULL/undefined as 'manual' (conservative - protect existing data)
-      const isManual = !existing.notes_source || existing.notes_source === 'manual';
+      // Check if existing notes have meaningful content
+      const existingHasContent = existing.notes &&
+        Array.isArray(existing.notes) &&
+        existing.notes.length > 0 &&
+        existing.notes.some(note => note && note.trim().length > 20); // At least 20 chars of content
 
-      // If existing is manual and new is auto, we need to merge
-      if (isManual && data.notes_source === 'auto') {
-        console.log('Manual notes detected, calling merge function...');
+      // ALWAYS merge when existing has content, to preserve quality information
+      // The AI merge will intelligently decide what to keep/combine
+      if (existingHasContent && data.notes_source === 'auto') {
+        console.log('📝 Existing notes found, calling smart merge to preserve quality...');
 
         // Call merge edge function
         const mergeResult = await callMergeFunction(
@@ -179,13 +182,17 @@ export async function addVersionHistory(softwareId: string, data: {
             .eq('id', existing.id);
 
           if (error) throw error;
-          console.log('✅ Notes merged successfully');
+          console.log('✅ Notes merged successfully - quality preserved');
+          return true;
+        } else {
+          console.log('⚠️ Merge failed, keeping existing notes');
+          // Merge failed - keep existing notes instead of blindly overwriting
           return true;
         }
       }
 
-      // If existing is auto or merged, safe to update
-      // Or if merge failed, just update normally
+      // Only overwrite if existing has no content OR new notes are manual
+      // This prevents losing quality information
       const updateData: any = {
         notes: notesArray,
         type: data.type,
