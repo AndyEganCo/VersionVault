@@ -139,9 +139,9 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
       // Save ALL versions to database if available
       let savedCount = 0;
       if (extracted.versions && extracted.versions.length > 0) {
-        // Only do web search for the latest 3 versions to avoid timeouts
-        const versionsToEnhance = extracted.versions.slice(0, 3);
-        const olderVersions = extracted.versions.slice(3);
+        // Only do web search for the latest 2 versions to avoid timeouts and rate limits
+        const versionsToEnhance = extracted.versions.slice(0, 2);
+        const olderVersions = extracted.versions.slice(2);
 
         // Process latest versions with web search enhancement (in parallel!)
         const enhancementPromises = versionsToEnhance.map(async (version) => {
@@ -153,7 +153,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
           // Call enhanced extraction edge function for better notes
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout for web search
+            const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout for web search
 
             const enhancedResult = await fetch(
               `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-with-web-search`,
@@ -250,7 +250,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
       if (savedCount > 0) {
         // Successfully extracted multiple versions
         toast.success(
-          `✅ Version extraction complete!\n\nFound and saved ${savedCount} version${savedCount > 1 ? 's' : ''}:\n${extracted.versions!.slice(0, 3).map(v => v.version).join(', ')}${extracted.versions!.length > 3 ? ` and ${extracted.versions!.length - 3} more` : ''}`,
+          `✅ Version extraction complete!\n\nFound and saved ${savedCount} version${savedCount > 1 ? 's' : ''}:\n${extracted.versions!.slice(0, 2).map(v => v.version).join(', ')}${extracted.versions!.length > 2 ? ` and ${extracted.versions!.length - 2} more` : ''}`,
           { id: loadingToast, duration: 7000 }
         );
       } else if (extracted.currentVersion) {
