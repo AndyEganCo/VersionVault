@@ -139,7 +139,12 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
       // Save ALL versions to database if available
       let savedCount = 0;
       if (extracted.versions && extracted.versions.length > 0) {
-        for (const version of extracted.versions) {
+        // Only do web search for the latest 3 versions to avoid timeouts
+        const versionsToEnhance = extracted.versions.slice(0, 3);
+        const olderVersions = extracted.versions.slice(3);
+
+        // Process latest versions with web search enhancement
+        for (const version of versionsToEnhance) {
           // Try to get enhanced notes via web search for new versions
           let enhancedNotes = version.notes;
           let structuredNotes = undefined;
@@ -147,6 +152,9 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
 
           // Call enhanced extraction edge function for better notes
           try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
             const enhancedResult = await fetch(
               `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-with-web-search`,
               {
@@ -161,9 +169,12 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                   version: version.version,
                   websiteUrl: software.website,
                   additionalDomains: []
-                })
+                }),
+                signal: controller.signal
               }
             );
+
+            clearTimeout(timeoutId);
 
             if (enhancedResult.ok) {
               const enhanced = await enhancedResult.json();
@@ -174,7 +185,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
               }
             }
           } catch (error) {
-            console.log('Web search extraction failed, using basic notes:', error);
+            console.log('Web search extraction failed for', version.version, '- using basic notes');
             // Fall back to basic notes - no error shown to user
           }
 
@@ -187,6 +198,22 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
             notes_source: 'auto', // Mark as auto-generated
             structured_notes: structuredNotes,
             search_sources: searchSources
+          });
+
+          if (success) {
+            savedCount++;
+          }
+        }
+
+        // Process older versions WITHOUT web search (much faster)
+        for (const version of olderVersions) {
+          const success = await addVersionHistory(software.id, {
+            software_id: software.id,
+            version: version.version,
+            release_date: version.releaseDate,
+            notes: version.notes,
+            type: version.type,
+            notes_source: 'auto'
           });
 
           if (success) {
