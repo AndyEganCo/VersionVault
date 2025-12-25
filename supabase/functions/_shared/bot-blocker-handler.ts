@@ -330,24 +330,19 @@ export function getBrowserlessOptions(blockerType: BlockerType, extended: boolea
   }
 
   // ServiceNow portals need special handling (Angular lazy loading)
+  // These sites load a shell, then fetch content via API after page load
   const isServiceNow = url && url.includes('support.zoom.com')
   if (isServiceNow) {
-    console.log('🔧 Applying ServiceNow-specific Browserless configuration')
+    console.log('🔧 Applying ServiceNow-specific Browserless configuration (extended wait)')
     return {
       ...baseOptions,
       gotoOptions: {
-        waitUntil: 'networkidle2' as const, // Less strict than networkidle0
-        timeout: 60000,
+        // Use 'load' event (less strict) + longer timeout for lazy-loaded content
+        waitUntil: 'load' as const,
+        timeout: 90000, // 90 seconds to allow for slow API calls
       },
-      // Wait for content to appear (ServiceNow Angular rendering)
-      waitForSelector: {
-        selector: '.kb-article-content, .kb_article, article, [data-component="article"]',
-        timeout: 10000 // Wait up to 10s for content to appear
-      },
-      // Additional delay after page load to ensure Angular finishes rendering
-      addScriptTag: [{
-        content: 'new Promise(r => setTimeout(r, 3000))' // 3 second delay
-      }]
+      // Browserless-specific wait option: Wait after page load
+      waitForTimeout: 8000, // Wait additional 8 seconds for Angular to fetch and render
     }
   }
 
