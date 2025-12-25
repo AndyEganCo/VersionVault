@@ -424,7 +424,8 @@ async function fetchWebpageContent(
     const isKnownDifficult = urlObj.hostname.includes('adobe.com') ||
                             urlObj.hostname.includes('helpx.adobe') ||
                             urlObj.hostname.includes('autodesk.com') ||
-                            urlObj.hostname.includes('apple.com')
+                            urlObj.hostname.includes('apple.com') ||
+                            urlObj.hostname.includes('support.zoom.com')
 
     if (isKnownDifficult) {
       console.warn('⚠️ Known difficult domain detected - using enhanced bot blocking protection')
@@ -1764,7 +1765,8 @@ serve(async (req) => {
     const isKnownDifficultDomain = versionUrl && (
       versionUrl.includes('adobe.com') ||
       versionUrl.includes('apple.com') ||
-      versionUrl.includes('autodesk.com')
+      versionUrl.includes('autodesk.com') ||
+      versionUrl.includes('support.zoom.com')
     )
 
     // Try sitemap discovery if webpage content is low and this is a webpage source
