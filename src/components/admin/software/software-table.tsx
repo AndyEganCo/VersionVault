@@ -15,7 +15,7 @@ import { DeleteSoftwareDialog } from './delete-software-dialog';
 import type { Software } from '@/lib/software/types';
 import { updateSoftware } from '@/lib/software/api/admin';
 import { toast } from 'sonner';
-import { addVersionHistory } from '@/lib/software/api/api';
+import { addVersionHistory, shouldPerformWebSearch } from '@/lib/software/api/api';
 import { formatDate } from '@/lib/date';
 import { ReleaseNotesDialog } from './release-notes-dialog';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
@@ -149,6 +149,22 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
           let enhancedNotes = version.notes;
           let structuredNotes = undefined;
           let searchSources = undefined;
+
+          // Check if we need to perform web search for this version
+          const needsSearch = await shouldPerformWebSearch(software.id, version.version);
+
+          if (!needsSearch) {
+            // Already have good notes, skip web search to save money/time
+            console.log(`💰 Saving costs: skipping web search for ${version.version}`);
+            return {
+              version: version.version,
+              releaseDate: version.releaseDate,
+              notes: enhancedNotes,
+              type: version.type,
+              structuredNotes,
+              searchSources
+            };
+          }
 
           // Call enhanced extraction edge function for better notes
           try {

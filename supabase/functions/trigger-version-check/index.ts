@@ -198,7 +198,7 @@ serve(async (req) => {
             // Check if version already exists
             const { data: existing } = await supabase
               .from('software_version_history')
-              .select('id, notes_source, notes, structured_notes')
+              .select('id, notes_source, notes, structured_notes, search_sources')
               .eq('software_id', software.id)
               .eq('version', normalizedVersion)
               .single()
@@ -212,9 +212,18 @@ serve(async (req) => {
             let notesSource: 'auto' | 'merged' = 'auto'
             let mergeMetadata = null
 
-            // Try enhanced extraction with web search for new versions
-            if (!existing && aiConfig.web_search_enabled) {
-              console.log(`  🔍 Attempting web search for ${normalizedVersion}...`)
+            // Check if we should perform web search (avoid redundant searches)
+            const shouldSearch = !existing ||
+              (!existing.search_sources || existing.search_sources.length < 10) &&
+              (!existing.structured_notes || Object.keys(existing.structured_notes || {}).length < 3)
+
+            // Try enhanced extraction with web search for new or incomplete versions
+            if (shouldSearch && aiConfig.web_search_enabled) {
+              if (!existing) {
+                console.log(`  🔍 New version detected, performing web search for ${normalizedVersion}...`)
+              } else {
+                console.log(`  🔍 Existing notes incomplete, performing web search for ${normalizedVersion}...`)
+              }
 
               const webSearchResult = await extractWithWebSearch(
                 software.name,
@@ -225,20 +234,27 @@ serve(async (req) => {
               )
 
               if (webSearchResult) {
-                console.log(`  ✅ Web search found detailed notes`)
+                console.log(`  ✅ Web search found detailed notes (${webSearchResult.sources.length} sources)`)
                 notesArray = webSearchResult.raw_notes
                 structuredNotes = webSearchResult.structured_notes
                 searchSources = webSearchResult.sources
               }
+            } else if (existing?.search_sources && existing.search_sources.length >= 10) {
+              console.log(`  💰 Skipping web search - already have ${existing.search_sources.length} sources`)
+            } else if (existing?.structured_notes && Object.keys(existing.structured_notes).length >= 3) {
+              console.log(`  💰 Skipping web search - already have ${Object.keys(existing.structured_notes).length} structured sections`)
             }
 
             if (existing) {
-              // Check if existing notes are manual
-              const isManual = existing.notes_source === 'manual'
+              // Check if existing notes have meaningful content
+              const existingHasContent = existing.notes &&
+                Array.isArray(existing.notes) &&
+                existing.notes.length > 0 &&
+                existing.notes.some((note: string) => note && note.trim().length > 20)
 
-              if (isManual) {
-                // Smart merge: combine manual + new auto notes
-                console.log(`  🔀 Merging manual notes with new auto-extracted notes...`)
+              // ALWAYS merge when existing has content, to preserve quality information
+              if (existingHasContent && notesSource === 'auto') {
+                console.log(`  🔀 Existing notes found, merging to preserve quality...`)
 
                 const mergeResult = await smartMergeNotes(
                   {
@@ -256,7 +272,7 @@ serve(async (req) => {
                 structuredNotes = mergeResult.structured_notes
                 notesSource = 'merged'
                 mergeMetadata = mergeResult.merge_metadata
-                console.log(`  ✅ Notes merged successfully`)
+                console.log(`  ✅ Notes merged successfully - quality preserved`)
               }
 
               // Update existing version

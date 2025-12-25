@@ -127,7 +127,7 @@ export async function addVersionHistory(softwareId: string, data: {
     // First check if this version already exists
     const { data: existing } = await supabase
       .from('software_version_history')
-      .select('id, notes_source, notes, structured_notes')
+      .select('id, notes_source, notes, structured_notes, search_sources')
       .eq('software_id', softwareId)
       .eq('version', data.version)
       .maybeSingle();
@@ -335,6 +335,59 @@ export async function getVersionHistory(softwareId: string) {
 
     return sorted;
   });
+}
+
+/**
+ * Check if a version needs web search (hasn't been searched yet or has low quality notes)
+ * Returns true if web search should be performed, false if we can skip it
+ */
+export async function shouldPerformWebSearch(
+  softwareId: string,
+  version: string
+): Promise<boolean> {
+  try {
+    const { data: existing } = await supabase
+      .from('software_version_history')
+      .select('search_sources, notes, structured_notes')
+      .eq('software_id', softwareId)
+      .eq('version', version)
+      .maybeSingle();
+
+    if (!existing) {
+      // Version doesn't exist yet, definitely search
+      return true;
+    }
+
+    // If we already have search sources with good coverage (10+ sources), skip search
+    if (existing.search_sources && existing.search_sources.length >= 10) {
+      console.log(`⏭️  Skipping web search for ${version} - already have ${existing.search_sources.length} sources`);
+      return false;
+    }
+
+    // If we have structured notes with multiple sections, probably good enough
+    if (existing.structured_notes &&
+        typeof existing.structured_notes === 'object' &&
+        Object.keys(existing.structured_notes).length >= 3) {
+      console.log(`⏭️  Skipping web search for ${version} - already have ${Object.keys(existing.structured_notes).length} structured sections`);
+      return false;
+    }
+
+    // If we have comprehensive raw notes (5+ lines), might be good enough
+    if (existing.notes &&
+        Array.isArray(existing.notes) &&
+        existing.notes.length >= 5 &&
+        !existing.notes.some(note => note.includes('No specific release notes'))) {
+      console.log(`⏭️  Skipping web search for ${version} - already have ${existing.notes.length} detailed notes`);
+      return false;
+    }
+
+    // Otherwise, do the search
+    return true;
+  } catch (error) {
+    console.error('Error checking if web search needed:', error);
+    // On error, default to searching to be safe
+    return true;
+  }
 }
 
 /**
