@@ -143,8 +143,8 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
         const versionsToEnhance = extracted.versions.slice(0, 3);
         const olderVersions = extracted.versions.slice(3);
 
-        // Process latest versions with web search enhancement
-        for (const version of versionsToEnhance) {
+        // Process latest versions with web search enhancement (in parallel!)
+        const enhancementPromises = versionsToEnhance.map(async (version) => {
           // Try to get enhanced notes via web search for new versions
           let enhancedNotes = version.notes;
           let structuredNotes = undefined;
@@ -189,15 +189,30 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
             // Fall back to basic notes - no error shown to user
           }
 
-          const success = await addVersionHistory(software.id, {
-            software_id: software.id,
+          return {
             version: version.version,
-            release_date: version.releaseDate,
+            releaseDate: version.releaseDate,
             notes: enhancedNotes,
             type: version.type,
+            structuredNotes,
+            searchSources
+          };
+        });
+
+        // Wait for all web searches to complete in parallel
+        const enhancedVersions = await Promise.all(enhancementPromises);
+
+        // Save enhanced versions to database
+        for (const versionData of enhancedVersions) {
+          const success = await addVersionHistory(software.id, {
+            software_id: software.id,
+            version: versionData.version,
+            release_date: versionData.releaseDate,
+            notes: versionData.notes,
+            type: versionData.type,
             notes_source: 'auto', // Mark as auto-generated
-            structured_notes: structuredNotes,
-            search_sources: searchSources
+            structured_notes: versionData.structuredNotes,
+            search_sources: versionData.searchSources
           });
 
           if (success) {
