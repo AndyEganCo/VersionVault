@@ -318,14 +318,37 @@ export function logBotBlocking(
 
 /**
  * Get recommended Browserless options based on blocker type
+ * Accepts optional URL to apply site-specific optimizations
  */
-export function getBrowserlessOptions(blockerType: BlockerType, extended: boolean = false) {
+export function getBrowserlessOptions(blockerType: BlockerType, extended: boolean = false, url?: string) {
   const baseOptions = {
     gotoOptions: {
       waitUntil: 'networkidle2' as const,
       timeout: extended ? 60000 : 30000,
     },
     setExtraHTTPHeaders: getRealisticHeaders(),
+  }
+
+  // ServiceNow portals need special handling (Angular lazy loading)
+  const isServiceNow = url && url.includes('support.zoom.com')
+  if (isServiceNow) {
+    console.log('🔧 Applying ServiceNow-specific Browserless configuration')
+    return {
+      ...baseOptions,
+      gotoOptions: {
+        waitUntil: 'networkidle2' as const, // Less strict than networkidle0
+        timeout: 60000,
+      },
+      // Wait for content to appear (ServiceNow Angular rendering)
+      waitForSelector: {
+        selector: '.kb-article-content, .kb_article, article, [data-component="article"]',
+        timeout: 10000 // Wait up to 10s for content to appear
+      },
+      // Additional delay after page load to ensure Angular finishes rendering
+      addScriptTag: [{
+        content: 'new Promise(r => setTimeout(r, 3000))' // 3 second delay
+      }]
+    }
   }
 
   // Extended options for tougher blockers

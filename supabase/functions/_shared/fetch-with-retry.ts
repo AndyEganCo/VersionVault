@@ -71,7 +71,7 @@ async function fetchBrowserless(
 
   const browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}&stealth=true&bestAttempt=true`
 
-  const options = getBrowserlessOptions(blockerType, extended)
+  const options = getBrowserlessOptions(blockerType, extended, url)
 
   const response = await fetch(browserlessUrl, {
     method: 'POST',

@@ -501,6 +501,17 @@ async function fetchWebpageContent(
     // Try to find main content areas first (more intelligent extraction)
     // Added wiki-specific selectors and documentation page patterns
     const selectors = [
+      // ServiceNow knowledge base specific (Zoom, etc.)
+      '.kb-article-content',
+      '#kb-article-content',
+      '.kb_article',
+      '.kb_article_text',
+      '.article-content',
+      '.article-body',
+      '#article-body',
+      '.sn-widget-textblock',
+      '[data-component="article"]',
+
       // Blackmagic Design specific
       '.support-downloads',
       '.downloads-list',
