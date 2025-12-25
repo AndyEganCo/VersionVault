@@ -186,12 +186,16 @@ export async function extractWithWebSearch(
         include: ['web_search_call.action.sources'],
         input: `Find the official release notes for ${softwareName} version ${detectedVersion} by ${manufacturer}.
 
+CRITICAL: First find the release date for this specific version.
+
 Extract:
+- Release date (exact date this version was released, format: YYYY-MM-DD)
 - New features and changes
 - Bug fixes
 - Known issues and notices
 - Compatibility and upgrade info
 
+Start your response with "Released: YYYY-MM-DD" if found.
 Return a concise, structured summary with specific details.`
       })
     })
@@ -232,6 +236,10 @@ Return a concise, structured summary with specific details.`
       webSearchCalls.length
     )
 
+    // Extract release date from the text content (format: "Released: YYYY-MM-DD")
+    const releaseDateMatch = textContent.match(/Released:\s*(\d{4}-\d{2}-\d{2})/i)
+    const releaseDate = releaseDateMatch ? releaseDateMatch[1] : null
+
     // Parse the response into structured notes
     const structured = await parseIntoStructuredNotes(textContent, config.preferred_extraction_model)
 
@@ -240,7 +248,8 @@ Return a concise, structured summary with specific details.`
 
     console.log('✅ Web search extraction successful:', {
       sources: sources.length,
-      sections: Object.keys(structured).length
+      sections: Object.keys(structured).length,
+      releaseDate: releaseDate || 'not found'
     })
 
     return {
@@ -248,7 +257,8 @@ Return a concise, structured summary with specific details.`
       structured_notes: structured,
       sources: sources,
       notes_source: 'auto',
-      raw_notes: rawNotes
+      raw_notes: rawNotes,
+      release_date: releaseDate
     }
 
   } catch (error) {

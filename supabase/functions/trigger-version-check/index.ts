@@ -266,6 +266,12 @@ serve(async (req) => {
                 notesArray = webSearchResult.raw_notes
                 structuredNotes = webSearchResult.structured_notes
                 searchSources = webSearchResult.sources
+
+                // Use web search release date if found (more accurate than extraction)
+                if (webSearchResult.release_date) {
+                  version.releaseDate = webSearchResult.release_date
+                  console.log(`  📅 Found release date: ${webSearchResult.release_date}`)
+                }
               }
             }
 

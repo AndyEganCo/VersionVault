@@ -169,6 +169,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
           let enhancedNotes = version.notes;
           let structuredNotes = undefined;
           let searchSources = undefined;
+          let enhancedReleaseDate = version.releaseDate; // Start with extracted date
 
           console.log(`🔍 Performing web search for ${version.version}...`);
 
@@ -205,6 +206,11 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                 enhancedNotes = enhanced.raw_notes.join('\n');
                 structuredNotes = enhanced.structured_notes;
                 searchSources = enhanced.sources;
+                // Use web search release date if found, otherwise keep original
+                if (enhanced.release_date) {
+                  enhancedReleaseDate = enhanced.release_date;
+                  console.log('📅 Found release date:', enhanced.release_date);
+                }
                 console.log('📝 Using enhanced notes for', version.version, '- sources:', searchSources?.length || 0);
               } else {
                 console.log('⚠️ Web search returned empty notes for', version.version);
@@ -220,7 +226,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
 
           return {
             version: version.version,
-            releaseDate: version.releaseDate,
+            releaseDate: enhancedReleaseDate, // Use enhanced date if found via web search
             notes: enhancedNotes,
             type: version.type,
             structuredNotes,
