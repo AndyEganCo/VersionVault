@@ -1527,7 +1527,11 @@ function detectSourceType(url: string): 'webpage' | 'rss' | 'forum' | 'pdf' {
     lowerUrl.includes('/community/') ||
     lowerUrl.includes('/discuss/') ||
     lowerUrl.includes('showthread.php') ||
-    lowerUrl.includes('forumdisplay.php')
+    lowerUrl.includes('forumdisplay.php') ||
+    // vMix-style forums (e.g., forums.vmix.com/posts/t12345-Topic-Name)
+    (lowerUrl.includes('/posts/') && lowerUrl.match(/\/posts\/t\d+/)) ||
+    // Generic: domain contains "forums" and has /posts/ path
+    (lowerUrl.includes('forums.') && lowerUrl.includes('/posts/'))
   ) {
     return 'forum';
   }
