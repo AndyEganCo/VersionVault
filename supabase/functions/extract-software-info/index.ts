@@ -66,6 +66,11 @@ import {
   type SitemapUrl
 } from '../_shared/sitemap-parser.ts'
 
+import {
+  getAIConfig,
+  type AIConfig
+} from '../_shared/ai-utils.ts'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -603,7 +608,8 @@ async function extractWithAI(
   versionUrl: string,
   versionContent: string,
   mainWebsiteContent: string,
-  description?: string
+  description: string | undefined,
+  aiConfig: AIConfig
 ): Promise<ExtractedInfo> {
   const apiKey = Deno.env.get('OPENAI_API_KEY')
 
@@ -731,7 +737,7 @@ Respond in JSON format:
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o', // Using GPT-4o for better accuracy (more expensive but more capable)
+      model: aiConfig.preferred_extraction_model,
       messages: [
         {
           role: 'system',
@@ -893,7 +899,7 @@ ${versionPageResult.content.substring(0, 15000)}`
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                  model: 'gpt-4o-mini',
+                  model: aiConfig.preferred_enrichment_model,
                   messages: [
                     { role: 'user', content: notesPrompt }
                   ],
@@ -1008,8 +1014,9 @@ async function extractWithAIEnhanced(
   versionUrl: string,
   versionContent: string,
   mainWebsiteContent: string,
-  productIdentifier?: string,
-  description?: string
+  productIdentifier: string | undefined,
+  description: string | undefined,
+  aiConfig: AIConfig
 ): Promise<ExtractedInfo> {
   const apiKey = Deno.env.get('OPENAI_API_KEY')
   if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
@@ -1182,7 +1189,7 @@ Extract the following information:
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model: aiConfig.preferred_extraction_model,
       messages: [
         {
           role: 'system',
@@ -1355,7 +1362,7 @@ ${versionPageResult.content.substring(0, 15000)}`
                   'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                  model: 'gpt-4o-mini',
+                  model: aiConfig.preferred_enrichment_model,
                   messages: [
                     { role: 'user', content: notesPrompt }
                   ],
@@ -1558,6 +1565,10 @@ serve(async (req) => {
     console.log(`Source Type: ${sourceType || 'auto-detect'}`)
     console.log(`Has provided content: ${!!content}`)
     console.log('='.repeat(60))
+
+    // Get AI model configuration
+    const aiConfig = await getAIConfig()
+    console.log(`🤖 Using models: extraction=${aiConfig.preferred_extraction_model}, enrichment=${aiConfig.preferred_enrichment_model}`)
 
     let versionContent = ''
     let mainWebsiteContent = ''
@@ -1819,7 +1830,8 @@ serve(async (req) => {
           versionContent,
           mainWebsiteContent,
           productIdentifier,
-          description
+          description,
+          aiConfig
         )
       } else {
         console.log('\n📊 Using LEGACY extraction (original system)')
@@ -1829,7 +1841,8 @@ serve(async (req) => {
           versionUrl,
           versionContent,
           mainWebsiteContent,
-          description
+          description,
+          aiConfig
         )
         // Mark as legacy extraction
         extracted.extractionMethod = 'legacy'
