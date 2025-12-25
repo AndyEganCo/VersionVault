@@ -453,10 +453,10 @@ serve(async (req) => {
     }
 
     // Process software in batches to avoid rate limits
-    // Batch size: 3 items at a time
-    // Delay: 15 seconds between batches
-    const BATCH_SIZE = 3
-    const BATCH_DELAY_MS = 15000 // 15 seconds
+    // Batch size: 2 items at a time (conservative to avoid rate limits)
+    // Delay: 30 seconds between batches (ensures TPM limit reset)
+    const BATCH_SIZE = 2
+    const BATCH_DELAY_MS = 30000 // 30 seconds
 
     console.log(`📊 Processing ${softwareList.length} software items in batches of ${BATCH_SIZE}`)
     console.log(`⏱️  Estimated time: ~${Math.ceil(softwareList.length / BATCH_SIZE) * (BATCH_DELAY_MS / 1000)} seconds`)
