@@ -4,6 +4,12 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { extractWithWebSearch, smartMergeNotes, getAIConfig } from '../_shared/ai-utils.ts'
 
+// Declare EdgeRuntime for background task support
+// This keeps the function alive after returning a response
+declare const EdgeRuntime: {
+  waitUntil: (promise: Promise<unknown>) => void
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -101,48 +107,39 @@ serve(async (req) => {
   console.log('✅ Authorization successful')
   console.log('🔄 Starting automated version check...')
 
-  // Use streaming response with keep-alive heartbeats to prevent timeout
-  // pg_cron's net.http_post has a ~3 minute timeout, so we need to send
-  // periodic data to keep the connection alive during long batch processing
-  const encoder = new TextEncoder()
+  // Use EdgeRuntime.waitUntil() to keep function alive after returning response
+  // This prevents pg_cron's net.http_post timeout (~3 min) from killing the function
+  // The function continues running in background while caller gets immediate 202 response
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
+  // Define the background processing function
+  const runVersionCheck = async (): Promise<void> => {
+    try {
+      console.log('🚀 Background version check starting...')
 
-        // Helper to send a message to the stream (keeps connection alive)
-        const sendMessage = (msg: string) => {
-          controller.enqueue(encoder.encode(`data: ${msg}\n\n`))
-        }
+      // Initialize Supabase client
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-        // Send initial heartbeat
-        sendMessage('{"status":"starting","message":"Initializing version check..."}')
+      // Fetch all software that has a version_website configured
+      const { data: softwareList, error: fetchError } = await supabase
+        .from('software')
+        .select('id, name, website, version_website, current_version, source_type, forum_config')
+        .not('version_website', 'is', null)
+        .neq('version_website', '')
 
-        // Initialize Supabase client
-        const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-        const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      if (fetchError) {
+        throw new Error(`Failed to fetch software: ${fetchError.message}`)
+      }
 
-        // Fetch all software that has a version_website configured
-        const { data: softwareList, error: fetchError } = await supabase
-          .from('software')
-          .select('id, name, website, version_website, current_version, source_type, forum_config')
-          .not('version_website', 'is', null)
-          .neq('version_website', '')
+      console.log(`📋 Found ${softwareList.length} software to check`)
 
-        if (fetchError) {
-          throw new Error(`Failed to fetch software: ${fetchError.message}`)
-        }
+      const results: VersionCheckResult[] = []
+      let totalVersionsAdded = 0
 
-        console.log(`📋 Found ${softwareList.length} software to check`)
-        sendMessage(`{"status":"fetched","total":${softwareList.length},"message":"Found ${softwareList.length} software to check"}`)
-
-        const results: VersionCheckResult[] = []
-        let totalVersionsAdded = 0
-
-        // Helper function to process a single software item
-        const processSoftware = async (software: any): Promise<VersionCheckResult> => {
-          console.log(`🔍 Checking: ${software.name}`)
+      // Helper function to process a single software item
+      const processSoftware = async (software: any): Promise<VersionCheckResult> => {
+        console.log(`🔍 Checking: ${software.name}`)
 
           try {
             // Call extract-software-info edge function
@@ -474,91 +471,75 @@ serve(async (req) => {
         // Batch size: 5 items at a time (balanced throughput)
         // Delay: 20 seconds between batches (allows TPM to reset)
         // Can handle 100+ software items in ~7 minutes, 200+ in ~14 minutes
-        const BATCH_SIZE = 5
-        const BATCH_DELAY_MS = 20000 // 20 seconds
-        const HEARTBEAT_INTERVAL_MS = 10000 // 10 seconds - send heartbeat during delays
+      const BATCH_SIZE = 5
+      const BATCH_DELAY_MS = 20000 // 20 seconds
 
-        console.log(`📊 Processing ${softwareList.length} software items in batches of ${BATCH_SIZE}`)
-        console.log(`⏱️  Estimated time: ~${Math.ceil(softwareList.length / BATCH_SIZE) * (BATCH_DELAY_MS / 1000 + 10)} seconds`)
-        console.log(`🔧 Pro tier: 30-minute timeout allows scaling to 200+ software items`)
+      console.log(`📊 Processing ${softwareList.length} software items in batches of ${BATCH_SIZE}`)
+      const totalBatches = Math.ceil(softwareList.length / BATCH_SIZE)
+      console.log(`⏱️  Estimated time: ~${totalBatches * (BATCH_DELAY_MS / 1000 + 10)} seconds`)
+      console.log(`🔧 Using EdgeRuntime.waitUntil() for background processing`)
 
-        const totalBatches = Math.ceil(softwareList.length / BATCH_SIZE)
-        sendMessage(`{"status":"processing","totalBatches":${totalBatches},"message":"Starting batch processing..."}`)
+      const allResults: VersionCheckResult[] = []
 
-        const allResults: VersionCheckResult[] = []
+      // Process in batches
+      for (let i = 0; i < softwareList.length; i += BATCH_SIZE) {
+        const batch = softwareList.slice(i, i + BATCH_SIZE)
+        const batchNumber = Math.floor(i / BATCH_SIZE) + 1
 
-        // Process in batches
-        for (let i = 0; i < softwareList.length; i += BATCH_SIZE) {
-          const batch = softwareList.slice(i, i + BATCH_SIZE)
-          const batchNumber = Math.floor(i / BATCH_SIZE) + 1
+        console.log(`\n🔄 Processing batch ${batchNumber}/${totalBatches} (${batch.length} items)`)
 
-          console.log(`\n🔄 Processing batch ${batchNumber}/${totalBatches} (${batch.length} items)`)
-          sendMessage(`{"status":"batch","batch":${batchNumber},"totalBatches":${totalBatches},"items":${batch.length},"message":"Processing batch ${batchNumber}/${totalBatches}"}`)
+        // Process batch in parallel
+        const batchResults = await Promise.all(batch.map(processSoftware))
+        allResults.push(...batchResults)
 
-          // Process batch in parallel
-          const batchResults = await Promise.all(batch.map(processSoftware))
-          allResults.push(...batchResults)
+        const batchSuccessful = batchResults.filter(r => r.success).length
+        console.log(`✅ Batch ${batchNumber} complete: ${batchSuccessful} successful, ${batchResults.length - batchSuccessful} failed`)
 
-          // Send batch completion message
-          const batchSuccessful = batchResults.filter(r => r.success).length
-          sendMessage(`{"status":"batch_complete","batch":${batchNumber},"successful":${batchSuccessful},"failed":${batchResults.length - batchSuccessful}}`)
-
-          // Add delay between batches with heartbeats (except after the last batch)
-          if (i + BATCH_SIZE < softwareList.length) {
-            console.log(`⏸️  Waiting ${BATCH_DELAY_MS / 1000}s before next batch to avoid rate limits...`)
-
-            // Send heartbeats during the delay to keep connection alive
-            const heartbeats = Math.floor(BATCH_DELAY_MS / HEARTBEAT_INTERVAL_MS)
-            for (let h = 0; h < heartbeats; h++) {
-              await new Promise(resolve => setTimeout(resolve, HEARTBEAT_INTERVAL_MS))
-              sendMessage(`{"status":"heartbeat","batch":${batchNumber},"nextBatch":${batchNumber + 1},"waiting":true}`)
-            }
-            // Wait remaining time
-            const remainingDelay = BATCH_DELAY_MS % HEARTBEAT_INTERVAL_MS
-            if (remainingDelay > 0) {
-              await new Promise(resolve => setTimeout(resolve, remainingDelay))
-            }
-          }
+        // Add delay between batches (except after the last batch)
+        if (i + BATCH_SIZE < softwareList.length) {
+          console.log(`⏸️  Waiting ${BATCH_DELAY_MS / 1000}s before next batch to avoid rate limits...`)
+          await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS))
         }
-
-        // Aggregate results and count new versions
-        for (const result of allResults) {
-          results.push(result)
-          totalVersionsAdded += result.versionsAdded
-        }
-
-        const summary: CheckSummary = {
-          totalChecked: softwareList.length,
-          successful: results.filter(r => r.success).length,
-          failed: results.filter(r => !r.success).length,
-          totalVersionsAdded,
-          results
-        }
-
-        console.log('\n✅ Version check complete!')
-        console.log(`   Total checked: ${summary.totalChecked}`)
-        console.log(`   Successful: ${summary.successful}`)
-        console.log(`   Failed: ${summary.failed}`)
-        console.log(`   New versions added: ${summary.totalVersionsAdded}`)
-
-        // Send final summary
-        sendMessage(`{"status":"complete","summary":${JSON.stringify(summary)}}`)
-        controller.close()
-
-      } catch (error) {
-        console.error('Error in trigger-version-check:', error)
-        controller.enqueue(encoder.encode(`data: {"status":"error","error":"${error.message || 'Internal server error'}"}\n\n`))
-        controller.close()
       }
-    }
-  })
 
-  return new Response(stream, {
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
+      // Aggregate results and count new versions
+      for (const result of allResults) {
+        results.push(result)
+        totalVersionsAdded += result.versionsAdded
+      }
+
+      const summary: CheckSummary = {
+        totalChecked: softwareList.length,
+        successful: results.filter(r => r.success).length,
+        failed: results.filter(r => !r.success).length,
+        totalVersionsAdded,
+        results
+      }
+
+      console.log('\n✅ Version check complete!')
+      console.log(`   Total checked: ${summary.totalChecked}`)
+      console.log(`   Successful: ${summary.successful}`)
+      console.log(`   Failed: ${summary.failed}`)
+      console.log(`   New versions added: ${summary.totalVersionsAdded}`)
+
+    } catch (error) {
+      console.error('❌ Error in background version check:', error)
     }
-  })
+  }
+
+  // Start background processing - keeps function alive after response is sent
+  EdgeRuntime.waitUntil(runVersionCheck())
+
+  // Return immediately with 202 Accepted
+  // The function continues running in background via EdgeRuntime.waitUntil()
+  return new Response(
+    JSON.stringify({
+      status: 'accepted',
+      message: 'Version check started in background. Check logs for progress.'
+    }),
+    {
+      status: 202,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    }
+  )
 })
