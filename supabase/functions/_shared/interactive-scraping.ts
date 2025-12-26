@@ -118,6 +118,7 @@ export default async function scrape({ page, context }) {
   }
 
   // Execute custom script if provided
+  const hasCustomScript = !!strategy.customScript
   if (strategy.customScript) {
     script += `
     // Execute custom script
@@ -136,17 +137,31 @@ export default async function scrape({ page, context }) {
     console.log('⏳ Waiting ${waitTime}ms for content to fully load...');
     await page.waitForTimeout(${waitTime});
 
+    ${hasCustomScript ? `
+    // Custom script used - return text content directly (what the script waited for)
+    const text = await page.evaluate(() => document.body.innerText);
+    console.log(\`✅ Scraping complete (text content): \${text.length} characters\`);
+    return text;
+    ` : `
     // Get final HTML
     const html = await page.content();
-    console.log(\`✅ Scraping complete: \${html.length} characters\`);
-
+    console.log(\`✅ Scraping complete (HTML): \${html.length} characters\`);
     return html;
+    `}
+`
 
+  // Add final return statement outside template
+  script += `
   } catch (error) {
     console.error('❌ Interactive scraping error:', error);
     // Return whatever content we have
+    ${hasCustomScript ? `
+    const text = await page.evaluate(() => document.body.innerText || '');
+    return text;
+    ` : `
     const html = await page.content();
     return html;
+    `}
   }
 }
 `
@@ -162,45 +177,52 @@ export default async function scrape({ page, context }) {
  * - Waiting for dynamic content
  * - Custom JavaScript execution
  */
-export async function fetchWithInteraction(url: string, strategy: ScrapingStrategy, apiKey: string): Promise<string> {
+export async function fetchWithInteraction(
+  url: string,
+  strategy: ScrapingStrategy,
+  browserlessApiKey?: string
+): Promise<string> {
+  if (!browserlessApiKey) {
+    throw new Error('Browserless API key required for interactive scraping')
+  }
+
+  console.log(`🎭 INTERACTIVE SCRAPING: ${url}`)
+  console.log(`Strategy:`, JSON.stringify(strategy))
+
+  const code = generatePuppeteerScript(url, strategy)
+
+  // When using customScript, we return text content directly, not HTML
+  const returnsText = !!strategy.customScript
+  console.log(`📝 Generated Puppeteer script${returnsText ? ' (returns text)' : ' (returns HTML)'}`)
+
   try {
-    console.log(`🎭 INTERACTIVE SCRAPING: ${url}`)
-    console.log(`Strategy:`, JSON.stringify(strategy, null, 2))
-
-    // Generate Puppeteer script from strategy
-    const puppeteerScript = generatePuppeteerScript(url, strategy)
-    console.log('📝 Generated Puppeteer script')
-
-    // Use /function API for actual Puppeteer code execution
-    const browserlessUrl = `https://chrome.browserless.io/function?token=${apiKey}&stealth=true&blockAds=true`
-
-    const response = await fetch(browserlessUrl, {
+    const response = await fetch('https://chrome.browserless.io/function', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/javascript',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${browserlessApiKey}`,
       },
-      body: puppeteerScript
+      body: JSON.stringify({ code }),
     })
 
     if (!response.ok) {
-      const error = await response.text()
-      console.error(`Browserless function API error: ${response.status}`)
-      console.error(`Error details: ${error}`)
-      throw new Error(`Browserless function error: ${response.status} - ${error}`)
+      const errorText = await response.text()
+      console.error(`Browserless /function error: ${response.status}`, errorText)
+      throw new Error(`Browserless /function returned ${response.status}: ${errorText}`)
     }
 
-    const html = await response.text()
-    console.log(`✅ Interactive scraping complete: ${html.length} characters`)
+    const result = await response.text()
+    console.log(`✅ Interactive scraping complete: ${result.length} characters`)
 
-    // Validate we got actual content, not just an error message
-    if (html.length < 500) {
-      console.warn(`⚠️ Suspiciously short response (${html.length} chars), may have failed`)
+    // If we got text content directly, wrap it in minimal HTML for compatibility
+    if (returnsText) {
+      return `<html><body>${result}</body></html>`
     }
 
-    return html
+    return result
 
   } catch (error) {
-    console.error(`❌ Interactive scraping failed for ${url}:`, error)
-    throw error // Re-throw so caller can handle fallback
+    console.error('❌ Fetch error:', error)
+    throw error
   }
 }
