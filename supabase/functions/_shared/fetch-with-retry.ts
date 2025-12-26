@@ -24,6 +24,11 @@ import {
   type BlockerDetection,
 } from './bot-blocker-handler.ts'
 
+import {
+  fetchWithInteraction as fetchInteractive,
+  type ScrapingStrategy,
+} from './interactive-scraping.ts'
+
 export interface FetchResult {
   html: string
   method: FetchMethod
@@ -36,6 +41,7 @@ export interface FetchWithRetryOptions {
   retryConfig?: Partial<RetryConfig>
   startingMethod?: FetchMethod
   browserlessApiKey?: string
+  scrapingStrategy?: ScrapingStrategy  // For interactive scraping
 }
 
 /**
@@ -153,12 +159,17 @@ export async function fetchWithRetry(
           break
 
         case 'interactive':
-          // For interactive, we would need the strategy object
-          // For now, fall back to extended browserless
+          // Use interactive scraping with Puppeteer script execution
           if (!options.browserlessApiKey) {
             throw new Error('Browserless API key required for this method')
           }
-          html = await fetchBrowserless(url, options.browserlessApiKey, true)
+          if (!options.scrapingStrategy) {
+            console.warn('⚠️ Interactive method requested but no scraping strategy provided, falling back to extended browserless')
+            html = await fetchBrowserless(url, options.browserlessApiKey, true)
+          } else {
+            console.log('🎭 Using interactive scraping with strategy')
+            html = await fetchInteractive(url, options.scrapingStrategy, options.browserlessApiKey)
+          }
           break
 
         default:

@@ -318,14 +318,29 @@ export function logBotBlocking(
 
 /**
  * Get recommended Browserless options based on blocker type
+ * @param blockerType - Type of bot blocker detected
+ * @param extended - Whether to use extended timeouts
+ * @param waitForSelector - Optional selector to wait for before returning (for dynamic content)
  */
-export function getBrowserlessOptions(blockerType: BlockerType, extended: boolean = false) {
-  const baseOptions = {
+export function getBrowserlessOptions(
+  blockerType: BlockerType,
+  extended: boolean = false,
+  waitForSelector?: string
+) {
+  const baseOptions: any = {
     gotoOptions: {
       waitUntil: 'networkidle2' as const,
       timeout: extended ? 60000 : 30000,
     },
     setExtraHTTPHeaders: getRealisticHeaders(),
+  }
+
+  // Add waitForSelector if specified (for ServiceNow, Angular, React apps)
+  if (waitForSelector) {
+    baseOptions.waitForSelector = {
+      selector: waitForSelector,
+      timeout: 40000,
+    }
   }
 
   // Extended options for tougher blockers

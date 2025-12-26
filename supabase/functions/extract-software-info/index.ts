@@ -53,6 +53,12 @@ import {
 } from '../_shared/bot-blocker-handler.ts'
 
 import {
+  fetchWithInteraction,
+  generatePuppeteerScript,
+  type ScrapingStrategy
+} from '../_shared/interactive-scraping.ts'
+
+import {
   fetchRSSContent
 } from '../_shared/rss-parser.ts'
 
@@ -115,17 +121,6 @@ interface ExtractedInfo {
 }
 
 /**
- * Scraping strategy for interactive content extraction
- */
-interface ScrapingStrategy {
-  releaseNotesSelectors?: string[]  // Buttons/links to click
-  expandSelectors?: string[]        // Accordions to expand
-  waitForSelector?: string          // Wait for element to appear
-  waitTime?: number                 // Time to wait in ms (default 2000)
-  customScript?: string             // Custom JavaScript to execute
-}
-
-/**
  * Fetches webpage content using Browserless (headless Chrome) for JavaScript rendering
  * Basic version - just renders the page without interaction
  */
@@ -177,62 +172,6 @@ async function fetchWithBrowserless(url: string): Promise<string> {
     }
 
     return ''
-  }
-}
-
-/**
- * Fetches webpage with INTERACTIVE scraping (Phase 3)
- * Uses Browserless /content API with bestAttempt for reliability
- */
-async function fetchWithInteraction(url: string, strategy: ScrapingStrategy): Promise<string> {
-  const apiKey = Deno.env.get('BROWSERLESS_API_KEY')
-
-  if (!apiKey) {
-    console.warn('BROWSERLESS_API_KEY not set, skipping interactive scraping')
-    return await fetchWithBrowserless(url) // Fallback to basic rendering
-  }
-
-  try {
-    console.log(`🎭 INTERACTIVE SCRAPING (Phase 3): ${url}`)
-    console.log(`Strategy:`, JSON.stringify(strategy, null, 2))
-
-    const browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}&bestAttempt=true&stealth=true`
-
-    // Just fetch the rendered page with JavaScript enabled
-    // We'll let Browserless handle the rendering
-    const response = await fetch(browserlessUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: url,
-        gotoOptions: {
-          waitUntil: 'networkidle2',
-          timeout: 30000
-        },
-        // Add headers to help evade bot detection
-        setExtraHTTPHeaders: {
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-        }
-      })
-    })
-
-    if (!response.ok) {
-      const error = await response.text()
-      throw new Error(`Browserless content error: ${response.status} - ${error}`)
-    }
-
-    const html = await response.text()
-    console.log(`✅ Interactive scraping complete: ${html.length} characters`)
-
-    return html
-
-  } catch (error) {
-    console.error(`❌ Interactive scraping failed for ${url}:`, error)
-    console.log('Falling back to basic Browserless rendering...')
-    return await fetchWithBrowserless(url) // Fallback
   }
 }
 
@@ -446,6 +385,7 @@ async function fetchWebpageContent(
     const result = await fetchWithRetry(url, {
       browserlessApiKey: Deno.env.get('BROWSERLESS_API_KEY'),
       startingMethod,
+      scrapingStrategy: strategy, // Pass through the scraping strategy for interactive method
       retryConfig: {
         maxAttempts: isKnownDifficult ? 2 : 3, // Reduced from 5 and 4 to prevent timeouts
         baseDelay: isKnownDifficult ? 2000 : 1500, // Reduced delays
