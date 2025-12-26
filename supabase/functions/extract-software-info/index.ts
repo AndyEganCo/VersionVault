@@ -1648,7 +1648,10 @@ serve(async (req) => {
     // This ensures we find the product even if buried deep in the page
     if (versionContent.length > 1000 && name) {
       console.log('\n🎯 Applying smart content extraction...')
-      const smartResult = extractSmartContent(versionContent, name, 30000)
+
+      // For interactive scraping, use much larger limits since we specifically waited for content
+      const maxContentSize = (fetchMethod === 'interactive') ? 100000 : 30000
+      const smartResult = extractSmartContent(versionContent, name, maxContentSize)
 
       if (smartResult.foundProduct) {
         console.log(`✅ Smart extraction successful - found product! (${smartResult.method})`)

@@ -253,9 +253,14 @@ export function extractSmartContent(
 ): { content: string; foundProduct: boolean; method: string } {
   console.log(`\n🔍 Smart extraction for "${productName}" (${fullContent.length} total chars)`);
 
+  // Use larger windows for larger content (e.g., from interactive scraping)
+  const windowSize = maxChars > 50000 ? 15000 : 5000;  // 3x larger window for interactive scraping
+  const maxWindows = maxChars > 50000 ? 10 : 5;  // More windows for larger content
+  console.log(`📐 Window size: ${windowSize} chars, Max windows: ${maxWindows}`);
+
   // STRATEGY 1: Look for version patterns first (best for release notes pages)
   console.log('📍 Strategy 1: Searching for version patterns...');
-  const versionWindows = extractVersionWindows(fullContent, 5000, 5);
+  const versionWindows = extractVersionWindows(fullContent, windowSize, maxWindows);
 
   if (versionWindows.length > 0) {
     // Found versions! Use those windows
@@ -271,7 +276,7 @@ export function extractSmartContent(
 
   // STRATEGY 2: Look for product name mentions (fallback)
   console.log('📍 Strategy 2: Searching for product mentions...');
-  const productWindows = extractContentWindows(fullContent, productName, 5000, 5);
+  const productWindows = extractContentWindows(fullContent, productName, windowSize, maxWindows);
 
   if (productWindows.length > 0) {
     const optimized = createOptimizedContent(productWindows, maxChars);
