@@ -372,7 +372,7 @@ async function fetchWebpageContent(
     // Determine starting method based on strategy and useBrowserless flag
     let startingMethod: 'static' | 'browserless' | 'browserless-extended' | 'interactive' = 'static'
 
-    if (strategy && (strategy.releaseNotesSelectors || strategy.expandSelectors || strategy.customScript)) {
+    if (strategy && (strategy.releaseNotesSelectors || strategy.expandSelectors || strategy.customScript || strategy.waitForSelector)) {
       startingMethod = 'interactive'
     } else if (useBrowserless || isKnownDifficult) {
       startingMethod = isKnownDifficult ? 'browserless-extended' : 'browserless'
