@@ -32,8 +32,14 @@ if ! command -v supabase &> /dev/null; then
     echo ""
 fi
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Change to project directory
-cd /home/user/VersionVault
+cd "$SCRIPT_DIR"
+
+echo "📁 Working directory: $SCRIPT_DIR"
+echo ""
 
 # Check if logged in to Supabase
 if ! supabase projects list &> /dev/null; then

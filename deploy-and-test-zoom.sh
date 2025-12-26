@@ -5,8 +5,14 @@ set -e  # Exit on error
 echo "🚀 Deploying Interactive Scraping Updates..."
 echo ""
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Change to project directory
-cd /home/user/VersionVault
+cd "$SCRIPT_DIR"
+
+echo "📁 Working directory: $SCRIPT_DIR"
+echo ""
 
 # Deploy the function
 echo "📦 Deploying extract-software-info function..."
