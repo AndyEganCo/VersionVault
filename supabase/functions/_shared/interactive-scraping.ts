@@ -45,7 +45,38 @@ export default async function scrape({ page, context }) {
 
   // Wait for initial selector if specified
   if (strategy.waitForSelector) {
-    script += `
+    // If multiple selectors provided (comma-separated), try each one
+    const selectors = strategy.waitForSelector.split(',').map(s => s.trim())
+
+    if (selectors.length > 1) {
+      // Multiple selectors - try each one until one succeeds
+      script += `
+    // Wait for any of multiple selectors to appear
+    const selectors = ${JSON.stringify(selectors)};
+    let found = false;
+
+    for (const selector of selectors) {
+      if (found) break;
+      console.log(\`⏳ Trying selector: \${selector}\`);
+      try {
+        await page.waitForSelector(selector, {
+          timeout: 10000,
+          visible: true
+        });
+        console.log(\`✅ Found content with selector: \${selector}\`);
+        found = true;
+      } catch (e) {
+        console.log(\`⚠️ Selector '\${selector}' not found, trying next...\`);
+      }
+    }
+
+    if (!found) {
+      console.warn('⚠️ None of the selectors matched, continuing anyway');
+    }
+`
+    } else {
+      // Single selector
+      script += `
     // Wait for content to appear
     console.log('⏳ Waiting for selector: ${strategy.waitForSelector}');
     try {
@@ -58,6 +89,7 @@ export default async function scrape({ page, context }) {
       console.warn('⚠️ Selector not found, continuing anyway:', e.message);
     }
 `
+    }
   }
 
   // Click all release notes buttons/links
