@@ -379,6 +379,7 @@ async function fetchWebpageContent(
     }
 
     console.log(`🔄 Using bot blocking protection with starting method: ${startingMethod}`)
+    console.log(`📋 Strategy provided: ${strategy ? 'YES' : 'NO'} ${strategy ? JSON.stringify(Object.keys(strategy)) : ''}`)
 
     // Use fetchWithRetry with bot blocking protection
     // REDUCED RETRIES: To prevent 504 timeouts, use fewer attempts for difficult domains
