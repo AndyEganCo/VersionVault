@@ -308,8 +308,8 @@ Return ONLY valid JSON. Each field should be an array of strings. Only include f
         role: 'user',
         content: `Parse these release notes:\n\n${releaseNotesText}`
       }],
-      response_format: { type: "json_object" },
-      temperature: 0.1
+      response_format: { type: "json_object" }
+      // Note: temperature removed - some models (o1 series) only support default (1)
     })
   })
 
@@ -423,8 +423,8 @@ Only include sections that have content.`
           role: 'user',
           content: mergePrompt
         }],
-        response_format: { type: "json_object" },
-        temperature: 0.2
+        response_format: { type: "json_object" }
+        // Note: temperature removed - some models (o1 series) only support default (1)
       })
     })
 

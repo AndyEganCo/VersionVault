@@ -749,7 +749,7 @@ Respond in JSON format:
           content: prompt
         }
       ],
-      temperature: 0.3,
+      // temperature removed - some models only support default (1)
       response_format: { type: 'json_object' }
     })
   })
@@ -904,7 +904,7 @@ ${versionPageResult.content.substring(0, 15000)}`
                   messages: [
                     { role: 'user', content: notesPrompt }
                   ],
-                  temperature: 0.3,
+                  // temperature removed - some models only support default (1)
                   response_format: { type: 'json_object' }
                 })
               })
@@ -1213,7 +1213,7 @@ Better to be honest about uncertainty than to provide incorrect data.`
           content: prompt
         }
       ],
-      temperature: 0.3,
+      // temperature removed - some models only support default (1)
       response_format: { type: 'json_object' }
     })
   })
@@ -1367,7 +1367,7 @@ ${versionPageResult.content.substring(0, 15000)}`
                   messages: [
                     { role: 'user', content: notesPrompt }
                   ],
-                  temperature: 0.3,
+                  // temperature removed - some models only support default (1)
                   response_format: { type: 'json_object' }
                 })
               })
