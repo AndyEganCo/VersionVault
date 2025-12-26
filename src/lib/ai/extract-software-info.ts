@@ -24,7 +24,8 @@ export async function extractSoftwareInfo(
   name: string,
   website: string,
   versionUrl: string,
-  description?: string
+  description?: string,
+  scrapingStrategy?: any  // Interactive scraping strategy from database
 ): Promise<ExtractedSoftwareInfo> {
   try {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -53,7 +54,8 @@ export async function extractSoftwareInfo(
           name,
           website,
           versionUrl,
-          description
+          description,
+          scrapingStrategy  // Pass through for interactive scraping
         }),
         signal: controller.signal
       });

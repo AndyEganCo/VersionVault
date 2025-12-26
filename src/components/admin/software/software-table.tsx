@@ -126,7 +126,8 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
         software.name,
         software.website,
         software.version_website,
-        `Current version: ${software.current_version || 'unknown'}`
+        `Current version: ${software.current_version || 'unknown'}`,
+        software.scraping_strategy  // Pass interactive scraping strategy from database
       );
 
       // Update software with latest version info
