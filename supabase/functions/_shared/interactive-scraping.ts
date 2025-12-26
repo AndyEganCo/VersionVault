@@ -150,18 +150,18 @@ export default async function scrape({ page, context }) {
     `}
 `
 
-  // Add final return statement outside template
+  // Add error handler - always use page.content() as it's more reliable
   script += `
   } catch (error) {
     console.error('❌ Interactive scraping error:', error);
-    // Return whatever content we have
-    ${hasCustomScript ? `
-    const text = await page.evaluate(() => document.body.innerText || '');
-    return text;
-    ` : `
-    const html = await page.content();
-    return html;
-    `}
+    // Always return HTML on error - it's more reliable than page.evaluate()
+    try {
+      const html = await page.content();
+      return html || '';
+    } catch (e) {
+      console.error('❌ Failed to get page content:', e);
+      return '';
+    }
   }
 }
 `
