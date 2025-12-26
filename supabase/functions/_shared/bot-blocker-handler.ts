@@ -337,8 +337,11 @@ export function getBrowserlessOptions(
 
   // Add waitForSelector if specified (for ServiceNow, Angular, React apps)
   if (waitForSelector) {
+    // If comma-separated selectors provided, use the first one
+    // (Browserless /content API only supports single selector)
+    const selector = waitForSelector.split(',')[0].trim()
     baseOptions.waitForSelector = {
-      selector: waitForSelector,
+      selector,
       timeout: 40000,
     }
   }

@@ -71,13 +71,17 @@ async function fetchBrowserless(
   url: string,
   apiKey: string,
   extended: boolean = false,
-  blockerType: any = null
+  blockerType: any = null,
+  waitForSelector?: string
 ): Promise<string> {
   console.log(`🌐 Fetching with Browserless${extended ? ' (extended)' : ''}: ${url}`)
+  if (waitForSelector) {
+    console.log(`⏳ Will wait for selector: ${waitForSelector}`)
+  }
 
   const browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}&stealth=true&bestAttempt=true`
 
-  const options = getBrowserlessOptions(blockerType, extended)
+  const options = getBrowserlessOptions(blockerType, extended, waitForSelector)
 
   const response = await fetch(browserlessUrl, {
     method: 'POST',
@@ -143,7 +147,13 @@ export async function fetchWithRetry(
           if (!options.browserlessApiKey) {
             throw new Error('Browserless API key required for this method')
           }
-          html = await fetchBrowserless(url, options.browserlessApiKey, false)
+          html = await fetchBrowserless(
+            url,
+            options.browserlessApiKey,
+            false,
+            null,
+            options.scrapingStrategy?.waitForSelector
+          )
           break
 
         case 'browserless-extended':
@@ -154,7 +164,8 @@ export async function fetchWithRetry(
             url,
             options.browserlessApiKey,
             true,
-            lastBlockerDetection?.blockerType
+            lastBlockerDetection?.blockerType,
+            options.scrapingStrategy?.waitForSelector
           )
           break
 

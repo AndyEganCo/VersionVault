@@ -372,8 +372,13 @@ async function fetchWebpageContent(
     // Determine starting method based on strategy and useBrowserless flag
     let startingMethod: 'static' | 'browserless' | 'browserless-extended' | 'interactive' = 'static'
 
-    if (strategy && (strategy.releaseNotesSelectors || strategy.expandSelectors || strategy.customScript || strategy.waitForSelector)) {
+    // Only use 'interactive' for strategies that require Puppeteer scripting
+    // Simple waitForSelector can be handled by browserless-extended (uses /content API)
+    if (strategy && (strategy.releaseNotesSelectors || strategy.expandSelectors || strategy.customScript)) {
       startingMethod = 'interactive'
+    } else if (strategy && strategy.waitForSelector) {
+      // waitForSelector doesn't need Puppeteer script - use /content API
+      startingMethod = 'browserless-extended'
     } else if (useBrowserless || isKnownDifficult) {
       startingMethod = isKnownDifficult ? 'browserless-extended' : 'browserless'
     }
