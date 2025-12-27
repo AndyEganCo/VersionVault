@@ -373,12 +373,13 @@ async function fetchWebpageContent(
     let startingMethod: 'static' | 'browserless' | 'browserless-extended' | 'interactive' = 'static'
 
     // Only use 'interactive' for strategies that require Puppeteer scripting
-    // Simple waitForSelector can be handled by browserless-extended (uses /content API)
+    // Simple waitForSelector can be handled by browserless (uses /content API)
     if (strategy && (strategy.releaseNotesSelectors || strategy.expandSelectors || strategy.customScript)) {
       startingMethod = 'interactive'
     } else if (strategy && strategy.waitForSelector) {
-      // waitForSelector doesn't need Puppeteer script - use /content API
-      startingMethod = 'browserless-extended'
+      // waitForSelector doesn't need Puppeteer script - use regular browserless (not extended)
+      // Extended uses networkidle0 which is too slow for nightly processing
+      startingMethod = 'browserless'
     } else if (useBrowserless || isKnownDifficult) {
       startingMethod = isKnownDifficult ? 'browserless-extended' : 'browserless'
     }
