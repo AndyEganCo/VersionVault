@@ -3,19 +3,23 @@ import {
   Text,
   Row,
   Column,
+  Link,
 } from '@react-email/components';
 import type { SoftwareUpdateSummary } from '../../lib/newsletter/types';
 
 interface UpdateCardProps {
   update: SoftwareUpdateSummary;
+  dashboardUrl: string;
 }
 
-export function UpdateCard({ update }: UpdateCardProps) {
+export function UpdateCard({ update, dashboardUrl }: UpdateCardProps) {
   const typeColor = getTypeColor(update.update_type);
   const typeLabel = getTypeLabel(update.update_type);
+  const detailUrl = `${dashboardUrl}?software_id=${update.software_id}`;
 
   return (
-    <Section style={cardContainer}>
+    <Link href={detailUrl} style={cardLink}>
+      <Section style={cardContainer}>
       <Row>
         <Column>
           {/* Header row: Name + Type badge */}
@@ -69,6 +73,7 @@ export function UpdateCard({ update }: UpdateCardProps) {
         </Column>
       </Row>
     </Section>
+    </Link>
   );
 }
 
@@ -110,6 +115,12 @@ function formatDate(dateString: string): string {
     return dateString;
   }
 }
+
+const cardLink: React.CSSProperties = {
+  textDecoration: 'none',
+  display: 'block',
+  color: 'inherit',
+};
 
 const cardContainer: React.CSSProperties = {
   backgroundColor: '#171717',

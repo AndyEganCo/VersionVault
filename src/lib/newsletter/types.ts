@@ -133,6 +133,7 @@ export interface WeeklyDigestProps {
   unsubscribeUrl: string;
   preferencesUrl: string;
   dashboardUrl: string;
+  softwarePageUrl: string;
 }
 
 export interface AllQuietProps {

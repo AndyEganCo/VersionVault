@@ -695,8 +695,28 @@ export function AdminNewsletter() {
       const activeSponsor = sponsors.find(s => s.is_active);
       const userName = user?.email?.split('@')[0] || 'User';
 
+      // Get new software added in the last 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const { data: newSoftwareData } = await supabase
+        .from('software')
+        .select('id, name, manufacturer, category, current_version, created_at')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const newSoftware = (newSoftwareData || []).map(s => ({
+        software_id: s.id,
+        name: s.name,
+        manufacturer: s.manufacturer,
+        category: s.category,
+        initial_version: s.current_version || 'N/A',
+        added_date: s.created_at,
+      }));
+
       // Generate preview HTML (simplified version of the actual template)
-      const html = generatePreviewHtml(userName, sampleUpdates, activeSponsor);
+      const html = generatePreviewHtml(userName, sampleUpdates, newSoftware, activeSponsor);
       setPreviewHtml(html);
     } catch (error) {
       console.error('Error generating preview:', error);
@@ -1206,6 +1226,7 @@ export function AdminNewsletter() {
 function generatePreviewHtml(
   userName: string,
   updates: any[],
+  newSoftware: any[],
   sponsor: Sponsor | null | undefined
 ): string {
   const updateCards = updates.map((u) => `
@@ -1279,6 +1300,31 @@ function generatePreviewHtml(
         <a href="https://versionvault.dev/dashboard" style="font-size: 13px; color: #3b82f6; text-decoration: none;">View all in dashboard →</a>
       </div>
     </div>
+
+    ${newSoftware.length > 0 ? `
+    <!-- New Software Section -->
+    <div style="padding: 24px 24px 0 24px;">
+      <div style="font-size: 18px; font-weight: 600; color: #ffffff; margin: 0 0 4px 0;">
+        🆕 New Software Added
+      </div>
+      <div style="font-size: 13px; color: #a3a3a3; margin: 0 0 16px 0;">
+        ${newSoftware.length} new ${newSoftware.length === 1 ? 'app' : 'apps'} added to VersionVault this week
+      </div>
+      ${newSoftware.map((s: any) => `
+        <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div style="flex: 1;">
+              <div style="font-size: 16px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">${s.name}</div>
+              <div style="font-size: 13px; color: #a3a3a3; margin-bottom: 8px;">${s.manufacturer} • ${s.category}</div>
+              <div style="font-size: 12px; color: #525252;">
+                Initial version: <span style="font-family: monospace; color: #a3a3a3;">${s.initial_version}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ` : ''}
 
     ${sponsorHtml}
 

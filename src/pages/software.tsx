@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SoftwareCard } from '@/components/software/software-card';
 import { SoftwareFilters } from '@/components/software/software-filters';
 import { useAuth } from '@/contexts/auth-context';
@@ -11,6 +11,10 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import type { SortOption } from '@/types/software';
 import { RequestSoftwareModal } from '@/components/software/request-software-modal';
+import { useSearchParams } from 'react-router-dom';
+import { supabase } from '@/lib/supabase';
+import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
+import type { Software as SoftwareType } from '@/lib/software/types';
 
 export function Software() {
   const { user } = useAuth();
@@ -20,6 +24,10 @@ export function Software() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('name');
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [urlSoftware, setUrlSoftware] = useState<SoftwareType | null>(null);
+  const [isLoadingSoftware, setIsLoadingSoftware] = useState(false);
+  const [hasProcessedAction, setHasProcessedAction] = useState(false);
 
   const loading = softwareLoading || trackingLoading;
 
@@ -138,6 +146,65 @@ export function Software() {
     }
   };
 
+  // Handle deep linking from email - fetch software when software_id parameter is present
+  useEffect(() => {
+    const softwareId = searchParams.get('software_id');
+    const action = searchParams.get('action');
+
+    if (softwareId && !isLoadingSoftware) {
+      setIsLoadingSoftware(true);
+
+      // Fetch software details
+      supabase
+        .from('software')
+        .select('*')
+        .eq('id', softwareId)
+        .single()
+        .then(async ({ data, error }) => {
+          if (error) {
+            console.error('Error fetching software:', error);
+            toast.error('Software not found');
+            // Clear the invalid parameter
+            searchParams.delete('software_id');
+            searchParams.delete('action');
+            setSearchParams(searchParams);
+          } else if (data) {
+            setUrlSoftware(data as SoftwareType);
+
+            // Handle auto-tracking action
+            if (action === 'track' && user && !hasProcessedAction) {
+              setHasProcessedAction(true);
+              const isTracked = trackedIds.has(data.id);
+
+              if (!isTracked) {
+                const success = await toggleSoftwareTracking(user.id, data.id, true);
+                if (success) {
+                  await refreshTracking();
+                  toast.success('Now tracking ' + data.name);
+                }
+              }
+            }
+          }
+        })
+        .finally(() => {
+          setIsLoadingSoftware(false);
+        });
+    } else if (!softwareId && urlSoftware) {
+      // Clear software when parameter is removed
+      setUrlSoftware(null);
+      setHasProcessedAction(false);
+    }
+  }, [searchParams, isLoadingSoftware, urlSoftware, setSearchParams, user, trackedIds, hasProcessedAction, refreshTracking]);
+
+  // Handle modal close - remove software_id and action from URL
+  const handleModalClose = () => {
+    setUrlSoftware(null);
+    setHasProcessedAction(false);
+    searchParams.delete('software_id');
+    searchParams.delete('action');
+    setSearchParams(searchParams);
+  };
+
   if (loading) {
     return <LoadingPage />;
   }
@@ -193,6 +260,19 @@ export function Software() {
           ))}
         </div>
       </div>
+
+      {/* Deep-linked software modal from email */}
+      {urlSoftware && (
+        <SoftwareDetailModal
+          open={!!urlSoftware}
+          onOpenChange={(open) => !open && handleModalClose()}
+          software={urlSoftware}
+          isTracked={trackedIds.has(urlSoftware.id)}
+          onTrackingChange={() => {
+            refreshTracking();
+          }}
+        />
+      )}
     </PageLayout>
   );
 }

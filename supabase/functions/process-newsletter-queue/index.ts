@@ -374,25 +374,27 @@ function generateHtmlEmail(data: any): string {
   const { userName, updates, hasUpdates, newSoftware, newSoftwareCount, sponsor, allQuietMessage, trackedCount, userId, digestLabel, timePeriod } = data
 
   const updateCards = updates.map((u: any) => `
-    <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 16px; font-weight: 600; color: #ffffff;">${u.name}</span>
-        <span style="font-size: 10px; font-weight: 600; color: #ffffff; background-color: ${getTypeColor(u.update_type)}; padding: 3px 8px; border-radius: 4px;">${u.update_type.toUpperCase()}</span>
-      </div>
-      <div style="font-size: 13px; color: #a3a3a3; margin: 4px 0 12px 0;">${u.manufacturer} • ${u.category}</div>
-      <div style="font-size: 14px; font-family: monospace;">
-        <span style="color: #737373;">${u.old_version}</span>
-        <span style="color: #525252;"> → </span>
-        <span style="color: #22c55e; font-weight: 600;">${u.new_version}</span>
-      </div>
-      <div style="font-size: 12px; color: #525252; margin-top: 4px;">Released ${formatDate(u.release_date)}</div>
-      ${u.release_notes && u.release_notes.length > 0 ? `
-        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #262626;">
-          ${u.release_notes.slice(0, 2).map((note: string) => `<div style="font-size: 12px; color: #a3a3a3; margin-bottom: 4px;">• ${note}</div>`).join('')}
-          ${u.release_notes.length > 2 ? `<div style="font-size: 12px; color: #525252; font-style: italic;">+${u.release_notes.length - 2} more changes</div>` : ''}
+    <a href="${VERSIONVAULT_URL}/dashboard?software_id=${u.software_id}" style="text-decoration: none; display: block; color: inherit;">
+      <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 16px; font-weight: 600; color: #ffffff;">${u.name}</span>
+          <span style="font-size: 10px; font-weight: 600; color: #ffffff; background-color: ${getTypeColor(u.update_type)}; padding: 3px 8px; border-radius: 4px;">${u.update_type.toUpperCase()}</span>
         </div>
-      ` : ''}
-    </div>
+        <div style="font-size: 13px; color: #a3a3a3; margin: 4px 0 12px 0;">${u.manufacturer} • ${u.category}</div>
+        <div style="font-size: 14px; font-family: monospace;">
+          <span style="color: #737373;">${u.old_version}</span>
+          <span style="color: #525252;"> → </span>
+          <span style="color: #22c55e; font-weight: 600;">${u.new_version}</span>
+        </div>
+        <div style="font-size: 12px; color: #525252; margin-top: 4px;">Released ${formatDate(u.release_date)}</div>
+        ${u.release_notes && u.release_notes.length > 0 ? `
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #262626;">
+            ${u.release_notes.slice(0, 2).map((note: string) => `<div style="font-size: 12px; color: #a3a3a3; margin-bottom: 4px;">• ${note}</div>`).join('')}
+            ${u.release_notes.length > 2 ? `<div style="font-size: 12px; color: #525252; font-style: italic;">+${u.release_notes.length - 2} more changes</div>` : ''}
+          </div>
+        ` : ''}
+      </div>
+    </a>
   `).join('')
 
   const newSoftwareCards = newSoftware.map((s: any) => `
@@ -407,6 +409,10 @@ function generateHtmlEmail(data: any): string {
         <span style="color: #8b5cf6; font-weight: 600;">${s.initial_version}</span>
       </div>
       <div style="font-size: 12px; color: #525252; margin-top: 4px;">Added ${formatDate(s.added_date)}</div>
+      <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #262626; text-align: center;">
+        <a href="${VERSIONVAULT_URL}/software?software_id=${s.software_id}" style="display: inline-block; font-size: 13px; font-weight: 500; color: #3b82f6; text-decoration: none; padding: 8px 16px; margin-right: 8px; border: 1px solid #3b82f6; border-radius: 6px;">View Details</a>
+        <a href="${VERSIONVAULT_URL}/software?software_id=${s.software_id}&action=track" style="display: inline-block; font-size: 13px; font-weight: 600; color: #ffffff; background-color: #8b5cf6; text-decoration: none; padding: 8px 16px; border-radius: 6px;">Start Tracking</a>
+      </div>
     </div>
   `).join('')
 

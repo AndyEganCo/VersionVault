@@ -3,14 +3,20 @@ import {
   Text,
   Row,
   Column,
+  Link,
+  Button,
 } from '@react-email/components';
 import type { NewSoftwareSummary } from '../../lib/newsletter/types';
 
 interface NewSoftwareCardProps {
   software: NewSoftwareSummary;
+  softwarePageUrl: string;
 }
 
-export function NewSoftwareCard({ software }: NewSoftwareCardProps) {
+export function NewSoftwareCard({ software, softwarePageUrl }: NewSoftwareCardProps) {
+  const viewUrl = `${softwarePageUrl}?software_id=${software.software_id}`;
+  const trackUrl = `${softwarePageUrl}?software_id=${software.software_id}&action=track`;
+
   return (
     <Section style={cardContainer}>
       <Row>
@@ -44,6 +50,20 @@ export function NewSoftwareCard({ software }: NewSoftwareCardProps) {
               Added {formatDate(software.added_date)}
             </Text>
           )}
+
+          {/* Action buttons */}
+          <Section style={actionsSection}>
+            <Row>
+              <Column align="center">
+                <Link href={viewUrl} style={viewButton}>
+                  View Details
+                </Link>
+                <Link href={trackUrl} style={trackButton}>
+                  Start Tracking
+                </Link>
+              </Column>
+            </Row>
+          </Section>
         </Column>
       </Row>
     </Section>
@@ -118,4 +138,35 @@ const dateText: React.CSSProperties = {
   color: '#525252',
   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
   margin: '0',
+};
+
+const actionsSection: React.CSSProperties = {
+  marginTop: '12px',
+  paddingTop: '12px',
+  borderTop: '1px solid #262626',
+};
+
+const viewButton: React.CSSProperties = {
+  display: 'inline-block',
+  fontSize: '13px',
+  fontWeight: '500',
+  color: '#3b82f6',
+  textDecoration: 'none',
+  padding: '8px 16px',
+  marginRight: '8px',
+  border: '1px solid #3b82f6',
+  borderRadius: '6px',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+};
+
+const trackButton: React.CSSProperties = {
+  display: 'inline-block',
+  fontSize: '13px',
+  fontWeight: '600',
+  color: '#ffffff',
+  backgroundColor: '#8b5cf6',
+  textDecoration: 'none',
+  padding: '8px 16px',
+  borderRadius: '6px',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
 };
