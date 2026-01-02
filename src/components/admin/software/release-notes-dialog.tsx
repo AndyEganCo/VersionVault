@@ -38,14 +38,12 @@ interface ReleaseNotesDialogProps {
 }
 
 function formatDateForInput(date: string): string {
+  // Return YYYY-MM-DD format for HTML5 date input
   const d = new Date(date);
-  return `${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getDate().toString().padStart(2, '0')}/${d.getFullYear()}`;
-}
-
-function parseDateString(dateString: string): string {
-  // Convert MM/DD/YYYY to YYYY-MM-DD for database
-  const [month, day, year] = dateString.split('/');
-  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  const year = d.getFullYear();
+  const month = (d.getMonth() + 1).toString().padStart(2, '0');
+  const day = d.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function ReleaseNotesDialog({
@@ -114,22 +112,6 @@ export function ReleaseNotesDialog({
     loadVersionHistory();
   }, [open, software.id, software.current_version]);
 
-  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, ''); // Remove non-digits
-
-    // Add slashes as user types
-    if (value.length >= 4) {
-      value = value.slice(0, 2) + '/' + value.slice(2, 4) + '/' + value.slice(4, 8);
-    } else if (value.length >= 2) {
-      value = value.slice(0, 2) + '/' + value.slice(2);
-    }
-
-    // Limit to MM/DD/YYYY format
-    if (value.length <= 10) {
-      setReleaseDate(value);
-    }
-  };
-
   const handleVersionChange = (value: string) => {
     setSelectedVersion(value);
 
@@ -179,8 +161,6 @@ export function ReleaseNotesDialog({
     setLoading(true);
 
     try {
-      const isoDate = parseDateString(releaseDate);
-
       // Determine which version to use
       let versionToSave = '';
       if (selectedVersion === 'new') {
@@ -191,10 +171,11 @@ export function ReleaseNotesDialog({
         versionToSave = selectedVersion;
       }
 
+      // releaseDate is already in YYYY-MM-DD format from the date input
       const success = await addVersionHistory(software.id, {
         software_id: software.id,
         version: versionToSave,
-        release_date: new Date(isoDate).toISOString(),
+        release_date: new Date(releaseDate).toISOString(),
         notes: notes,
         type,
         notes_source: 'manual' // Mark as manual when edited through UI
@@ -527,11 +508,9 @@ export function ReleaseNotesDialog({
           <div className="space-y-2">
             <Label>Release Date</Label>
             <Input
-              type="text"
+              type="date"
               value={releaseDate}
-              onChange={handleDateChange}
-              placeholder="MM/DD/YYYY"
-              pattern="\d{2}/\d{2}/\d{4}"
+              onChange={(e) => setReleaseDate(e.target.value)}
               required
             />
           </div>
