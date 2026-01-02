@@ -11,8 +11,12 @@ const corsHeaders = {
 
 const BATCH_SIZE = 100
 const MAX_RETRY_ATTEMPTS = 3
+const RATE_LIMIT_DELAY_MS = 500 // Resend allows 2 req/sec, use 500ms delay
 const VERSIONVAULT_FROM = 'VersionVault <digest@updates.versionvault.dev>'
 const VERSIONVAULT_URL = 'https://versionvault.dev'
+
+// Helper function to delay between requests (rate limiting)
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 interface ProcessResult {
   processed: number
@@ -161,7 +165,8 @@ serve(async (req) => {
     }
 
     // Process each queue item
-    for (const item of itemsToProcess) {
+    for (let i = 0; i < itemsToProcess.length; i++) {
+      const item = itemsToProcess[i]
       result.processed++
 
       try {
@@ -264,6 +269,12 @@ serve(async (req) => {
           .eq('id', item.id)
 
         console.error(`❌ Failed for ${item.email}: ${error.message}`)
+      }
+
+      // Rate limit: Wait between requests to respect Resend's 2 req/sec limit
+      // Skip delay after the last item
+      if (i < itemsToProcess.length - 1) {
+        await delay(RATE_LIMIT_DELAY_MS)
       }
     }
 
