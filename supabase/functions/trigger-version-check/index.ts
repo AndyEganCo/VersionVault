@@ -59,6 +59,16 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  // Parse query parameters for configuration
+  const url = new URL(req.url)
+  const limitParam = url.searchParams.get('limit')
+
+  // Default to 15 items per run for incremental checks
+  // Use 'all' to check all software (for manual runs)
+  const checkLimit = limitParam === 'all' ? null : parseInt(limitParam || '15', 10)
+
+  console.log(`🎯 Check limit: ${checkLimit === null ? 'ALL' : checkLimit} items`)
+
   // Verify authorization - check multiple sources
   const authHeader = req.headers.get('Authorization')
   const customSecretHeader = req.headers.get('X-Cron-Secret')
@@ -121,18 +131,28 @@ serve(async (req) => {
       const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-      // Fetch all software that has a version_website configured
-      const { data: softwareList, error: fetchError } = await supabase
+      // Fetch software that has a version_website configured
+      // Prioritize: never checked (NULLS FIRST) then oldest checked
+      let query = supabase
         .from('software')
-        .select('id, name, website, version_website, current_version, source_type, forum_config')
+        .select('id, name, website, version_website, current_version, source_type, forum_config, last_checked')
         .not('version_website', 'is', null)
         .neq('version_website', '')
+        .order('last_checked', { ascending: true, nullsFirst: true })
+
+      // Apply limit if specified (null means check all)
+      if (checkLimit !== null) {
+        query = query.limit(checkLimit)
+      }
+
+      const { data: softwareList, error: fetchError } = await query
 
       if (fetchError) {
         throw new Error(`Failed to fetch software: ${fetchError.message}`)
       }
 
-      console.log(`📋 Found ${softwareList.length} software to check`)
+      const checkMode = checkLimit === null ? 'full check' : `incremental (${checkLimit} oldest)`
+      console.log(`📋 Found ${softwareList.length} software to check (${checkMode})`)
 
       const results: VersionCheckResult[] = []
       let totalVersionsAdded = 0
