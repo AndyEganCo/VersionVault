@@ -6,7 +6,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -98,16 +97,18 @@ export function SoftwareDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] flex flex-col p-6">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="text-2xl">{software.name}</DialogTitle>
-          <DialogDescription>
-            by {software.manufacturer}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-hidden p-0 gap-0">
+        <div className="flex-shrink-0 p-6 pb-4">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">{software.name}</DialogTitle>
+            <DialogDescription>
+              by {software.manufacturer}
+            </DialogDescription>
+          </DialogHeader>
+        </div>
 
-        <ScrollArea className="flex-1 overflow-hidden">
-          <div className="pr-4 space-y-6">
+        <div className="flex-1 overflow-y-auto px-6 pb-6 min-h-0">
+          <div className="space-y-6">
             {/* Software Info Section */}
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
@@ -241,7 +242,7 @@ export function SoftwareDetailModal({
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
