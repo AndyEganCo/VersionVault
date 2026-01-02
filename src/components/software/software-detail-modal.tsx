@@ -97,15 +97,18 @@ export function SoftwareDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl w-[95vw]">
-        <DialogHeader>
-          <DialogTitle className="text-2xl">{software.name}</DialogTitle>
-          <DialogDescription>
-            by {software.manufacturer}
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="max-w-2xl w-[95vw] max-h-[90vh] overflow-hidden p-0 gap-0">
+        <div className="flex-shrink-0 p-6 pb-4">
+          <DialogHeader>
+            <DialogTitle className="text-2xl">{software.name}</DialogTitle>
+            <DialogDescription>
+              by {software.manufacturer}
+            </DialogDescription>
+          </DialogHeader>
+        </div>
 
-        <div className="space-y-6">
+        <div className="flex-1 overflow-y-auto px-6 pb-6 min-h-0">
+          <div className="space-y-6">
             {/* Software Info Section */}
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
@@ -238,6 +241,7 @@ export function SoftwareDetailModal({
                 </p>
               </div>
             )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
