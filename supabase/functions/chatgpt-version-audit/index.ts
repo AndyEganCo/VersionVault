@@ -205,28 +205,48 @@ ${softwareList}`
       requestBody.response_format = { type: 'json_object' }
     }
 
-    const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    })
+    // GPT-5 can take longer to respond - set generous timeout (3 minutes)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 180000) // 3 minutes
 
-    if (!chatResponse.ok) {
-      const errorText = await chatResponse.text()
-      throw new Error(`ChatGPT API error: ${chatResponse.status} ${errorText}`)
+    const apiCallStart = Date.now()
+    let content: string
+
+    try {
+      const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${openaiApiKey}`,
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeoutId)
+      const apiCallDuration = Date.now() - apiCallStart
+      console.log(`⏱️  API call took ${apiCallDuration}ms`)
+
+      if (!chatResponse.ok) {
+        const errorText = await chatResponse.text()
+        throw new Error(`ChatGPT API error: ${chatResponse.status} ${errorText}`)
+      }
+
+      const chatData = await chatResponse.json()
+      content = chatData.choices[0]?.message?.content
+
+      if (!content) {
+        throw new Error('No response from ChatGPT')
+      }
+
+      console.log('📦 ChatGPT response received')
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (error.name === 'AbortError') {
+        throw new Error('ChatGPT API timeout after 3 minutes')
+      }
+      throw error
     }
-
-    const chatData = await chatResponse.json()
-    const content = chatData.choices[0]?.message?.content
-
-    if (!content) {
-      throw new Error('No response from ChatGPT')
-    }
-
-    console.log('📦 ChatGPT response received')
 
     // Parse response
     let parsedResponse: ChatGPTResponse
