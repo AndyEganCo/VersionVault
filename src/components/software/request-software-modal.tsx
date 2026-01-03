@@ -60,9 +60,55 @@ export function RequestSoftwareModal({ onSuccess, open, onOpenChange, trigger }:
     setIsLoading(true);
 
     try {
-      const { error } = await supabase
-        .from('software_requests')
-        .insert([
+      // Check for duplicate software first
+      const { data: duplicateData, error: duplicateError } = await supabase.rpc(
+        'check_duplicate_software',
+        {
+          p_name: formData.name,
+          p_website: formData.website,
+        }
+      );
+
+      if (duplicateError) {
+        console.error('Error checking for duplicates:', duplicateError);
+        // Continue with normal submission if duplicate check fails
+      }
+
+      // If duplicate found, auto-approve and link to existing software
+      if (duplicateData && duplicateData.length > 0 && duplicateData[0].software_exists) {
+        const existingSoftware = duplicateData[0];
+
+        const { error } = await supabase.from('software_requests').insert([
+          {
+            name: formData.name,
+            website: formData.website,
+            version_url: formData.versionUrl,
+            description: formData.description || null,
+            user_id: user?.id,
+            status: 'approved',
+            software_id: existingSoftware.software_id,
+            approved_at: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+          },
+        ]);
+
+        if (error) throw error;
+
+        toast.success(
+          `This software is already being tracked! ${existingSoftware.software_name} is available in your dashboard.`,
+          {
+            duration: 5000,
+            action: {
+              label: 'View Software',
+              onClick: () => {
+                window.location.href = `/dashboard?software_id=${existingSoftware.software_id}`;
+              },
+            },
+          }
+        );
+      } else {
+        // No duplicate, submit as pending
+        const { error } = await supabase.from('software_requests').insert([
           {
             name: formData.name,
             website: formData.website,
@@ -74,9 +120,11 @@ export function RequestSoftwareModal({ onSuccess, open, onOpenChange, trigger }:
           },
         ]);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast.success('Software request submitted successfully');
+        toast.success('Software request submitted successfully');
+      }
+
       setFormData(initialFormData); // Clear form only on success
       setIsOpen(false);
 

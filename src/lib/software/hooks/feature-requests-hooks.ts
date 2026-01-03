@@ -12,6 +12,16 @@ export interface FeatureRequest {
   status: 'pending' | 'approved' | 'rejected' | 'completed';
   created_at: string;
   updated_at: string;
+  rejection_reason?: string;
+  approved_at?: string;
+  rejected_at?: string;
+  completed_at?: string;
+  approved_by?: string;
+  rejected_by?: string;
+  completed_by?: string;
+  // User info from join (for admin view)
+  user_email?: string;
+  user_name?: string;
 }
 
 export function useFeatureRequests() {
@@ -27,17 +37,8 @@ export function useFeatureRequests() {
         setLoading(true);
       }
 
-      let query = supabase
-        .from('feature_requests')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      // Non-admins only see their own requests
-      if (!isAdmin && user) {
-        query = query.eq('user_id', user.id);
-      }
-
-      const { data, error } = await query;
+      // Use RPC function to get requests with user info
+      const { data, error } = await supabase.rpc('get_feature_requests_with_user');
 
       if (error) throw error;
 
@@ -61,12 +62,33 @@ export function useFeatureRequests() {
 
   const updateRequestStatus = async (
     id: string,
-    status: 'approved' | 'rejected' | 'completed'
+    status: 'approved' | 'rejected' | 'completed',
+    rejectionReason?: string
   ): Promise<boolean> => {
     try {
+      const updateData: any = {
+        status,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Add metadata based on status
+      if (status === 'approved') {
+        updateData.approved_at = new Date().toISOString();
+        updateData.approved_by = user?.id;
+      } else if (status === 'rejected') {
+        updateData.rejected_at = new Date().toISOString();
+        updateData.rejected_by = user?.id;
+        if (rejectionReason) {
+          updateData.rejection_reason = rejectionReason;
+        }
+      } else if (status === 'completed') {
+        updateData.completed_at = new Date().toISOString();
+        updateData.completed_by = user?.id;
+      }
+
       const { error } = await supabase
         .from('feature_requests')
-        .update({ status, updated_at: new Date().toISOString() })
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;

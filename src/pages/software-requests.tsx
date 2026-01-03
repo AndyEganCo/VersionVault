@@ -15,12 +15,14 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, X, Trash2, ExternalLink, Loader2, CheckCircle } from 'lucide-react';
+import { Check, X, Trash2, ExternalLink, Loader2, CheckCircle, User, Mail, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
 import { RequestSoftwareModal } from '@/components/software/request-software-modal';
 import { RequestFeatureModal } from '@/components/software/request-feature-modal';
+import { RejectRequestDialog } from '@/components/software/reject-request-dialog';
+import { Link } from 'react-router-dom';
 
 export function SoftwareRequests() {
   const { isAdmin } = useAuth();
@@ -33,6 +35,8 @@ export function SoftwareRequests() {
     refetch: refetchFeatures
   } = useFeatureRequests();
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectingRequest, setRejectingRequest] = useState<{ id: string; name: string; type: 'software' | 'feature' } | null>(null);
 
   const handleApprove = async (id: string) => {
     // Find the request to get its details
@@ -62,10 +66,11 @@ export function SoftwareRequests() {
 
       // Step 2: Add software to tracking list
       toast.loading('Adding to software tracking list...', { id: loadingToast });
+      const softwareId = crypto.randomUUID();
       const { error: insertError } = await supabase
         .from('software')
         .insert([{
-          id: crypto.randomUUID(),
+          id: softwareId,
           name: request.name,
           manufacturer: extracted.manufacturer,
           website: request.website,
@@ -86,14 +91,25 @@ export function SoftwareRequests() {
         throw insertError;
       }
 
-      // Step 3: Update request status to approved
+      // Step 3: Update request status to approved and link to software
       toast.loading('Updating request status...', { id: loadingToast });
-      const success = await updateRequestStatus(id, 'approved');
+      const { error: updateError } = await supabase
+        .from('software_requests')
+        .update({
+          status: 'approved',
+          software_id: softwareId,
+          approved_at: new Date().toISOString(),
+          approved_by: (await supabase.auth.getUser()).data.user?.id,
+        })
+        .eq('id', id);
 
-      if (!success) {
+      if (updateError) {
         toast.error('Software added but failed to update request status', { id: loadingToast });
         return;
       }
+
+      // Refresh the list
+      await refreshRequests();
 
       // Success!
       const successDetails = [
@@ -115,13 +131,32 @@ export function SoftwareRequests() {
     }
   };
 
-  const handleReject = async (id: string) => {
-    const success = await updateRequestStatus(id, 'rejected');
-    if (success) {
-      toast.success('Request rejected');
+  const handleReject = async (id: string, name: string) => {
+    setRejectingRequest({ id, name, type: 'software' });
+    setRejectDialogOpen(true);
+  };
+
+  const handleRejectConfirm = async (reason: string) => {
+    if (!rejectingRequest) return;
+
+    if (rejectingRequest.type === 'software') {
+      const success = await updateRequestStatus(rejectingRequest.id, 'rejected', reason);
+      if (success) {
+        toast.success('Request rejected');
+      } else {
+        toast.error('Failed to reject request');
+      }
     } else {
-      toast.error('Failed to reject request');
+      const success = await updateFeatureStatus(rejectingRequest.id, 'rejected', reason);
+      if (success) {
+        toast.success('Feature request rejected');
+      } else {
+        toast.error('Failed to reject feature request');
+      }
     }
+
+    setRejectDialogOpen(false);
+    setRejectingRequest(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -145,13 +180,9 @@ export function SoftwareRequests() {
     }
   };
 
-  const handleFeatureReject = async (id: string) => {
-    const success = await updateFeatureStatus(id, 'rejected');
-    if (success) {
-      toast.success('Feature request rejected');
-    } else {
-      toast.error('Failed to reject feature request');
-    }
+  const handleFeatureReject = async (id: string, title: string) => {
+    setRejectingRequest({ id, name: title, type: 'feature' });
+    setRejectDialogOpen(true);
   };
 
   const handleFeatureComplete = async (id: string) => {
@@ -226,10 +257,33 @@ export function SoftwareRequests() {
             <Card key={request.id}>
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <CardTitle>{request.name}</CardTitle>
-                    <CardDescription>
-                      Submitted {new Date(request.created_at).toLocaleDateString()}
+                  <div className="space-y-1 flex-1">
+                    <CardTitle>
+                      {request.status === 'approved' && request.software_id ? (
+                        <Link
+                          to={`/software?software_id=${request.software_id}`}
+                          className="hover:underline hover:text-primary transition-colors"
+                        >
+                          {request.name}
+                        </Link>
+                      ) : (
+                        request.name
+                      )}
+                    </CardTitle>
+                    <CardDescription className="space-y-1">
+                      <div>Submitted {new Date(request.created_at).toLocaleDateString()}</div>
+                      {isAdmin && request.user_email && (
+                        <div className="flex items-center gap-3 text-xs">
+                          <span className="flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            {request.user_name || 'Unknown'}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Mail className="h-3 w-3" />
+                            {request.user_email}
+                          </span>
+                        </div>
+                      )}
                     </CardDescription>
                   </div>
                   {getStatusBadge(request.status)}
@@ -237,28 +291,28 @@ export function SoftwareRequests() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
+                  <div className="space-y-1">
                     <span className="text-sm font-medium">Website:</span>
                     <a
                       href={request.website}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                      className="text-sm text-primary hover:underline flex items-center gap-1 break-all"
                     >
                       {request.website}
-                      <ExternalLink className="h-3 w-3" />
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
                     </a>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="space-y-1">
                     <span className="text-sm font-medium">Version URL:</span>
                     <a
                       href={request.version_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                      className="text-sm text-primary hover:underline flex items-center gap-1 break-all"
                     >
                       {request.version_url}
-                      <ExternalLink className="h-3 w-3" />
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
                     </a>
                   </div>
                   {request.description && (
@@ -270,6 +324,18 @@ export function SoftwareRequests() {
                     </div>
                   )}
                 </div>
+
+                {request.rejection_reason && request.status === 'rejected' && (
+                  <div className="border-l-4 border-destructive bg-destructive/10 p-3 rounded">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-destructive">Rejection Reason:</p>
+                        <p className="text-sm text-muted-foreground">{request.rejection_reason}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {isAdmin && request.status === 'pending' && (
                   <div className="flex gap-2 pt-2">
@@ -294,7 +360,7 @@ export function SoftwareRequests() {
                     <Button
                       size="sm"
                       variant="destructive"
-                      onClick={() => handleReject(request.id)}
+                      onClick={() => handleReject(request.id, request.name)}
                       className="flex items-center gap-1"
                       disabled={processingId === request.id}
                     >
@@ -304,14 +370,23 @@ export function SoftwareRequests() {
                   </div>
                 )}
 
-                {isAdmin && request.status === 'approved' && (
+                {request.status === 'approved' && (
                   <div className="border-t pt-4 mt-4 bg-green-50 dark:bg-green-950 p-3 rounded">
                     <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">
                       ✅ Approved and added to software tracking
                     </p>
-                    <p className="text-xs text-green-700 dark:text-green-300">
-                      This software is now being tracked. You can view it in the Software page.
-                    </p>
+                    {request.software_id ? (
+                      <Link
+                        to={`/software?software_id=${request.software_id}`}
+                        className="text-sm text-green-700 dark:text-green-300 hover:underline inline-flex items-center gap-1"
+                      >
+                        View software in library →
+                      </Link>
+                    ) : (
+                      <p className="text-xs text-green-700 dark:text-green-300">
+                        This software is now being tracked. You can view it in the Software page.
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -359,9 +434,23 @@ export function SoftwareRequests() {
                     <div className="flex items-start justify-between">
                       <div className="space-y-1 flex-1">
                         <CardTitle>{request.title}</CardTitle>
-                        <CardDescription>
-                          Submitted {new Date(request.created_at).toLocaleDateString()}
-                          {request.category && ` • ${request.category}`}
+                        <CardDescription className="space-y-1">
+                          <div>
+                            Submitted {new Date(request.created_at).toLocaleDateString()}
+                            {request.category && ` • ${request.category}`}
+                          </div>
+                          {isAdmin && request.user_email && (
+                            <div className="flex items-center gap-3 text-xs">
+                              <span className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                {request.user_name || 'Unknown'}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Mail className="h-3 w-3" />
+                                {request.user_email}
+                              </span>
+                            </div>
+                          )}
                         </CardDescription>
                       </div>
                       {getStatusBadge(request.status)}
@@ -377,6 +466,18 @@ export function SoftwareRequests() {
                       </div>
                     </div>
 
+                    {request.rejection_reason && request.status === 'rejected' && (
+                      <div className="border-l-4 border-destructive bg-destructive/10 p-3 rounded">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle className="h-4 w-4 text-destructive mt-0.5 flex-shrink-0" />
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-destructive">Rejection Reason:</p>
+                            <p className="text-sm text-muted-foreground">{request.rejection_reason}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {isAdmin && request.status === 'pending' && (
                       <div className="flex gap-2 pt-2">
                         <Button
@@ -390,7 +491,7 @@ export function SoftwareRequests() {
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => handleFeatureReject(request.id)}
+                          onClick={() => handleFeatureReject(request.id, request.title)}
                           className="flex items-center gap-1"
                         >
                           <X className="h-4 w-4" />
@@ -448,6 +549,13 @@ export function SoftwareRequests() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <RejectRequestDialog
+        open={rejectDialogOpen}
+        onOpenChange={setRejectDialogOpen}
+        onConfirm={handleRejectConfirm}
+        requestName={rejectingRequest?.name || ''}
+      />
     </PageLayout>
   );
 }
