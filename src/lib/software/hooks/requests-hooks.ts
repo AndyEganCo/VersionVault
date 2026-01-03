@@ -11,6 +11,15 @@ export interface SoftwareRequestWithId {
   readonly user_id: string;
   readonly status: 'pending' | 'approved' | 'rejected';
   readonly created_at: string;
+  readonly rejection_reason?: string;
+  readonly approved_at?: string;
+  readonly rejected_at?: string;
+  readonly approved_by?: string;
+  readonly rejected_by?: string;
+  readonly software_id?: string;
+  // User info from join (for admin view)
+  readonly user_email?: string;
+  readonly user_name?: string;
 }
 
 export function useSoftwareRequests() {
@@ -31,8 +40,12 @@ export function useSoftwareRequests() {
       if (isInitialLoad) {
         setLoading(true);
       }
+
+      // Use view with user info if admin, otherwise use regular table
+      const tableName = isAdmin ? 'software_requests_with_user' : 'software_requests';
+
       let query = supabase
-        .from('software_requests')
+        .from(tableName)
         .select('*');
 
       // If not admin, only show user's own requests
@@ -60,11 +73,31 @@ export function useSoftwareRequests() {
     fetchRequests();
   }, [fetchRequests]);
 
-  const updateRequestStatus = async (id: string, status: 'approved' | 'rejected') => {
+  const updateRequestStatus = async (
+    id: string,
+    status: 'approved' | 'rejected',
+    rejectionReason?: string
+  ) => {
     try {
+      const updateData: any = {
+        status,
+      };
+
+      // Add metadata based on status
+      if (status === 'approved') {
+        updateData.approved_at = new Date().toISOString();
+        updateData.approved_by = user?.id;
+      } else if (status === 'rejected') {
+        updateData.rejected_at = new Date().toISOString();
+        updateData.rejected_by = user?.id;
+        if (rejectionReason) {
+          updateData.rejection_reason = rejectionReason;
+        }
+      }
+
       const { error } = await supabase
         .from('software_requests')
-        .update({ status })
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;
