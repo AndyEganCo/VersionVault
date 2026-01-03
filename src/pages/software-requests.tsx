@@ -366,7 +366,7 @@ export function SoftwareRequests() {
                     </p>
                     {request.software_id ? (
                       <Link
-                        to={`/software?highlight=${request.software_id}`}
+                        to={`/software?software_id=${request.software_id}`}
                         className="text-sm text-green-700 dark:text-green-300 hover:underline inline-flex items-center gap-1"
                       >
                         View software in library →
