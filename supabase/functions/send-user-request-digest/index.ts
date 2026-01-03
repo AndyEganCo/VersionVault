@@ -165,8 +165,10 @@ serve(async (req) => {
     const batchId = crypto.randomUUID()
     const notificationLogs: any[] = []
 
-    // Send digest to each user
-    for (const [userId, requests] of requestsByUser) {
+    // Send digest to each user with rate limiting (2 emails per second)
+    const userEntries = Array.from(requestsByUser.entries())
+    for (let i = 0; i < userEntries.length; i++) {
+      const [userId, requests] = userEntries[i]
       const userEmail = userEmailMap.get(userId)
       if (!userEmail) {
         console.log(`⚠️  No email found for user ${userId}`)
@@ -234,6 +236,11 @@ serve(async (req) => {
         }
       } catch (error) {
         console.error(`❌ Error sending to ${userEmail}:`, error)
+      }
+
+      // Rate limit: wait 500ms between emails (2 per second)
+      if (i < userEntries.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500))
       }
     }
 

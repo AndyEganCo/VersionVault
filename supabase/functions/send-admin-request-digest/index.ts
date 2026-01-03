@@ -152,8 +152,9 @@ serve(async (req) => {
       ...(featureRequests || []).map(r => r.id),
     ]
 
-    // Send to each admin
-    for (const admin of admins) {
+    // Send to each admin with rate limiting (2 emails per second)
+    for (let i = 0; i < admins.length; i++) {
+      const admin = admins[i]
       const userEmail = (admin.users as any)?.email
       if (!userEmail) continue
 
@@ -175,6 +176,11 @@ serve(async (req) => {
         }
       } catch (error) {
         console.error(`❌ Error sending to ${userEmail}:`, error)
+      }
+
+      // Rate limit: wait 500ms between emails (2 per second)
+      if (i < admins.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500))
       }
     }
 
