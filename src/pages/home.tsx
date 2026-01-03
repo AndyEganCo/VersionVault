@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { BetaBanner } from '@/components/beta-banner';
 import { ExternalLink, Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
 import type { Software } from '@/lib/software/types';
+import { formatDate } from '@/lib/date';
 
 export function Home() {
   const { user, loading } = useAuth();
@@ -281,7 +282,7 @@ export function Home() {
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-muted-foreground">{item.release_date ? 'Released:' : 'Added:'}</span>
                           <span className="text-sm font-medium">
-                            {new Date(item.release_date || item.last_checked).toLocaleDateString()}
+                            {formatDate(item.release_date || item.last_checked)}
                           </span>
                         </div>
                       )}
