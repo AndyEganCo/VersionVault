@@ -258,7 +258,18 @@ export function SoftwareRequests() {
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="space-y-1 flex-1">
-                    <CardTitle>{request.name}</CardTitle>
+                    <CardTitle>
+                      {request.status === 'approved' && request.software_id ? (
+                        <Link
+                          to={`/software?software_id=${request.software_id}`}
+                          className="hover:underline hover:text-primary transition-colors"
+                        >
+                          {request.name}
+                        </Link>
+                      ) : (
+                        request.name
+                      )}
+                    </CardTitle>
                     <CardDescription className="space-y-1">
                       <div>Submitted {new Date(request.created_at).toLocaleDateString()}</div>
                       {isAdmin && request.user_email && (
