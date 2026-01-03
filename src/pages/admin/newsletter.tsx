@@ -574,24 +574,31 @@ export function AdminNewsletter() {
 
           // Handle the array response (first item or undefined)
           const historyEntry = versionHistory?.[0];
+          if (!historyEntry) continue;
 
           // Match production logic: use release_date || detected_at
-          const releaseDate = historyEntry?.release_date || historyEntry?.detected_at || software.updated_at;
+          const releaseDate = historyEntry.release_date || historyEntry.detected_at || software.updated_at;
+          const releaseDateObj = new Date(releaseDate);
+
+          // Only include versions released in the last 30 days (matching production logic)
+          if (releaseDateObj < thirtyDaysAgo) {
+            continue;
+          }
 
           sampleUpdates.push({
             software_id: software.id,
             name: software.name,
             manufacturer: software.manufacturer,
             category: software.category,
-            old_version: historyEntry?.previous_version || 'N/A',
+            old_version: historyEntry.previous_version || 'N/A',
             new_version: software.current_version,
             release_date: releaseDate,
-            release_notes: historyEntry?.notes || [],
-            update_type: historyEntry?.type || 'minor',
+            release_notes: historyEntry.notes || [],
+            update_type: historyEntry.type || 'minor',
           });
         }
 
-        console.log(`📧 Updates: ${recentSoftware.length} software -> ${sampleUpdates.length} in email`);
+        console.log(`📧 Updates: ${recentSoftware.length} software checked -> ${sampleUpdates.length} recent updates found`);
       }
 
       // Only use fallback if truly no data in database
