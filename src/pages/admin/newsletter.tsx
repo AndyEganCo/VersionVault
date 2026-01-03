@@ -566,7 +566,7 @@ export function AdminNewsletter() {
         for (const software of recentSoftware) {
           const { data: versionHistory } = await supabase
             .from('software_version_history')
-            .select('previous_version, type, notes')
+            .select('previous_version, type, notes, release_date')
             .eq('software_id', software.id)
             .eq('version', software.current_version)
             .order('detected_at', { ascending: false })
@@ -582,7 +582,7 @@ export function AdminNewsletter() {
             category: software.category,
             old_version: historyEntry?.previous_version || 'N/A',
             new_version: software.current_version,
-            release_date: software.release_date || software.last_checked || software.updated_at,
+            release_date: historyEntry?.release_date || software.release_date || software.updated_at,
             release_notes: historyEntry?.notes || [],
             update_type: historyEntry?.type || 'minor',
           });
