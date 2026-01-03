@@ -165,8 +165,10 @@ serve(async (req) => {
     const batchId = crypto.randomUUID()
     const notificationLogs: any[] = []
 
-    // Send digest to each user
-    for (const [userId, requests] of requestsByUser) {
+    // Send digest to each user with rate limiting (2 emails per second)
+    const userEntries = Array.from(requestsByUser.entries())
+    for (let i = 0; i < userEntries.length; i++) {
+      const [userId, requests] = userEntries[i]
       const userEmail = userEmailMap.get(userId)
       if (!userEmail) {
         console.log(`⚠️  No email found for user ${userId}`)
@@ -234,6 +236,11 @@ serve(async (req) => {
         }
       } catch (error) {
         console.error(`❌ Error sending to ${userEmail}:`, error)
+      }
+
+      // Rate limit: wait 500ms between emails (2 per second)
+      if (i < userEntries.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 500))
       }
     }
 
@@ -304,7 +311,7 @@ function generateEmailContent(data: any): { subject: string; html: string; text:
         ` : ''}
         ${isApproved && type === 'software' && req.software_id ? `
           <div style="margin-top: 12px; text-align: center;">
-            <a href="${VERSIONVAULT_URL}/software?highlight=${req.software_id}" style="display: inline-block; font-size: 13px; font-weight: 600; color: #ffffff; background-color: ${color}; padding: 8px 16px; border-radius: 6px; text-decoration: none;">
+            <a href="${VERSIONVAULT_URL}/software?software_id=${req.software_id}" style="display: inline-block; font-size: 13px; font-weight: 600; color: #ffffff; background-color: ${color}; padding: 8px 16px; border-radius: 6px; text-decoration: none;">
               View in Library →
             </a>
           </div>
@@ -390,7 +397,7 @@ function generateEmailContent(data: any): { subject: string; html: string; text:
     for (const req of [...approvedSoftware, ...approvedFeatures]) {
       text += `${req.name || req.title}\n`
       if (req.software_id) {
-        text += `View in library: ${VERSIONVAULT_URL}/software?highlight=${req.software_id}\n`
+        text += `View in library: ${VERSIONVAULT_URL}/software?software_id=${req.software_id}\n`
       }
       text += `\n`
     }
