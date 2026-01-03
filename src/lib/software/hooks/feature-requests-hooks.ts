@@ -37,20 +37,8 @@ export function useFeatureRequests() {
         setLoading(true);
       }
 
-      // Use view with user info if admin, otherwise use regular table
-      const tableName = isAdmin ? 'feature_requests_with_user' : 'feature_requests';
-
-      let query = supabase
-        .from(tableName)
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      // Non-admins only see their own requests
-      if (!isAdmin && user) {
-        query = query.eq('user_id', user.id);
-      }
-
-      const { data, error } = await query;
+      // Use RPC function to get requests with user info
+      const { data, error } = await supabase.rpc('get_feature_requests_with_user');
 
       if (error) throw error;
 

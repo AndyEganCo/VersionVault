@@ -41,19 +41,8 @@ export function useSoftwareRequests() {
         setLoading(true);
       }
 
-      // Use view with user info if admin, otherwise use regular table
-      const tableName = isAdmin ? 'software_requests_with_user' : 'software_requests';
-
-      let query = supabase
-        .from(tableName)
-        .select('*');
-
-      // If not admin, only show user's own requests
-      if (!isAdmin) {
-        query = query.eq('user_id', user.id);
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: false });
+      // Use RPC function to get requests with user info
+      const { data, error } = await supabase.rpc('get_software_requests_with_user');
 
       if (error) throw error;
 
@@ -67,7 +56,7 @@ export function useSoftwareRequests() {
         setIsInitialLoad(false);
       }
     }
-  }, [user, isAdmin, isInitialLoad]);
+  }, [user, isInitialLoad]);
 
   useEffect(() => {
     fetchRequests();
