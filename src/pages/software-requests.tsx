@@ -291,28 +291,28 @@ export function SoftwareRequests() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2">
+                  <div className="space-y-1">
                     <span className="text-sm font-medium">Website:</span>
                     <a
                       href={request.website}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                      className="text-sm text-primary hover:underline flex items-center gap-1 break-all"
                     >
                       {request.website}
-                      <ExternalLink className="h-3 w-3" />
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
                     </a>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="space-y-1">
                     <span className="text-sm font-medium">Version URL:</span>
                     <a
                       href={request.version_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                      className="text-sm text-primary hover:underline flex items-center gap-1 break-all"
                     >
                       {request.version_url}
-                      <ExternalLink className="h-3 w-3" />
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
                     </a>
                   </div>
                   {request.description && (
