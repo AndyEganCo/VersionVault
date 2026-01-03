@@ -158,8 +158,33 @@ export async function extractWithWebSearch(
   }
 
   // Build allowed domains list
+  const baseDomain = websiteUrl.replace(/^https?:\/\//, '').split('/')[0]
+
+  // Extract the root domain (remove www or other subdomains if present)
+  const domainParts = baseDomain.split('.')
+  const rootDomain = domainParts.length > 2 && domainParts[0] === 'www'
+    ? domainParts.slice(1).join('.')
+    : baseDomain
+
+  // Include common documentation/support subdomains
+  const commonSubdomains = [
+    rootDomain,
+    `www.${rootDomain}`,
+    `docs.${rootDomain}`,
+    `documentation.${rootDomain}`,
+    `support.${rootDomain}`,
+    `help.${rootDomain}`,
+    `guide.${rootDomain}`,
+    `downloads.${rootDomain}`,
+    `download.${rootDomain}`,
+    `update.${rootDomain}`,
+    `updates.${rootDomain}`,
+    `kb.${rootDomain}`,
+    `knowledgebase.${rootDomain}`
+  ]
+
   const allowedDomains = [
-    websiteUrl.replace(/^https?:\/\//, '').split('/')[0],
+    ...commonSubdomains,
     'github.com',
     ...additionalDomains,
     ...config.web_search_domains
