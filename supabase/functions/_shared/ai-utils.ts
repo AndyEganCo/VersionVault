@@ -158,8 +158,34 @@ export async function extractWithWebSearch(
   }
 
   // Build allowed domains list
+  const baseDomain = websiteUrl.replace(/^https?:\/\//, '').split('/')[0]
+
+  // Extract the root domain (e.g., "teradek.com" from "www.teradek.com" or "support.teradek.com")
+  // This handles: domain.com, www.domain.com, subdomain.domain.com, etc.
+  const domainParts = baseDomain.split('.')
+  const rootDomain = domainParts.length >= 2
+    ? domainParts.slice(-2).join('.') // Take last 2 parts (domain.tld)
+    : baseDomain
+
+  // Include common documentation/support subdomains
+  const commonSubdomains = [
+    rootDomain,
+    `www.${rootDomain}`,
+    `docs.${rootDomain}`,
+    `documentation.${rootDomain}`,
+    `support.${rootDomain}`,
+    `help.${rootDomain}`,
+    `guide.${rootDomain}`,
+    `downloads.${rootDomain}`,
+    `download.${rootDomain}`,
+    `update.${rootDomain}`,
+    `updates.${rootDomain}`,
+    `kb.${rootDomain}`,
+    `knowledgebase.${rootDomain}`
+  ]
+
   const allowedDomains = [
-    websiteUrl.replace(/^https?:\/\//, '').split('/')[0],
+    ...commonSubdomains,
     'github.com',
     ...additionalDomains,
     ...config.web_search_domains
@@ -190,19 +216,26 @@ export async function extractWithWebSearch(
         }],
         tool_choice: 'auto',
         include: ['web_search_call.action.sources'],
-        input: `Find the official release notes for ${softwareName} version ${detectedVersion} by ${manufacturer}.
+        input: `Find the official release notes for ${softwareName} version ${detectedVersion}.
 
-CRITICAL: First find the release date for this specific version.
+PRIMARY SOURCE: Check ${websiteUrl} first - this is the official release notes page.
 
-Extract:
-- Release date (exact date this version was released, format: YYYY-MM-DD)
-- New features and changes
-- Bug fixes
-- Known issues and notices
-- Compatibility and upgrade info
+All domains including subdomains (update.*, docs.*, support.*, guide.*, downloads.*) are official sources - use them freely.
 
-Start your response with "Released: YYYY-MM-DD" if found.
-Return a concise, structured summary with specific details.`
+RESPONSE FORMAT:
+- If you find release notes, extract them in a clear, structured format
+- If no release notes are found, respond with exactly: "No release notes found for version ${detectedVersion}"
+- Do NOT include explanations about domain restrictions or what you can/cannot access
+- Do NOT mention third-party sites or sources you cannot use
+
+EXTRACT:
+1. Release date (YYYY-MM-DD format) - check the specific version ${detectedVersion}
+2. New features and changes
+3. Bug fixes
+4. Known issues and notices
+5. Compatibility and upgrade information
+
+Start with "Released: YYYY-MM-DD" if found, then list the details.`
       })
     })
 

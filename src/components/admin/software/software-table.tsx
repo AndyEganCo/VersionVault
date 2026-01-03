@@ -190,7 +190,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                   softwareName: software.name,
                   manufacturer: software.manufacturer || 'Unknown',
                   version: version.version,
-                  websiteUrl: software.website,
+                  websiteUrl: software.version_website || software.website,
                   additionalDomains: []
                 }),
                 signal: controller.signal
