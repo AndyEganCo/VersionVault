@@ -131,28 +131,64 @@ serve(async (req) => {
       const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
       const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+      // Get IDs of software flagged by ChatGPT audit (unresolved flags from last 7 days)
+      const { data: flaggedIds, error: flagError } = await supabase.rpc('get_audit_flagged_software_ids')
+
+      if (flagError) {
+        console.warn('⚠️ Failed to fetch audit flags, continuing without prioritization:', flagError)
+      }
+
+      const auditFlaggedIds = (flaggedIds as unknown as string[]) || []
+      console.log(`🚩 Found ${auditFlaggedIds.length} audit-flagged software to prioritize`)
+
       // Fetch software that has a version_website configured
-      // Prioritize: never checked (NULLS FIRST) then oldest checked
-      let query = supabase
+      // Prioritize:
+      // 1. Audit-flagged items (from ChatGPT version audit)
+      // 2. Never checked items (last_checked IS NULL)
+      // 3. Oldest checked items
+      const { data: allSoftware, error: fetchError } = await supabase
         .from('software')
         .select('id, name, website, version_website, current_version, source_type, forum_config, last_checked')
         .not('version_website', 'is', null)
         .neq('version_website', '')
-        .order('last_checked', { ascending: true, nullsFirst: true })
-
-      // Apply limit if specified (null means check all)
-      if (checkLimit !== null) {
-        query = query.limit(checkLimit)
-      }
-
-      const { data: softwareList, error: fetchError } = await query
 
       if (fetchError) {
         throw new Error(`Failed to fetch software: ${fetchError.message}`)
       }
 
+      // Sort with custom priority logic
+      const sortedSoftware = allSoftware.sort((a, b) => {
+        const aIsFlagged = auditFlaggedIds.includes(a.id)
+        const bIsFlagged = auditFlaggedIds.includes(b.id)
+
+        // Flagged items always come first
+        if (aIsFlagged && !bIsFlagged) return -1
+        if (!aIsFlagged && bIsFlagged) return 1
+
+        // Among flagged items, prioritize never-checked, then oldest
+        if (aIsFlagged && bIsFlagged) {
+          if (!a.last_checked && b.last_checked) return -1
+          if (a.last_checked && !b.last_checked) return 1
+          if (!a.last_checked && !b.last_checked) return 0
+          return new Date(a.last_checked).getTime() - new Date(b.last_checked).getTime()
+        }
+
+        // Among non-flagged items, prioritize never-checked, then oldest
+        if (!a.last_checked && b.last_checked) return -1
+        if (a.last_checked && !b.last_checked) return 1
+        if (!a.last_checked && !b.last_checked) return 0
+        return new Date(a.last_checked).getTime() - new Date(b.last_checked).getTime()
+      })
+
+      // Apply limit if specified
+      const softwareList = checkLimit !== null ? sortedSoftware.slice(0, checkLimit) : sortedSoftware
+
       const checkMode = checkLimit === null ? 'full check' : `incremental (${checkLimit} oldest)`
+      const flaggedInBatch = softwareList.filter(s => auditFlaggedIds.includes(s.id)).length
       console.log(`📋 Found ${softwareList.length} software to check (${checkMode})`)
+      if (flaggedInBatch > 0) {
+        console.log(`   🚩 Including ${flaggedInBatch} audit-flagged items (prioritized)`)
+      }
 
       const results: VersionCheckResult[] = []
       let totalVersionsAdded = 0
@@ -514,6 +550,32 @@ serve(async (req) => {
 
         const batchSuccessful = batchResults.filter(r => r.success).length
         console.log(`✅ Batch ${batchNumber} complete: ${batchSuccessful} successful, ${batchResults.length - batchSuccessful} failed`)
+
+        // Resolve audit flags for successful checks
+        const successfulAndFlagged = batchResults.filter(r =>
+          r.success && auditFlaggedIds.includes(r.softwareId)
+        )
+
+        if (successfulAndFlagged.length > 0) {
+          console.log(`  🔓 Resolving ${successfulAndFlagged.length} audit flags...`)
+
+          for (const result of successfulAndFlagged) {
+            const { error: resolveError } = await supabase
+              .from('version_audit_flags')
+              .update({
+                resolved_at: new Date().toISOString(),
+                verification_result: 'confirmed'
+              })
+              .eq('software_id', result.softwareId)
+              .is('resolved_at', null) // Only update unresolved flags
+
+            if (resolveError) {
+              console.warn(`  ⚠️ Failed to resolve flag for ${result.name}:`, resolveError)
+            } else {
+              console.log(`  ✅ Resolved audit flag for ${result.name}`)
+            }
+          }
+        }
 
         // Add delay between batches (except after the last batch)
         if (i + BATCH_SIZE < softwareList.length) {
