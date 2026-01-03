@@ -311,7 +311,7 @@ function generateEmailContent(data: any): { subject: string; html: string; text:
         ` : ''}
         ${isApproved && type === 'software' && req.software_id ? `
           <div style="margin-top: 12px; text-align: center;">
-            <a href="${VERSIONVAULT_URL}/software?highlight=${req.software_id}" style="display: inline-block; font-size: 13px; font-weight: 600; color: #ffffff; background-color: ${color}; padding: 8px 16px; border-radius: 6px; text-decoration: none;">
+            <a href="${VERSIONVAULT_URL}/software?software_id=${req.software_id}" style="display: inline-block; font-size: 13px; font-weight: 600; color: #ffffff; background-color: ${color}; padding: 8px 16px; border-radius: 6px; text-decoration: none;">
               View in Library →
             </a>
           </div>
@@ -397,7 +397,7 @@ function generateEmailContent(data: any): { subject: string; html: string; text:
     for (const req of [...approvedSoftware, ...approvedFeatures]) {
       text += `${req.name || req.title}\n`
       if (req.software_id) {
-        text += `View in library: ${VERSIONVAULT_URL}/software?highlight=${req.software_id}\n`
+        text += `View in library: ${VERSIONVAULT_URL}/software?software_id=${req.software_id}\n`
       }
       text += `\n`
     }
