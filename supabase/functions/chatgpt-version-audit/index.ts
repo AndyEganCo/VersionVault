@@ -138,10 +138,8 @@ serve(async (req) => {
       .join('\n')
 
     // Call ChatGPT API with latest model
-    // Try latest models in order of preference
-    // Note: Change this to whatever model has the latest knowledge cutoff
-    // Options: 'gpt-5', 'gpt-4.5-turbo', 'o1', 'gpt-4o'
-    const chatGPTModel = 'gpt-4o'  // Change to newer model if available
+    // Using GPT-5 for most up-to-date knowledge (2025+ cutoff)
+    const chatGPTModel = 'gpt-5'
     console.log(`🤖 Calling ChatGPT (${chatGPTModel})...`)
 
     // Build API request based on model type
