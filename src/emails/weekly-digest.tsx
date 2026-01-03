@@ -24,6 +24,7 @@ export default function WeeklyDigest({
   unsubscribeUrl,
   preferencesUrl,
   dashboardUrl,
+  softwarePageUrl,
 }: WeeklyDigestProps) {
   const updateCount = updates.length;
   const newSoftwareCount = newSoftware?.length || 0;
@@ -63,7 +64,7 @@ export default function WeeklyDigest({
           {updateCount > 0 && (
             <Section style={updatesSection}>
               {updates.map((update, index) => (
-                <UpdateCard key={index} update={update} />
+                <UpdateCard key={index} update={update} dashboardUrl={dashboardUrl} />
               ))}
 
               {/* View all link */}
@@ -86,7 +87,7 @@ export default function WeeklyDigest({
               </Text>
 
               {newSoftware!.map((software, index) => (
-                <NewSoftwareCard key={index} software={software} />
+                <NewSoftwareCard key={index} software={software} softwarePageUrl={softwarePageUrl} />
               ))}
             </Section>
           )}
@@ -186,6 +187,7 @@ WeeklyDigest.PreviewProps = {
   unsubscribeUrl: 'https://versionvault.dev/unsubscribe?token=abc123',
   preferencesUrl: 'https://versionvault.dev/user/notifications',
   dashboardUrl: 'https://versionvault.dev/dashboard',
+  softwarePageUrl: 'https://versionvault.dev/software',
 } satisfies WeeklyDigestProps;
 
 const body: React.CSSProperties = {

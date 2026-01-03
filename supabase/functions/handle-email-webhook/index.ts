@@ -104,9 +104,41 @@ serve(async (req) => {
           })
           .eq('resend_id', emailId)
 
-        // Track sponsor clicks if it's a sponsor link
+        // Track sponsor clicks and software-specific clicks
         const clickedLink = payload.data.click?.link
         if (clickedLink) {
+          // Get user ID and email type from newsletter log
+          const { data: logEntry } = await supabase
+            .from('newsletter_logs')
+            .select('user_id, email_type')
+            .eq('resend_id', emailId)
+            .single()
+
+          // Track software-specific clicks (dashboard or software page with software_id parameter)
+          const urlMatch = clickedLink.match(/[?&]software_id=([^&]+)/)
+          if (urlMatch && urlMatch[1] && logEntry) {
+            const softwareId = urlMatch[1]
+            const actionMatch = clickedLink.match(/[?&]action=([^&]+)/)
+            const actionType = actionMatch ? actionMatch[1] : (
+              clickedLink.includes('/dashboard') ? 'view_details' :
+              clickedLink.includes('/software') ? 'view_details' : null
+            )
+
+            // Log to email_software_clicks table
+            await supabase
+              .from('email_software_clicks')
+              .insert({
+                user_id: logEntry.user_id,
+                software_id: softwareId,
+                email_type: logEntry.email_type,
+                action_type: actionType,
+                resend_email_id: emailId,
+                clicked_at: new Date().toISOString(),
+              })
+
+            console.log(`📊 Software click tracked: ${softwareId} (${actionType})`)
+          }
+
           // Check if this is a sponsor link and increment click count
           const { data: sponsor } = await supabase
             .from('newsletter_sponsors')

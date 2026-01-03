@@ -524,18 +524,40 @@ export function AdminNewsletter() {
 
     setTestEmailLoading(true);
     try {
-      // Get software with release_date or updated_at in the last 7 days
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Query software table for recent releases (no limit - show all)
-      let { data: recentSoftware } = await supabase
-        .from('software')
-        .select('id, name, manufacturer, category, current_version, release_date, updated_at')
-        .or(`release_date.gte.${sevenDaysAgo.toISOString()},and(release_date.is.null,updated_at.gte.${sevenDaysAgo.toISOString()})`)
-        .order('release_date', { ascending: false, nullsFirst: false });
+      // For test emails, get user's tracked software OR most recent software
+      // This gives a realistic preview with actual database data
+      const { data: trackedData } = await supabase
+        .from('tracked_software')
+        .select('software_id')
+        .eq('user_id', user.id);
 
-      console.log('📊 Recent software releases found:', recentSoftware?.length || 0);
+      let recentSoftware;
+
+      if (trackedData && trackedData.length > 0) {
+        // Get user's tracked software for realistic preview
+        const { data: tracked } = await supabase
+          .from('software')
+          .select('id, name, manufacturer, category, current_version, release_date, updated_at')
+          .in('id', trackedData.map(t => t.software_id))
+          .order('updated_at', { ascending: false })
+          .limit(10);
+
+        recentSoftware = tracked;
+        console.log('📊 Using tracked software for test email:', tracked?.length || 0);
+      } else {
+        // Fallback: get most recently updated software from database
+        const { data: recent } = await supabase
+          .from('software')
+          .select('id, name, manufacturer, category, current_version, release_date, updated_at')
+          .order('updated_at', { ascending: false })
+          .limit(10);
+
+        recentSoftware = recent;
+        console.log('📊 Using recent software for test email:', recent?.length || 0);
+      }
 
       let sampleUpdates: any[] = [];
 
@@ -544,7 +566,7 @@ export function AdminNewsletter() {
         for (const software of recentSoftware) {
           const { data: versionHistory } = await supabase
             .from('software_version_history')
-            .select('previous_version, type, notes')
+            .select('previous_version, type, notes, release_date, detected_at')
             .eq('software_id', software.id)
             .eq('version', software.current_version)
             .order('detected_at', { ascending: false })
@@ -552,21 +574,31 @@ export function AdminNewsletter() {
 
           // Handle the array response (first item or undefined)
           const historyEntry = versionHistory?.[0];
+          if (!historyEntry) continue;
+
+          // Match production logic: use release_date || detected_at
+          const releaseDate = historyEntry.release_date || historyEntry.detected_at || software.updated_at;
+          const releaseDateObj = new Date(releaseDate);
+
+          // Only include versions released in the last 30 days (matching production logic)
+          if (releaseDateObj < thirtyDaysAgo) {
+            continue;
+          }
 
           sampleUpdates.push({
             software_id: software.id,
             name: software.name,
             manufacturer: software.manufacturer,
             category: software.category,
-            old_version: historyEntry?.previous_version || 'N/A',
+            old_version: historyEntry.previous_version || 'N/A',
             new_version: software.current_version,
-            release_date: software.release_date || software.last_checked || software.updated_at,
-            release_notes: historyEntry?.notes || [],
-            update_type: historyEntry?.type || 'minor',
+            release_date: releaseDate,
+            release_notes: historyEntry.notes || [],
+            update_type: historyEntry.type || 'minor',
           });
         }
 
-        console.log(`📧 Updates: ${recentSoftware.length} software -> ${sampleUpdates.length} in email`);
+        console.log(`📧 Updates: ${recentSoftware.length} software checked -> ${sampleUpdates.length} recent updates found`);
       }
 
       // Only use fallback if truly no data in database
@@ -589,11 +621,11 @@ export function AdminNewsletter() {
       // Get active sponsor
       const activeSponsor = sponsors.find(s => s.is_active);
 
-      // Get new software added in the last 7 days
+      // Get new software added in the last 30 days
       const { data: newSoftwareData } = await supabase
         .from('software')
         .select('id, name, manufacturer, category, current_version, created_at')
-        .gte('created_at', sevenDaysAgo.toISOString())
+        .gte('created_at', thirtyDaysAgo.toISOString())
         .order('created_at', { ascending: false });
 
       const newSoftware = (newSoftwareData || []).map(s => ({
@@ -695,8 +727,28 @@ export function AdminNewsletter() {
       const activeSponsor = sponsors.find(s => s.is_active);
       const userName = user?.email?.split('@')[0] || 'User';
 
+      // Get new software added in the last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { data: newSoftwareData } = await supabase
+        .from('software')
+        .select('id, name, manufacturer, category, current_version, created_at')
+        .gte('created_at', thirtyDaysAgo.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      const newSoftware = (newSoftwareData || []).map(s => ({
+        software_id: s.id,
+        name: s.name,
+        manufacturer: s.manufacturer,
+        category: s.category,
+        initial_version: s.current_version || 'N/A',
+        added_date: s.created_at,
+      }));
+
       // Generate preview HTML (simplified version of the actual template)
-      const html = generatePreviewHtml(userName, sampleUpdates, activeSponsor);
+      const html = generatePreviewHtml(userName, sampleUpdates, newSoftware, activeSponsor);
       setPreviewHtml(html);
     } catch (error) {
       console.error('Error generating preview:', error);
@@ -1206,6 +1258,7 @@ export function AdminNewsletter() {
 function generatePreviewHtml(
   userName: string,
   updates: any[],
+  newSoftware: any[],
   sponsor: Sponsor | null | undefined
 ): string {
   const updateCards = updates.map((u) => `
@@ -1279,6 +1332,31 @@ function generatePreviewHtml(
         <a href="https://versionvault.dev/dashboard" style="font-size: 13px; color: #3b82f6; text-decoration: none;">View all in dashboard →</a>
       </div>
     </div>
+
+    ${newSoftware.length > 0 ? `
+    <!-- New Software Section -->
+    <div style="padding: 24px 24px 0 24px;">
+      <div style="font-size: 18px; font-weight: 600; color: #ffffff; margin: 0 0 4px 0;">
+        🆕 New Software Added
+      </div>
+      <div style="font-size: 13px; color: #a3a3a3; margin: 0 0 16px 0;">
+        ${newSoftware.length} new ${newSoftware.length === 1 ? 'app' : 'apps'} added to VersionVault this week
+      </div>
+      ${newSoftware.map((s: any) => `
+        <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div style="flex: 1;">
+              <div style="font-size: 16px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">${s.name}</div>
+              <div style="font-size: 13px; color: #a3a3a3; margin-bottom: 8px;">${s.manufacturer} • ${s.category}</div>
+              <div style="font-size: 12px; color: #525252;">
+                Initial version: <span style="font-family: monospace; color: #a3a3a3;">${s.initial_version}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ` : ''}
 
     ${sponsorHtml}
 

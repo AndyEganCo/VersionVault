@@ -161,6 +161,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
                             >
                               Manage Users
                             </NavLink>
+                            <NavLink
+                              to="/admin/newsletter"
+                              onClick={() => setMobileMenuOpen(false)}
+                              className={({ isActive }) =>
+                                cn(
+                                  'text-sm font-medium transition-colors hover:text-primary px-3 py-2 rounded',
+                                  isActive ? 'text-primary bg-accent' : 'text-muted-foreground'
+                                )
+                              }
+                            >
+                              Newsletter
+                            </NavLink>
                           </nav>
                         )}
 

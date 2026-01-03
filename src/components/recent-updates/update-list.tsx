@@ -1,8 +1,7 @@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { formatDate } from '@/lib/date';
 import type { Software } from '@/lib/software/types';
-import { useState, useEffect } from 'react';
-import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
+import { useSearchParams } from 'react-router-dom';
 
 export type UpdateListProps = {
   updates: Software[];
@@ -12,17 +11,15 @@ export type UpdateListProps = {
 };
 
 export function UpdateList({ updates, loading, refreshTracking, trackedIds }: UpdateListProps) {
-  const [selectedSoftware, setSelectedSoftware] = useState<Software | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Filter to only show tracked software
   const trackedUpdates = updates.filter(u => trackedIds.has(u.id));
 
-  // Close modal if the selected software is no longer tracked
-  useEffect(() => {
-    if (selectedSoftware && !trackedIds.has(selectedSoftware.id)) {
-      setSelectedSoftware(null);
-    }
-  }, [trackedIds, selectedSoftware]);
+  const handleSoftwareClick = (softwareId: string) => {
+    // Update URL to open modal via deep linking
+    setSearchParams({ software_id: softwareId });
+  };
 
   if (loading) {
     return (
@@ -43,15 +40,14 @@ export function UpdateList({ updates, loading, refreshTracking, trackedIds }: Up
   }
 
   return (
-    <>
-      <ScrollArea className="h-[400px] pr-4">
-        <div className="space-y-6">
-          {trackedUpdates.map((software) => (
-            <div
-              onClick={() => setSelectedSoftware(software)}
-              className="flex items-center cursor-pointer"
-              key={software.id}
-            >
+    <ScrollArea className="h-[400px] pr-4">
+      <div className="space-y-6">
+        {trackedUpdates.map((software) => (
+          <div
+            onClick={() => handleSoftwareClick(software.id)}
+            className="flex items-center cursor-pointer"
+            key={software.id}
+          >
               <div className="ml-4 space-y-1">
                 <p className="text-sm font-medium leading-none">{software.name}</p>
                 <p className="text-sm text-muted-foreground">
@@ -69,18 +65,5 @@ export function UpdateList({ updates, loading, refreshTracking, trackedIds }: Up
           ))}
         </div>
       </ScrollArea>
-
-      {selectedSoftware && (
-        <SoftwareDetailModal
-          open={!!selectedSoftware}
-          onOpenChange={(open) => !open && setSelectedSoftware(null)}
-          software={selectedSoftware}
-          isTracked={trackedIds.has(selectedSoftware.id)}
-          onTrackingChange={() => {
-            refreshTracking();
-          }}
-        />
-      )}
-    </>
   );
 }
