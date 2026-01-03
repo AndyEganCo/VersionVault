@@ -137,10 +137,13 @@ serve(async (req) => {
       .map((s: SoftwareItem) => `- ${s.name}: ${s.current_version || 'No version tracked'}`)
       .join('\n')
 
-    // Call ChatGPT API
-    const chatGPTModel = 'gpt-4o' // Can switch to 'gpt-5' or 'o1' when available
+    // Call ChatGPT API with latest model
+    // Using o1 (released Dec 2024) for most up-to-date knowledge
+    const chatGPTModel = 'o1'
     console.log(`🤖 Calling ChatGPT (${chatGPTModel})...`)
 
+    // Note: o1 models don't support system messages or temperature parameter
+    // Combine instructions into user message for o1 compatibility
     const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -151,17 +154,25 @@ serve(async (req) => {
         model: chatGPTModel,
         messages: [
           {
-            role: 'system',
+            role: 'user',
             content: `You are a software version tracking assistant. Your job is to identify if any software versions are outdated based on your knowledge.
+
+Today's date is ${new Date().toISOString().split('T')[0]}.
+
+Check if any of these software versions are outdated:
+
+${softwareList}
 
 For each outdated software, provide:
 1. The software name (must match exactly from the input)
 2. The latest version you know about
 3. Confidence level (high/medium/low) based on:
-   - high: Recent knowledge, certain this version exists
+   - high: Recent knowledge (within 6 months), certain this version exists
    - medium: Somewhat recent knowledge, likely accurate
    - low: Older knowledge, may need verification
 4. Brief reasoning (one sentence)
+
+CRITICAL: Only flag software if you are reasonably confident. Do not guess or hallucinate versions. If a version is already current or very recent, DO NOT flag it.
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -177,17 +188,9 @@ Respond ONLY with valid JSON in this exact format:
   "summary": "brief summary of findings"
 }
 
-If no software is outdated, return: {"outdated": [], "summary": "All software appears up to date based on available knowledge."}
-
-CRITICAL: Only flag software if you are reasonably confident. Do not guess or hallucinate versions.`
-          },
-          {
-            role: 'user',
-            content: `Check if any of these software versions are outdated:\n\n${softwareList}\n\nToday's date is ${new Date().toISOString().split('T')[0]}.`
+If no software is outdated, return: {"outdated": [], "summary": "All software appears up to date based on available knowledge."}`
           }
-        ],
-        temperature: 0.1, // Low temperature for accuracy
-        response_format: { type: 'json_object' }
+        ]
       }),
     })
 
@@ -308,6 +311,7 @@ CRITICAL: Only flag software if you are reasonably confident. Do not guess or ha
     console.log('📧 Sending admin notification...')
 
     // Get all admins
+    console.log('📧 Fetching admin users for notification...')
     const { data: admins, error: adminsError } = await supabase
       .from('admin_users')
       .select(`
@@ -317,9 +321,12 @@ CRITICAL: Only flag software if you are reasonably confident. Do not guess or ha
         )
       `)
 
-    if (adminsError || !admins || admins.length === 0) {
-      console.error('⚠️ No admins found for notification')
+    if (adminsError) {
+      console.error('❌ Error fetching admins:', adminsError)
+    } else if (!admins || admins.length === 0) {
+      console.warn('⚠️ No admins found in admin_users table - skipping email notification')
     } else {
+      console.log(`📧 Found ${admins.length} admin(s) to notify`)
       const { subject, html, text } = generateEmailContent({
         flaggedSoftware,
         totalAudited: software.length,

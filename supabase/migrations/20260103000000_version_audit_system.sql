@@ -1,7 +1,7 @@
 -- Create table to track ChatGPT version audit flags
 CREATE TABLE IF NOT EXISTS version_audit_flags (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  software_id UUID NOT NULL REFERENCES software(id) ON DELETE CASCADE,
+  software_id TEXT NOT NULL REFERENCES software(id) ON DELETE CASCADE,
   audit_run_id UUID NOT NULL,
   current_version TEXT NOT NULL,
   suggested_version TEXT,
@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS version_audit_flags (
   flagged_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   resolved_at TIMESTAMP WITH TIME ZONE,
   resolved_by UUID REFERENCES auth.users(id),
-  verification_result TEXT CHECK (verification_result IN ('confirmed', 'false_positive', 'pending')),
+  verification_result TEXT CHECK (verification_result IN ('confirmed', 'false_positive', 'pending')) DEFAULT 'pending',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -38,41 +38,29 @@ CREATE INDEX IF NOT EXISTS idx_version_audit_runs_created_at ON version_audit_ru
 ALTER TABLE version_audit_flags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE version_audit_runs ENABLE ROW LEVEL SECURITY;
 
--- Admin-only policies
+-- Admin-only policies (using admin_users table)
 CREATE POLICY "Admins can view audit flags"
   ON version_audit_flags FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM user_settings
-      WHERE user_id = auth.uid() AND role = 'admin'
-    )
+    (SELECT auth.uid()) IN (SELECT user_id FROM admin_users)
   );
 
 CREATE POLICY "Admins can update audit flags"
   ON version_audit_flags FOR UPDATE
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM user_settings
-      WHERE user_id = auth.uid() AND role = 'admin'
-    )
+    (SELECT auth.uid()) IN (SELECT user_id FROM admin_users)
   )
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM user_settings
-      WHERE user_id = auth.uid() AND role = 'admin'
-    )
+    (SELECT auth.uid()) IN (SELECT user_id FROM admin_users)
   );
 
 CREATE POLICY "Admins can view audit runs"
   ON version_audit_runs FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM user_settings
-      WHERE user_id = auth.uid() AND role = 'admin'
-    )
+    (SELECT auth.uid()) IN (SELECT user_id FROM admin_users)
   );
 
 -- Service role can do everything (for edge functions)
@@ -90,7 +78,7 @@ CREATE POLICY "Service role can manage audit runs"
 
 -- Function to get unresolved audit flags for prioritization
 CREATE OR REPLACE FUNCTION get_audit_flagged_software_ids()
-RETURNS UUID[] AS $$
+RETURNS TEXT[] AS $$
   SELECT ARRAY_AGG(DISTINCT software_id)
   FROM version_audit_flags
   WHERE resolved_at IS NULL
