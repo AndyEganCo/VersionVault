@@ -524,18 +524,40 @@ export function AdminNewsletter() {
 
     setTestEmailLoading(true);
     try {
-      // Get software with release_date or updated_at in the last 30 days
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      // Query software table for recent releases (no limit - show all)
-      let { data: recentSoftware } = await supabase
-        .from('software')
-        .select('id, name, manufacturer, category, current_version, release_date, updated_at')
-        .or(`release_date.gte.${thirtyDaysAgo.toISOString()},and(release_date.is.null,updated_at.gte.${thirtyDaysAgo.toISOString()})`)
-        .order('release_date', { ascending: false, nullsFirst: false });
+      // For test emails, get user's tracked software OR most recent software
+      // This gives a realistic preview with actual database data
+      const { data: trackedData } = await supabase
+        .from('tracked_software')
+        .select('software_id')
+        .eq('user_id', user.id);
 
-      console.log('📊 Recent software releases found:', recentSoftware?.length || 0);
+      let recentSoftware;
+
+      if (trackedData && trackedData.length > 0) {
+        // Get user's tracked software for realistic preview
+        const { data: tracked } = await supabase
+          .from('software')
+          .select('id, name, manufacturer, category, current_version, release_date, updated_at')
+          .in('id', trackedData.map(t => t.software_id))
+          .order('updated_at', { ascending: false })
+          .limit(10);
+
+        recentSoftware = tracked;
+        console.log('📊 Using tracked software for test email:', tracked?.length || 0);
+      } else {
+        // Fallback: get most recently updated software from database
+        const { data: recent } = await supabase
+          .from('software')
+          .select('id, name, manufacturer, category, current_version, release_date, updated_at')
+          .order('updated_at', { ascending: false })
+          .limit(10);
+
+        recentSoftware = recent;
+        console.log('📊 Using recent software for test email:', recent?.length || 0);
+      }
 
       let sampleUpdates: any[] = [];
 
