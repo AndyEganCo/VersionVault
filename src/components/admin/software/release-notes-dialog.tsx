@@ -39,11 +39,12 @@ interface ReleaseNotesDialogProps {
 
 function formatDateForInput(date: string): string {
   // Return YYYY-MM-DD format for HTML5 date input
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = (d.getMonth() + 1).toString().padStart(2, '0');
-  const day = d.getDate().toString().padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  // If already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return date;
+  }
+  // Otherwise extract the date portion from ISO timestamp
+  return date.split('T')[0];
 }
 
 export function ReleaseNotesDialog({
@@ -175,7 +176,7 @@ export function ReleaseNotesDialog({
       const success = await addVersionHistory(software.id, {
         software_id: software.id,
         version: versionToSave,
-        release_date: new Date(releaseDate).toISOString(),
+        release_date: releaseDate, // Store as-is (YYYY-MM-DD)
         notes: notes,
         type,
         notes_source: 'manual' // Mark as manual when edited through UI
@@ -351,7 +352,7 @@ export function ReleaseNotesDialog({
           const success = await addVersionHistory(software.id, {
             software_id: software.id,
             version: version.version,
-            release_date: new Date(version.releaseDate).toISOString(),
+            release_date: version.releaseDate, // Store as-is
             notes: version.notes, // Notes are now a single Markdown string
             type: version.type
           });
