@@ -53,6 +53,7 @@ import {
   Package,
   ExternalLink,
 } from 'lucide-react';
+import { formatDate } from '@/lib/date';
 
 interface QueueSummary {
   pending: number;
@@ -874,7 +875,7 @@ export function AdminNewsletter() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {new Date(version.detected_at).toLocaleDateString()}
+                      {formatDate(version.detected_at)}
                     </TableCell>
                     <TableCell className="text-right space-x-1">
                       <Button

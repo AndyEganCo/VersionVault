@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type { ReleaseNote } from '../types';
+import { formatDate } from '@/lib/date';
 
 /**
  * Compare two version strings (semantic versioning)
@@ -38,7 +39,7 @@ export async function getReleaseNotes(softwareId: string): Promise<ReleaseNote[]
 
     const releaseNotes = data?.map(item => ({
       version: item.version,
-      date: new Date(item.detected_at).toLocaleDateString(),
+      date: formatDate(item.detected_at),
       notes: item.notes || ['No release notes available'],
       type: item.type || 'patch'
     })) || [];

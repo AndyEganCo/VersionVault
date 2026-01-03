@@ -32,11 +32,11 @@ export function Routes() {
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/unsubscribe" element={<Unsubscribe />} />
+      <Route path="/software" element={<Software />} />
 
       {/* Protected routes */}
       <Route element={<AuthCheck />}>
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/software" element={<Software />} />
         <Route path="/requests" element={<SoftwareRequests />} />
 
         {/* User routes */}
