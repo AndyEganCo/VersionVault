@@ -39,32 +39,12 @@ interface ReleaseNotesDialogProps {
 
 function formatDateForInput(date: string): string {
   // Return YYYY-MM-DD format for HTML5 date input
-  const d = new Date(date);
-  const year = d.getUTCFullYear();
-  const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
-  const day = d.getUTCDate().toString().padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function convertDateInputToUTC(dateString: string): string {
-  // Convert YYYY-MM-DD to UTC ISO string without timezone shift
-  // Input: "2025-12-28" -> Output: "2025-12-28T00:00:00.000Z"
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day)).toISOString();
-}
-
-function convertToUTCDate(dateString: string): string {
-  // Handle various date formats and convert to UTC without timezone shift
-  // If it's YYYY-MM-DD format, use our safe converter
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-    return convertDateInputToUTC(dateString);
+  // If already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return date;
   }
-  // Otherwise parse it and extract the date components to preserve the date
-  const d = new Date(dateString);
-  const year = d.getFullYear();
-  const month = d.getMonth();
-  const day = d.getDate();
-  return new Date(Date.UTC(year, month, day)).toISOString();
+  // Otherwise extract the date portion from ISO timestamp
+  return date.split('T')[0];
 }
 
 export function ReleaseNotesDialog({
@@ -196,7 +176,7 @@ export function ReleaseNotesDialog({
       const success = await addVersionHistory(software.id, {
         software_id: software.id,
         version: versionToSave,
-        release_date: convertDateInputToUTC(releaseDate),
+        release_date: releaseDate, // Store as-is (YYYY-MM-DD)
         notes: notes,
         type,
         notes_source: 'manual' // Mark as manual when edited through UI
@@ -372,7 +352,7 @@ export function ReleaseNotesDialog({
           const success = await addVersionHistory(software.id, {
             software_id: software.id,
             version: version.version,
-            release_date: convertToUTCDate(version.releaseDate),
+            release_date: version.releaseDate, // Store as-is
             notes: version.notes, // Notes are now a single Markdown string
             type: version.type
           });
