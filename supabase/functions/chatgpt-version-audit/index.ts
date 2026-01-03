@@ -144,8 +144,10 @@ serve(async (req) => {
 
     // Build API request based on model type
     // o1 models: single user message, no system/temperature/response_format
-    // Standard models (gpt-4o, gpt-4.5, gpt-5): system message + parameters supported
+    // gpt-5 models: system messages supported, but temperature must be default (1)
+    // Standard models (gpt-4o, gpt-4.5): full parameter support
     const isO1Model = chatGPTModel.startsWith('o1')
+    const isGPT5Model = chatGPTModel.startsWith('gpt-5')
 
     const systemPrompt = `You are a software version tracking assistant. Your job is to identify if any software versions are outdated based on your knowledge.
 
@@ -192,9 +194,14 @@ ${softwareList}`
           ]
     }
 
-    // Add parameters only for non-o1 models
-    if (!isO1Model) {
+    // Add parameters based on model capabilities
+    if (!isO1Model && !isGPT5Model) {
+      // Only older models (gpt-4o, gpt-4-turbo) support custom temperature
       requestBody.temperature = 0.1
+    }
+
+    if (!isO1Model) {
+      // Both GPT-5 and older models support JSON mode
       requestBody.response_format = { type: 'json_object' }
     }
 
