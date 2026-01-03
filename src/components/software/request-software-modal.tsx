@@ -75,7 +75,7 @@ export function RequestSoftwareModal({ onSuccess, open, onOpenChange, trigger }:
       }
 
       // If duplicate found, auto-approve and link to existing software
-      if (duplicateData && duplicateData.length > 0 && duplicateData[0].exists) {
+      if (duplicateData && duplicateData.length > 0 && duplicateData[0].software_exists) {
         const existingSoftware = duplicateData[0];
 
         const { error } = await supabase.from('software_requests').insert([
