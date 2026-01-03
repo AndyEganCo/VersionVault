@@ -84,23 +84,25 @@ serve(async (req) => {
     const yesterday = new Date()
     yesterday.setDate(yesterday.getDate() - 1)
 
-    const { data: softwareRequests, error: softwareError } = await supabase
-      .from('software_requests_with_user')
-      .select('*')
-      .eq('status', 'pending')
-      .gte('created_at', yesterday.toISOString())
-      .order('created_at', { ascending: false })
+    // Use RPC functions instead of views for proper permissions
+    const { data: allSoftwareRequests, error: softwareError } = await supabase
+      .rpc('get_software_requests_with_user')
 
-    const { data: featureRequests, error: featureError } = await supabase
-      .from('feature_requests_with_user')
-      .select('*')
-      .eq('status', 'pending')
-      .gte('created_at', yesterday.toISOString())
-      .order('created_at', { ascending: false })
+    const { data: allFeatureRequests, error: featureError } = await supabase
+      .rpc('get_feature_requests_with_user')
 
     if (softwareError || featureError) {
       throw new Error(`Failed to fetch requests: ${softwareError?.message || featureError?.message}`)
     }
+
+    // Filter for pending requests from last 24 hours
+    const softwareRequests = (allSoftwareRequests || []).filter((req: any) =>
+      req.status === 'pending' && new Date(req.created_at) >= yesterday
+    )
+
+    const featureRequests = (allFeatureRequests || []).filter((req: any) =>
+      req.status === 'pending' && new Date(req.created_at) >= yesterday
+    )
 
     const totalRequests = (softwareRequests?.length || 0) + (featureRequests?.length || 0)
 
