@@ -138,30 +138,18 @@ serve(async (req) => {
       .join('\n')
 
     // Call ChatGPT API with latest model
-    // Using o1 (released Dec 2024) for most up-to-date knowledge
-    const chatGPTModel = 'o1'
+    // Using GPT-5 for most up-to-date knowledge (2025+ cutoff)
+    const chatGPTModel = 'gpt-5'
     console.log(`🤖 Calling ChatGPT (${chatGPTModel})...`)
 
-    // Note: o1 models don't support system messages or temperature parameter
-    // Combine instructions into user message for o1 compatibility
-    const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: chatGPTModel,
-        messages: [
-          {
-            role: 'user',
-            content: `You are a software version tracking assistant. Your job is to identify if any software versions are outdated based on your knowledge.
+    // Build API request based on model type
+    // o1 models: single user message, no system/temperature/response_format
+    // Standard models (gpt-4o, gpt-4.5, gpt-5): system message + parameters supported
+    const isO1Model = chatGPTModel.startsWith('o1')
 
-Today's date is ${new Date().toISOString().split('T')[0]}.
+    const systemPrompt = `You are a software version tracking assistant. Your job is to identify if any software versions are outdated based on your knowledge.
 
-Check if any of these software versions are outdated:
-
-${softwareList}
+CRITICAL: Only flag software if you are reasonably confident. Do not guess or hallucinate versions. If a version is already current or very recent, DO NOT flag it.
 
 For each outdated software, provide:
 1. The software name (must match exactly from the input)
@@ -171,8 +159,6 @@ For each outdated software, provide:
    - medium: Somewhat recent knowledge, likely accurate
    - low: Older knowledge, may need verification
 4. Brief reasoning (one sentence)
-
-CRITICAL: Only flag software if you are reasonably confident. Do not guess or hallucinate versions. If a version is already current or very recent, DO NOT flag it.
 
 Respond ONLY with valid JSON in this exact format:
 {
@@ -189,9 +175,36 @@ Respond ONLY with valid JSON in this exact format:
 }
 
 If no software is outdated, return: {"outdated": [], "summary": "All software appears up to date based on available knowledge."}`
-          }
-        ]
-      }),
+
+    const userPrompt = `Today's date is ${new Date().toISOString().split('T')[0]}.
+
+Check if any of these software versions are outdated:
+
+${softwareList}`
+
+    const requestBody: any = {
+      model: chatGPTModel,
+      messages: isO1Model
+        ? [{ role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }]
+        : [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ]
+    }
+
+    // Add parameters only for non-o1 models
+    if (!isO1Model) {
+      requestBody.temperature = 0.1
+      requestBody.response_format = { type: 'json_object' }
+    }
+
+    const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openaiApiKey}`,
+      },
+      body: JSON.stringify(requestBody),
     })
 
     if (!chatResponse.ok) {
