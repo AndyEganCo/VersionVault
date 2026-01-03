@@ -160,10 +160,11 @@ export async function extractWithWebSearch(
   // Build allowed domains list
   const baseDomain = websiteUrl.replace(/^https?:\/\//, '').split('/')[0]
 
-  // Extract the root domain (remove www or other subdomains if present)
+  // Extract the root domain (e.g., "teradek.com" from "www.teradek.com" or "support.teradek.com")
+  // This handles: domain.com, www.domain.com, subdomain.domain.com, etc.
   const domainParts = baseDomain.split('.')
-  const rootDomain = domainParts.length > 2 && domainParts[0] === 'www'
-    ? domainParts.slice(1).join('.')
+  const rootDomain = domainParts.length >= 2
+    ? domainParts.slice(-2).join('.') // Take last 2 parts (domain.tld)
     : baseDomain
 
   // Include common documentation/support subdomains
@@ -217,6 +218,11 @@ export async function extractWithWebSearch(
         include: ['web_search_call.action.sources'],
         input: `Find the official release notes for ${softwareName} version ${detectedVersion} by ${manufacturer}.
 
+IMPORTANT: You have access to search the following OFFICIAL domains:
+${allowedDomains.map(d => `- ${d}`).join('\n')}
+
+All of these domains are official ${manufacturer} sources. Subdomains like update.*, docs.*, support.*, etc. are official vendor sites, NOT third-party distributors. Use information from ANY of these domains freely.
+
 CRITICAL: First find the release date for this specific version.
 
 Extract:
@@ -227,7 +233,7 @@ Extract:
 - Compatibility and upgrade info
 
 Start your response with "Released: YYYY-MM-DD" if found.
-Return a concise, structured summary with specific details.`
+Return a concise, structured summary with specific details from the official sources listed above.`
       })
     })
 
