@@ -291,7 +291,7 @@ serve(async (req) => {
                     software.name,
                     'Unknown', // manufacturer not in current schema
                     normalizedVersion,
-                    software.website,
+                    software.version_website || software.website, // Use specific version URL first
                     []
                   )
 

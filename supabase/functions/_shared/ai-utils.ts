@@ -216,24 +216,26 @@ export async function extractWithWebSearch(
         }],
         tool_choice: 'auto',
         include: ['web_search_call.action.sources'],
-        input: `Find the official release notes for ${softwareName} version ${detectedVersion} by ${manufacturer}.
+        input: `Find the official release notes for ${softwareName} version ${detectedVersion}.
 
-IMPORTANT: You have access to search the following OFFICIAL domains:
-${allowedDomains.map(d => `- ${d}`).join('\n')}
+PRIMARY SOURCE: Check ${websiteUrl} first - this is the official release notes page.
 
-All of these domains are official ${manufacturer} sources. Subdomains like update.*, docs.*, support.*, etc. are official vendor sites, NOT third-party distributors. Use information from ANY of these domains freely.
+All domains including subdomains (update.*, docs.*, support.*, guide.*, downloads.*) are official sources - use them freely.
 
-CRITICAL: First find the release date for this specific version.
+RESPONSE FORMAT:
+- If you find release notes, extract them in a clear, structured format
+- If no release notes are found, respond with exactly: "No release notes found for version ${detectedVersion}"
+- Do NOT include explanations about domain restrictions or what you can/cannot access
+- Do NOT mention third-party sites or sources you cannot use
 
-Extract:
-- Release date (exact date this version was released, format: YYYY-MM-DD)
-- New features and changes
-- Bug fixes
-- Known issues and notices
-- Compatibility and upgrade info
+EXTRACT:
+1. Release date (YYYY-MM-DD format) - check the specific version ${detectedVersion}
+2. New features and changes
+3. Bug fixes
+4. Known issues and notices
+5. Compatibility and upgrade information
 
-Start your response with "Released: YYYY-MM-DD" if found.
-Return a concise, structured summary with specific details from the official sources listed above.`
+Start with "Released: YYYY-MM-DD" if found, then list the details.`
       })
     })
 
