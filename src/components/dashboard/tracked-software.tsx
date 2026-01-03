@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useSoftwareList } from '@/lib/software/hooks/hooks';
 import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
-import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -10,6 +8,7 @@ import { formatDate } from '@/lib/date';
 import { toast } from 'sonner';
 import { Software } from '@/lib/software/types';
 import { breakPhonePattern } from '@/lib/utils/version-display';
+import { useSearchParams } from 'react-router-dom';
 
 interface TrackedSoftwareProps {
   refreshTracking: () => Promise<void>;
@@ -18,18 +17,16 @@ interface TrackedSoftwareProps {
 
 export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftwareProps) {
   const { user } = useAuth();
-  const { software, loading: softwareLoading, refreshSoftware } = useSoftwareList();
-  const [selectedSoftware, setSelectedSoftware] = useState<Software | null>(null);
+  const { software, loading: softwareLoading } = useSoftwareList();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const trackedSoftware = software.filter((s) => trackedIds.has(s.id));
   const loading = softwareLoading;
 
-  // Close modal if the selected software is no longer tracked
-  useEffect(() => {
-    if (selectedSoftware && !trackedIds.has(selectedSoftware.id)) {
-      setSelectedSoftware(null);
-    }
-  }, [trackedIds, selectedSoftware]);
+  const handleSoftwareClick = (softwareId: string) => {
+    // Update URL to open modal via deep linking
+    setSearchParams({ software_id: softwareId });
+  };
 
   const handleUntrack = async (softwareId: string) => {
     if (!user) return;
@@ -84,7 +81,7 @@ export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftware
           <Card
             key={softwareItem.id}
             className="cursor-pointer hover:shadow-md transition-shadow group"
-            onClick={() => setSelectedSoftware(softwareItem)}
+            onClick={() => handleSoftwareClick(softwareItem.id)}
           >
             <CardContent className="p-3 space-y-2">
               <div className="flex items-start justify-between gap-2">
@@ -116,18 +113,6 @@ export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftware
           </Card>
         ))}
       </div>
-
-      {selectedSoftware && (
-        <SoftwareDetailModal
-          open={!!selectedSoftware}
-          onOpenChange={(open) => !open && setSelectedSoftware(null)}
-          software={selectedSoftware}
-          isTracked={trackedIds.has(selectedSoftware.id)}
-          onTrackingChange={() => {
-            refreshTracking();
-          }}
-        />
-      )}
     </div>
   );
 }

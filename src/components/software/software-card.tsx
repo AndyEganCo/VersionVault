@@ -1,13 +1,12 @@
-import { useState } from 'react';
 import { Software } from '@/lib/software/types';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/auth-context';
-import { SoftwareDetailModal } from './software-detail-modal';
 import { breakPhonePattern } from '@/lib/utils/version-display';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatDate } from '@/lib/date';
 import { ExternalLink } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 
 interface SoftwareCardProps {
   software: Software;
@@ -16,18 +15,22 @@ interface SoftwareCardProps {
 
 export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) {
   const { user } = useAuth();
-  const [showDetails, setShowDetails] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const handleTrackingChange = async (_e: unknown | null, checked: boolean) => {
     await onTrackingChange(software.id, checked);
   };
 
+  const handleCardClick = () => {
+    // Update URL to open modal via deep linking
+    setSearchParams({ software_id: software.id });
+  };
+
   return (
-    <>
-      <Card
-        className="cursor-pointer hover:shadow-md transition-shadow group h-full"
-        onClick={() => setShowDetails(true)}
-      >
+    <Card
+      className="cursor-pointer hover:shadow-md transition-shadow group h-full"
+      onClick={handleCardClick}
+    >
         <CardContent className="p-4 flex flex-col h-full">
           <div className="flex items-start justify-between gap-2 mb-3">
             <div className="flex-1 min-w-0">
@@ -94,14 +97,5 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
           </div>
         </CardContent>
       </Card>
-
-      <SoftwareDetailModal
-        open={showDetails}
-        onOpenChange={setShowDetails}
-        software={software}
-        isTracked={software.tracked}
-        onTrackingChange={(tracked) => onTrackingChange(software.id, tracked)}
-      />
-    </>
   );
 }

@@ -524,15 +524,15 @@ export function AdminNewsletter() {
 
     setTestEmailLoading(true);
     try {
-      // Get software with release_date or updated_at in the last 7 days
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      // Get software with release_date or updated_at in the last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       // Query software table for recent releases (no limit - show all)
       let { data: recentSoftware } = await supabase
         .from('software')
         .select('id, name, manufacturer, category, current_version, release_date, updated_at')
-        .or(`release_date.gte.${sevenDaysAgo.toISOString()},and(release_date.is.null,updated_at.gte.${sevenDaysAgo.toISOString()})`)
+        .or(`release_date.gte.${thirtyDaysAgo.toISOString()},and(release_date.is.null,updated_at.gte.${thirtyDaysAgo.toISOString()})`)
         .order('release_date', { ascending: false, nullsFirst: false });
 
       console.log('📊 Recent software releases found:', recentSoftware?.length || 0);
@@ -589,11 +589,11 @@ export function AdminNewsletter() {
       // Get active sponsor
       const activeSponsor = sponsors.find(s => s.is_active);
 
-      // Get new software added in the last 7 days
+      // Get new software added in the last 30 days
       const { data: newSoftwareData } = await supabase
         .from('software')
         .select('id, name, manufacturer, category, current_version, created_at')
-        .gte('created_at', sevenDaysAgo.toISOString())
+        .gte('created_at', thirtyDaysAgo.toISOString())
         .order('created_at', { ascending: false });
 
       const newSoftware = (newSoftwareData || []).map(s => ({
@@ -695,14 +695,14 @@ export function AdminNewsletter() {
       const activeSponsor = sponsors.find(s => s.is_active);
       const userName = user?.email?.split('@')[0] || 'User';
 
-      // Get new software added in the last 7 days
-      const sevenDaysAgo = new Date();
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      // Get new software added in the last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
       const { data: newSoftwareData } = await supabase
         .from('software')
         .select('id, name, manufacturer, category, current_version, created_at')
-        .gte('created_at', sevenDaysAgo.toISOString())
+        .gte('created_at', thirtyDaysAgo.toISOString())
         .order('created_at', { ascending: false })
         .limit(5);
 
