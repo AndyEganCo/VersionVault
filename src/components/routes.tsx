@@ -14,6 +14,7 @@ import { Signup } from '@/pages/signup';
 import { AdminSoftware } from '@/pages/admin/software';
 import { AdminUsers } from '@/pages/admin/users';
 import { AdminNewsletter } from '@/pages/admin/newsletter';
+import { NewsletterCompose } from '@/pages/admin/newsletter-compose';
 import { Unsubscribe } from '@/pages/unsubscribe';
 import { VerifyEmail } from '@/pages/verify-email';
 import { AuthCallback } from '@/pages/auth-callback';
@@ -52,6 +53,7 @@ export function Routes() {
           <Route path="software" element={<AdminSoftware />} />
           <Route path="users" element={<AdminUsers />} />
           <Route path="newsletter" element={<AdminNewsletter />} />
+          <Route path="newsletter/compose" element={<NewsletterCompose />} />
         </Route>
       </Route>
 
