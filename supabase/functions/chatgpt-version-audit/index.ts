@@ -112,17 +112,17 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const resend = new Resend(resendApiKey)
 
-    // Fetch all software with current versions
-    const { data: software, error: softwareError } = await supabase
+    // Fetch all software with current versions, ordered consistently
+    const { data: allSoftware, error: softwareError } = await supabase
       .from('software')
       .select('id, name, current_version')
-      .order('name')
+      .order('id') // Consistent ordering by ID
 
     if (softwareError) {
       throw new Error(`Failed to fetch software: ${softwareError.message}`)
     }
 
-    if (!software || software.length === 0) {
+    if (!allSoftware || allSoftware.length === 0) {
       console.log('⚠️ No software found to audit')
       return new Response(
         JSON.stringify({ message: 'No software to audit', flagged: 0 }),
@@ -130,115 +130,170 @@ serve(async (req) => {
       )
     }
 
-    console.log(`📋 Auditing ${software.length} software items...`)
+    // Rotate through batches based on day of year
+    // This ensures different software is checked each run
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24))
+    const BATCH_SIZE = 25
+    const MAX_BATCHES_PER_RUN = 1 // Process 25 items per run
+    const itemsPerRun = BATCH_SIZE * MAX_BATCHES_PER_RUN
 
-    // Prepare data for ChatGPT
-    const softwareList = software
-      .map((s: SoftwareItem) => `- ${s.name}: ${s.current_version || 'No version tracked'}`)
-      .join('\n')
+    // Calculate which slice of software to check this run
+    const totalRuns = Math.ceil(allSoftware.length / itemsPerRun)
+    const currentRun = dayOfYear % totalRuns
+    const startIndex = currentRun * itemsPerRun
+    const endIndex = Math.min(startIndex + itemsPerRun, allSoftware.length)
 
-    // Call ChatGPT API with latest model
-    // Using GPT-5 for most up-to-date knowledge (2025+ cutoff)
+    const software = allSoftware.slice(startIndex, endIndex)
+
+    console.log(`📋 Auditing software ${startIndex + 1}-${endIndex} of ${allSoftware.length} (run ${currentRun + 1}/${totalRuns} for day ${dayOfYear})...`)
+
+    // Split selected software into batches for API calls
+    const batches: SoftwareItem[][] = []
+    for (let i = 0; i < software.length; i += BATCH_SIZE) {
+      batches.push(software.slice(i, i + BATCH_SIZE))
+    }
+
+    // Process all batches from this run's slice (should be exactly 1 batch = 25 items)
+    console.log(`🔄 Processing ${batches.length} batch(es) of ${BATCH_SIZE} items each`)
+
+    const allFlags: AuditFlag[] = []
+    let totalApiTime = 0
+
+    // Call OpenAI Responses API with web search (same as release notes extraction)
+    // Using GPT-5 with agentic search for real-time version verification
     const chatGPTModel = 'gpt-5'
-    console.log(`🤖 Calling ChatGPT (${chatGPTModel})...`)
 
-    // Build API request based on model type
-    // o1 models: single user message, no system/temperature/response_format
-    // gpt-5 models: system messages supported, but temperature must be default (1)
-    // Standard models (gpt-4o, gpt-4.5): full parameter support
-    const isO1Model = chatGPTModel.startsWith('o1')
-    const isGPT5Model = chatGPTModel.startsWith('gpt-5')
+    // Process each batch
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex]
+      const batchNum = batchIndex + 1
 
-    const systemPrompt = `You are a software version tracking assistant. Your job is to identify if any software versions are outdated based on your knowledge.
+      console.log(`\n🔍 Batch ${batchNum}/${batches.length}: Auditing ${batch.length} items with web search...`)
 
-CRITICAL: Only flag software if you are reasonably confident. Do not guess or hallucinate versions. If a version is already current or very recent, DO NOT flag it.
+      // Prepare data for audit
+      const softwareList = batch
+        .map((s: SoftwareItem) => `- ${s.name}: ${s.current_version || 'No version tracked'}`)
+        .join('\n')
 
-For each outdated software, provide:
-1. The software name (must match exactly from the input)
-2. The latest version you know about
-3. Confidence level (high/medium/low) based on:
-   - high: Recent knowledge (within 6 months), certain this version exists
-   - medium: Somewhat recent knowledge, likely accurate
-   - low: Older knowledge, may need verification
-4. Brief reasoning (one sentence)
+      const prompt = `Today's date is ${new Date().toISOString().split('T')[0]}.
 
-Respond ONLY with valid JSON in this exact format:
+Search the web to verify if any of these software versions are outdated:
+
+${softwareList}
+
+For each software, search their official website for the current version number.
+
+CRITICAL RULES:
+- ONLY flag software if you find definitive proof on the official website that a newer version exists
+- Do NOT flag based on your training data alone - you MUST verify via web search
+- If you cannot find version information, DO NOT flag it
+- Cite the source URL where you found the version
+
+Respond with valid JSON in this exact format:
 {
   "outdated": [
     {
-      "software_name": "exact name from input",
+      "software_name": "Software Name Only",
       "current_version": "version from input",
-      "suggested_version": "latest version you know",
-      "confidence": "high|medium|low",
-      "reasoning": "brief explanation"
+      "suggested_version": "latest version found via web search",
+      "confidence": "high",
+      "reasoning": "Found on [URL]"
     }
   ],
-  "summary": "brief summary of findings"
+  "summary": "brief summary"
 }
 
-If no software is outdated, return: {"outdated": [], "summary": "All software appears up to date based on available knowledge."}`
+IMPORTANT:
+- In "software_name", include ONLY the software name (e.g., "WATCHOUT"), NOT the version number
+- The format is "Software Name Only" without any version numbers or colons
+- Example: Use "WATCHOUT" not "WATCHOUT: 7.6"
 
-    const userPrompt = `Today's date is ${new Date().toISOString().split('T')[0]}.
+If all software is up to date or you cannot verify, return: {"outdated": [], "summary": "All software appears up to date or could not be verified."}`
 
-Check if any of these software versions are outdated:
+      const apiCallStart = Date.now()
+      let content: string
+      let sources: string[] = []
 
-${softwareList}`
+      try {
+        // Use Responses API with web_search tool (same as ai-utils.ts)
+        const response = await fetch('https://api.openai.com/v1/responses', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openaiApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: chatGPTModel,
+            reasoning: { effort: 'low' }, // Low effort for faster searches (was 'medium')
+            tools: [{
+              type: 'web_search',
+              // No domain filtering - allow searching any official software sites
+            }],
+            tool_choice: 'auto',
+            include: ['web_search_call.action.sources'],
+            input: prompt,
+          }),
+        })
 
-    const requestBody: any = {
-      model: chatGPTModel,
-      messages: isO1Model
-        ? [{ role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }]
-        : [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ]
-    }
+        const apiCallDuration = Date.now() - apiCallStart
+        console.log(`⏱️  API call took ${apiCallDuration}ms`)
 
-    // Add parameters based on model capabilities
-    if (!isO1Model && !isGPT5Model) {
-      // Only older models (gpt-4o, gpt-4-turbo) support custom temperature
-      requestBody.temperature = 0.1
-    }
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error(`❌ Batch ${batchNum} API error:`, response.status, errorText)
+          continue // Skip this batch
+        }
 
-    if (!isO1Model) {
-      // Both GPT-5 and older models support JSON mode
-      requestBody.response_format = { type: 'json_object' }
-    }
+        const result = await response.json()
 
-    const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${openaiApiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    })
+        // Extract sources from web_search_call items
+        const webSearchCalls = result.output?.filter((item: any) => item.type === 'web_search_call') || []
+        for (const call of webSearchCalls) {
+          if (call.action?.sources) {
+            sources.push(...call.action.sources.map((s: any) => s.url || s))
+          }
+        }
 
-    if (!chatResponse.ok) {
-      const errorText = await chatResponse.text()
-      throw new Error(`ChatGPT API error: ${chatResponse.status} ${errorText}`)
-    }
+        // Get the text output
+        const messageItems = result.output?.filter((item: any) => item.type === 'message') || []
+        content = messageItems[0]?.content?.find((c: any) => c.type === 'output_text')?.text || ''
 
-    const chatData = await chatResponse.json()
-    const content = chatData.choices[0]?.message?.content
+        if (!content) {
+          console.error(`❌ Batch ${batchNum} - No text content in response`)
+          continue
+        }
 
-    if (!content) {
-      throw new Error('No response from ChatGPT')
-    }
+        console.log(`✅ Batch ${batchNum} - Web search completed (${webSearchCalls.length} searches, ${sources.length} sources)`)
+        totalApiTime += apiCallDuration
+      } catch (error) {
+        console.error(`❌ Batch ${batchNum} - Error:`, error.message)
+        continue
+      }
 
-    console.log('📦 ChatGPT response received')
+      // Parse response
+      let parsedResponse: ChatGPTResponse
+      try {
+        parsedResponse = JSON.parse(content)
+      } catch (e) {
+        console.error(`❌ Batch ${batchNum} - Failed to parse response:`, content)
+        continue
+      }
 
-    // Parse response
-    let parsedResponse: ChatGPTResponse
-    try {
-      parsedResponse = JSON.parse(content)
-    } catch (e) {
-      console.error('Failed to parse ChatGPT response:', content)
-      throw new Error(`Invalid JSON from ChatGPT: ${e.message}`)
-    }
+      console.log(`🎯 Batch ${batchNum}: Found ${parsedResponse.outdated.length} outdated items`)
+      if (parsedResponse.outdated.length > 0) {
+        console.log(`📝 Summary: ${parsedResponse.summary}`)
+        console.log(`📚 Sources consulted: ${sources.slice(0, 5).join(', ')}${sources.length > 5 ? '...' : ''}`)
+      }
 
-    console.log(`🎯 ChatGPT found ${parsedResponse.outdated.length} potentially outdated software`)
-    console.log(`📝 Summary: ${parsedResponse.summary}`)
+      // Add to overall results
+      allFlags.push(...parsedResponse.outdated)
+    } // End of batch loop
+
+    console.log(`\n✅ Batch processing complete!`)
+    console.log(`   Processed: ${batches.length} batches`)
+    console.log(`   Items audited: ${software.length}`)
+    console.log(`   Total API time: ${totalApiTime}ms`)
+    console.log(`   Total flagged: ${allFlags.length} potentially outdated software`)
 
     // Create audit run record
     const auditRunId = crypto.randomUUID()
@@ -249,7 +304,7 @@ ${softwareList}`
       .insert({
         id: auditRunId,
         total_software_checked: software.length,
-        flags_created: parsedResponse.outdated.length,
+        flags_created: allFlags.length,
         chatgpt_model: chatGPTModel,
         execution_time_ms: executionTime,
       })
@@ -259,7 +314,7 @@ ${softwareList}`
     }
 
     // If no outdated software found, we're done
-    if (parsedResponse.outdated.length === 0) {
+    if (allFlags.length === 0) {
       console.log('✅ No outdated software detected - audit complete!')
 
       await supabase
@@ -272,7 +327,7 @@ ${softwareList}`
           message: 'Audit complete - no outdated software found',
           audited: software.length,
           flagged: 0,
-          summary: parsedResponse.summary
+          summary: 'All software appears up to date based on available knowledge.'
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -282,7 +337,7 @@ ${softwareList}`
     const flags: any[] = []
     const flaggedSoftware: { name: string, current: string, suggested: string, confidence: string }[] = []
 
-    for (const item of parsedResponse.outdated) {
+    for (const item of allFlags) {
       // Find matching software by name
       const matchedSoftware = software.find(
         (s: SoftwareItem) => s.name.toLowerCase() === item.software_name.toLowerCase()
@@ -330,16 +385,31 @@ ${softwareList}`
     // Send admin notification email
     console.log('📧 Sending admin notification...')
 
-    // Get all admins
+    // Get all admins - query admin_users and fetch emails from auth
     console.log('📧 Fetching admin users for notification...')
-    const { data: admins, error: adminsError } = await supabase
+    const { data: adminUsers, error: adminUsersError } = await supabase
       .from('admin_users')
-      .select(`
-        user_id,
-        users:user_id (
-          email
-        )
-      `)
+      .select('user_id')
+
+    if (adminUsersError) {
+      console.error('❌ Error fetching admin users:', adminUsersError)
+    }
+
+    const adminUserIds = adminUsers?.map(a => a.user_id) || []
+
+    // Fetch emails from auth.users
+    const admins: { user_id: string; email: string }[] = []
+    for (const userId of adminUserIds) {
+      const { data: userData } = await supabase.auth.admin.getUserById(userId)
+      if (userData?.user?.email) {
+        admins.push({
+          user_id: userId,
+          email: userData.user.email
+        })
+      }
+    }
+
+    const adminsError = admins.length === 0 && adminUserIds.length > 0 ? new Error('No emails found') : null
 
     if (adminsError) {
       console.error('❌ Error fetching admins:', adminsError)
@@ -347,16 +417,17 @@ ${softwareList}`
       console.warn('⚠️ No admins found in admin_users table - skipping email notification')
     } else {
       console.log(`📧 Found ${admins.length} admin(s) to notify`)
+      const summary = `Found ${allFlags.length} potentially outdated software (audited items ${startIndex + 1}-${endIndex} of ${allSoftware.length} this run).`
       const { subject, html, text } = generateEmailContent({
         flaggedSoftware,
         totalAudited: software.length,
-        summary: parsedResponse.summary,
+        summary,
       })
 
       let sentCount = 0
 
       for (const admin of admins) {
-        const userEmail = (admin.users as any)?.email
+        const userEmail = admin.email
         if (!userEmail) continue
 
         try {
@@ -392,16 +463,23 @@ ${softwareList}`
     }
 
     console.log(`\n✅ Version audit complete!`)
-    console.log(`   Audited: ${software.length} software items`)
+    console.log(`   Items audited: ${software.length} (${startIndex + 1}-${endIndex} of ${allSoftware.length} total)`)
     console.log(`   Flagged: ${flags.length} potentially outdated`)
+    console.log(`   Run: ${currentRun + 1} of ${totalRuns}`)
     console.log(`   Execution time: ${executionTime}ms`)
+
+    const finalSummary = `Found ${flags.length} outdated items (audited ${startIndex + 1}-${endIndex} of ${allSoftware.length}). Rotation ${currentRun + 1}/${totalRuns}.`
 
     return new Response(
       JSON.stringify({
         message: 'Version audit complete',
         audited: software.length,
+        total_software: allSoftware.length,
+        range_start: startIndex + 1,
+        range_end: endIndex,
         flagged: flags.length,
-        summary: parsedResponse.summary,
+        rotation: `${currentRun + 1}/${totalRuns}`,
+        summary: finalSummary,
         execution_time_ms: executionTime,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
