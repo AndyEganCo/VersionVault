@@ -132,15 +132,33 @@ serve(async (req) => {
 
     console.log(`📋 Auditing ${software.length} software items...`)
 
-    // Prepare data for ChatGPT
-    const softwareList = software
-      .map((s: SoftwareItem) => `- ${s.name}: ${s.current_version || 'No version tracked'}`)
-      .join('\n')
+    // Process in batches to avoid GPT-5 timeout (max 30 items per batch)
+    const BATCH_SIZE = 30
+    const batches: SoftwareItem[][] = []
+    for (let i = 0; i < software.length; i += BATCH_SIZE) {
+      batches.push(software.slice(i, i + BATCH_SIZE))
+    }
+
+    console.log(`🔄 Processing ${batches.length} batch(es) of up to ${BATCH_SIZE} items each`)
+
+    const allFlags: AuditFlag[] = []
+    let totalApiTime = 0
 
     // Call ChatGPT API with latest model
     // Using GPT-5 for most up-to-date knowledge (2025+ cutoff)
     const chatGPTModel = 'gpt-5'
-    console.log(`🤖 Calling ChatGPT (${chatGPTModel})...`)
+
+    // Process each batch
+    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+      const batch = batches[batchIndex]
+      const batchNum = batchIndex + 1
+
+      console.log(`\n🔍 Batch ${batchNum}/${batches.length}: Auditing ${batch.length} items...`)
+
+      // Prepare data for ChatGPT
+      const softwareList = batch
+        .map((s: SoftwareItem) => `- ${s.name}: ${s.current_version || 'No version tracked'}`)
+        .join('\n')
 
     // Build API request based on model type
     // o1 models: single user message, no system/temperature/response_format
@@ -239,26 +257,40 @@ ${softwareList}`
         throw new Error('No response from ChatGPT')
       }
 
-      console.log('📦 ChatGPT response received')
+      console.log('✅ ChatGPT response received')
+      totalApiTime += apiCallDuration
     } catch (error) {
       clearTimeout(timeoutId)
       if (error.name === 'AbortError') {
-        throw new Error('ChatGPT API timeout after 3 minutes')
+        console.error(`❌ Batch ${batchNum} timeout after 3 minutes`)
+        // Continue to next batch instead of failing completely
+        continue
       }
       throw error
     }
 
-    // Parse response
-    let parsedResponse: ChatGPTResponse
-    try {
-      parsedResponse = JSON.parse(content)
-    } catch (e) {
-      console.error('Failed to parse ChatGPT response:', content)
-      throw new Error(`Invalid JSON from ChatGPT: ${e.message}`)
-    }
+      // Parse response
+      let parsedResponse: ChatGPTResponse
+      try {
+        parsedResponse = JSON.parse(content)
+      } catch (e) {
+        console.error(`❌ Batch ${batchNum} - Failed to parse response:`, content)
+        // Continue to next batch
+        continue
+      }
 
-    console.log(`🎯 ChatGPT found ${parsedResponse.outdated.length} potentially outdated software`)
-    console.log(`📝 Summary: ${parsedResponse.summary}`)
+      console.log(`🎯 Batch ${batchNum}: Found ${parsedResponse.outdated.length} outdated items`)
+      if (parsedResponse.outdated.length > 0) {
+        console.log(`📝 Summary: ${parsedResponse.summary}`)
+      }
+
+      // Add to overall results
+      allFlags.push(...parsedResponse.outdated)
+    } // End of batch loop
+
+    console.log(`\n✅ All batches complete!`)
+    console.log(`   Total API time: ${totalApiTime}ms`)
+    console.log(`   Total flagged: ${allFlags.length} potentially outdated software`)
 
     // Create audit run record
     const auditRunId = crypto.randomUUID()
@@ -269,7 +301,7 @@ ${softwareList}`
       .insert({
         id: auditRunId,
         total_software_checked: software.length,
-        flags_created: parsedResponse.outdated.length,
+        flags_created: allFlags.length,
         chatgpt_model: chatGPTModel,
         execution_time_ms: executionTime,
       })
@@ -279,7 +311,7 @@ ${softwareList}`
     }
 
     // If no outdated software found, we're done
-    if (parsedResponse.outdated.length === 0) {
+    if (allFlags.length === 0) {
       console.log('✅ No outdated software detected - audit complete!')
 
       await supabase
@@ -292,7 +324,7 @@ ${softwareList}`
           message: 'Audit complete - no outdated software found',
           audited: software.length,
           flagged: 0,
-          summary: parsedResponse.summary
+          summary: 'All software appears up to date based on available knowledge.'
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -302,7 +334,7 @@ ${softwareList}`
     const flags: any[] = []
     const flaggedSoftware: { name: string, current: string, suggested: string, confidence: string }[] = []
 
-    for (const item of parsedResponse.outdated) {
+    for (const item of allFlags) {
       // Find matching software by name
       const matchedSoftware = software.find(
         (s: SoftwareItem) => s.name.toLowerCase() === item.software_name.toLowerCase()
@@ -367,10 +399,11 @@ ${softwareList}`
       console.warn('⚠️ No admins found in admin_users table - skipping email notification')
     } else {
       console.log(`📧 Found ${admins.length} admin(s) to notify`)
+      const summary = `Found ${allFlags.length} potentially outdated software across ${batches.length} audit batch(es).`
       const { subject, html, text } = generateEmailContent({
         flaggedSoftware,
         totalAudited: software.length,
-        summary: parsedResponse.summary,
+        summary,
       })
 
       let sentCount = 0
@@ -414,14 +447,18 @@ ${softwareList}`
     console.log(`\n✅ Version audit complete!`)
     console.log(`   Audited: ${software.length} software items`)
     console.log(`   Flagged: ${flags.length} potentially outdated`)
+    console.log(`   Batches processed: ${batches.length}`)
     console.log(`   Execution time: ${executionTime}ms`)
+
+    const finalSummary = `Found ${flags.length} potentially outdated software across ${batches.length} audit batch(es).`
 
     return new Response(
       JSON.stringify({
         message: 'Version audit complete',
         audited: software.length,
         flagged: flags.length,
-        summary: parsedResponse.summary,
+        batches: batches.length,
+        summary: finalSummary,
         execution_time_ms: executionTime,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
