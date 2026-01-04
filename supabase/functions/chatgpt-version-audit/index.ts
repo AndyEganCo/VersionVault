@@ -133,8 +133,8 @@ serve(async (req) => {
     // Rotate through batches based on day of year
     // This ensures different software is checked each run
     const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24))
-    const BATCH_SIZE = 15
-    const MAX_BATCHES_PER_RUN = 1 // Process 15 items per run (reduced to prevent timeouts)
+    const BATCH_SIZE = 25
+    const MAX_BATCHES_PER_RUN = 1 // Process 25 items per run
     const itemsPerRun = BATCH_SIZE * MAX_BATCHES_PER_RUN
 
     // Calculate which slice of software to check this run
@@ -153,7 +153,7 @@ serve(async (req) => {
       batches.push(software.slice(i, i + BATCH_SIZE))
     }
 
-    // Process all batches from this run's slice (should be exactly 1 batch = 15 items)
+    // Process all batches from this run's slice (should be exactly 1 batch = 25 items)
     console.log(`🔄 Processing ${batches.length} batch(es) of ${BATCH_SIZE} items each`)
 
     const allFlags: AuditFlag[] = []
