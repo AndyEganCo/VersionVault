@@ -132,15 +132,23 @@ serve(async (req) => {
 
     console.log(`📋 Auditing ${software.length} software items...`)
 
-    // Process in batches to avoid GPT-5 timeout (max 15 items per batch)
-    // Lower batch size for faster web search completion
+    // Process in small batches to stay within Supabase timeout limits
+    // Strategy: Process only 2-3 batches per run, continue in next scheduled run
     const BATCH_SIZE = 15
+    const MAX_BATCHES_PER_RUN = 2 // Process only 2 batches per run (~3 minutes)
     const batches: SoftwareItem[][] = []
     for (let i = 0; i < software.length; i += BATCH_SIZE) {
       batches.push(software.slice(i, i + BATCH_SIZE))
     }
 
-    console.log(`🔄 Processing ${batches.length} batch(es) of up to ${BATCH_SIZE} items each`)
+    // Limit to MAX_BATCHES_PER_RUN to stay within timeout
+    const batchesToProcess = batches.slice(0, MAX_BATCHES_PER_RUN)
+    const totalBatches = batches.length
+
+    console.log(`🔄 Processing ${batchesToProcess.length} of ${totalBatches} batch(es) (max ${MAX_BATCHES_PER_RUN} per run)`)
+    if (batchesToProcess.length < totalBatches) {
+      console.log(`⏰ Remaining ${totalBatches - batchesToProcess.length} batch(es) will be processed in next run`)
+    }
 
     const allFlags: AuditFlag[] = []
     let totalApiTime = 0
@@ -149,12 +157,12 @@ serve(async (req) => {
     // Using GPT-5 with agentic search for real-time version verification
     const chatGPTModel = 'gpt-5'
 
-    // Process each batch
-    for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
-      const batch = batches[batchIndex]
+    // Process each batch (limited to MAX_BATCHES_PER_RUN)
+    for (let batchIndex = 0; batchIndex < batchesToProcess.length; batchIndex++) {
+      const batch = batchesToProcess[batchIndex]
       const batchNum = batchIndex + 1
 
-      console.log(`\n🔍 Batch ${batchNum}/${batches.length}: Auditing ${batch.length} items with web search...`)
+      console.log(`\n🔍 Batch ${batchNum}/${totalBatches}: Auditing ${batch.length} items with web search...`)
 
       // Prepare data for audit
       const softwareList = batch
@@ -270,9 +278,14 @@ If all software is up to date or you cannot verify, return: {"outdated": [], "su
       allFlags.push(...parsedResponse.outdated)
     } // End of batch loop
 
-    console.log(`\n✅ All batches complete!`)
+    console.log(`\n✅ Batch processing complete!`)
+    console.log(`   Processed: ${batchesToProcess.length} of ${totalBatches} batches`)
+    console.log(`   Items audited: ${batchesToProcess.length * BATCH_SIZE} of ${software.length}`)
     console.log(`   Total API time: ${totalApiTime}ms`)
     console.log(`   Total flagged: ${allFlags.length} potentially outdated software`)
+    if (batchesToProcess.length < totalBatches) {
+      console.log(`   ⏰ ${totalBatches - batchesToProcess.length} batches remaining for next run`)
+    }
 
     // Create audit run record
     const auditRunId = crypto.randomUUID()
@@ -381,7 +394,7 @@ If all software is up to date or you cannot verify, return: {"outdated": [], "su
       console.warn('⚠️ No admins found in admin_users table - skipping email notification')
     } else {
       console.log(`📧 Found ${admins.length} admin(s) to notify`)
-      const summary = `Found ${allFlags.length} potentially outdated software across ${batches.length} audit batch(es).`
+      const summary = `Found ${allFlags.length} potentially outdated software (audited ${batchesToProcess.length * BATCH_SIZE} of ${software.length} items this run).`
       const { subject, html, text } = generateEmailContent({
         flaggedSoftware,
         totalAudited: software.length,
@@ -427,19 +440,26 @@ If all software is up to date or you cannot verify, return: {"outdated": [], "su
     }
 
     console.log(`\n✅ Version audit complete!`)
-    console.log(`   Audited: ${software.length} software items`)
+    console.log(`   Items audited: ${batchesToProcess.length * BATCH_SIZE} of ${software.length}`)
     console.log(`   Flagged: ${flags.length} potentially outdated`)
-    console.log(`   Batches processed: ${batches.length}`)
+    console.log(`   Batches processed: ${batchesToProcess.length} of ${totalBatches}`)
     console.log(`   Execution time: ${executionTime}ms`)
 
-    const finalSummary = `Found ${flags.length} potentially outdated software across ${batches.length} audit batch(es).`
+    const itemsAudited = batchesToProcess.length * BATCH_SIZE
+    const isPartialRun = batchesToProcess.length < totalBatches
+    const finalSummary = isPartialRun
+      ? `Partial audit: Found ${flags.length} outdated (audited ${itemsAudited}/${software.length} items). Next run will continue.`
+      : `Complete audit: Found ${flags.length} potentially outdated software.`
 
     return new Response(
       JSON.stringify({
-        message: 'Version audit complete',
-        audited: software.length,
+        message: isPartialRun ? 'Partial version audit complete' : 'Version audit complete',
+        audited: itemsAudited,
+        total_software: software.length,
         flagged: flags.length,
-        batches: batches.length,
+        batches_processed: batchesToProcess.length,
+        batches_total: totalBatches,
+        is_partial: isPartialRun,
         summary: finalSummary,
         execution_time_ms: executionTime,
       }),
