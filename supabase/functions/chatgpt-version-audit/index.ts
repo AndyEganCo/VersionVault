@@ -132,8 +132,9 @@ serve(async (req) => {
 
     console.log(`📋 Auditing ${software.length} software items...`)
 
-    // Process in batches to avoid GPT-5 timeout (max 30 items per batch)
-    const BATCH_SIZE = 30
+    // Process in batches to avoid GPT-5 timeout (max 15 items per batch)
+    // Lower batch size for faster web search completion
+    const BATCH_SIZE = 15
     const batches: SoftwareItem[][] = []
     for (let i = 0; i < software.length; i += BATCH_SIZE) {
       batches.push(software.slice(i, i + BATCH_SIZE))
@@ -204,7 +205,7 @@ If all software is up to date or you cannot verify, return: {"outdated": [], "su
           },
           body: JSON.stringify({
             model: chatGPTModel,
-            reasoning: { effort: 'medium' }, // Agentic search
+            reasoning: { effort: 'low' }, // Low effort for faster searches (was 'medium')
             tools: [{
               type: 'web_search',
               // No domain filtering - allow searching any official software sites
