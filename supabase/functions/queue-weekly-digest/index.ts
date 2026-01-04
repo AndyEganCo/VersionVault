@@ -339,8 +339,8 @@ serve(async (req) => {
         const today = new Date().toISOString().split('T')[0]
         const idempotencyKey = `${sub.user_id}-${frequency}_digest-${today}`
 
-        // Calculate scheduled time (8am in user's timezone tomorrow)
-        const scheduledFor = calculateScheduledTime(sub.timezone || 'America/New_York', 8)
+        // Calculate scheduled time (8am in user's timezone - next occurrence)
+        const scheduledFor = calculateScheduledTime(sub.timezone || 'America/New_York', 8, frequency)
 
         // Determine email type and payload
         const emailType = hasUpdates ? `${frequency}_digest` : 'all_quiet'
@@ -456,52 +456,119 @@ function isNewerVersion(newVersion: string, currentVersion: string): boolean {
 }
 
 // Helper: Calculate scheduled time for 8am in user's timezone
-function calculateScheduledTime(timezone: string, hour: number): Date {
-  const now = new Date()
-
-  // Get tomorrow's date
-  const tomorrow = new Date(now)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-
-  // Set to target hour in UTC, then adjust for timezone
-  // This is a simplified approach - for production, use a proper timezone library
+// Returns the next occurrence based on frequency:
+// - daily: next 8 AM (today if before 8 AM, tomorrow if after)
+// - weekly: next Monday at 8 AM
+// - monthly: next 1st of month at 8 AM
+function calculateScheduledTime(timezone: string, hour: number, frequency: string): Date {
   try {
-    // Create a date string for tomorrow at the target hour
-    const year = tomorrow.getFullYear()
-    const month = String(tomorrow.getMonth() + 1).padStart(2, '0')
-    const day = String(tomorrow.getDate()).padStart(2, '0')
+    const now = new Date()
 
-    // Parse timezone offset (simplified - assumes IANA timezone names)
-    // For production, use a proper library like date-fns-tz
-    const targetDate = new Date(`${year}-${month}-${day}T${String(hour).padStart(2, '0')}:00:00`)
-
-    // Get the timezone offset for the target timezone
+    // Get current time components in user's timezone
     const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
-      timeZoneName: 'shortOffset',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
     })
-    const parts = formatter.formatToParts(targetDate)
-    const offsetPart = parts.find(p => p.type === 'timeZoneName')
 
-    if (offsetPart) {
-      // Parse offset like "GMT-5" or "GMT+5:30"
-      const match = offsetPart.value.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/)
-      if (match) {
-        const sign = match[1] === '+' ? 1 : -1
-        const hours = parseInt(match[2], 10)
-        const minutes = parseInt(match[3] || '0', 10)
-        const offsetMinutes = sign * (hours * 60 + minutes)
+    const parts = formatter.formatToParts(now)
+    const getValue = (type: string) => parts.find(p => p.type === type)?.value || '0'
 
-        // Adjust to UTC
-        targetDate.setMinutes(targetDate.getMinutes() - offsetMinutes)
+    const userNow = {
+      year: parseInt(getValue('year')),
+      month: parseInt(getValue('month')),
+      day: parseInt(getValue('day')),
+      hour: parseInt(getValue('hour')),
+    }
+
+    // Start with today in user's timezone
+    let targetDate = new Date(Date.UTC(userNow.year, userNow.month - 1, userNow.day))
+
+    // Calculate target date based on frequency
+    if (frequency === 'daily') {
+      // If current hour >= target hour, move to tomorrow
+      if (userNow.hour >= hour) {
+        targetDate.setUTCDate(targetDate.getUTCDate() + 1)
+      }
+    } else if (frequency === 'weekly') {
+      // Find next Monday
+      const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        weekday: 'short',
+      })
+      const dayOfWeek = weekdayFormatter.format(now)
+      const dayNum = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[dayOfWeek] || 0
+
+      let daysToAdd = 0
+      if (dayNum === 1) {
+        // It's Monday
+        if (userNow.hour >= hour) {
+          daysToAdd = 7 // Past target hour, schedule for next Monday
+        } else {
+          daysToAdd = 0 // Before target hour, schedule for today
+        }
+      } else if (dayNum === 0) {
+        // Sunday
+        daysToAdd = 1
+      } else {
+        // Tuesday-Saturday: days until next Monday
+        daysToAdd = (8 - dayNum) % 7
+      }
+
+      targetDate.setUTCDate(targetDate.getUTCDate() + daysToAdd)
+    } else if (frequency === 'monthly') {
+      // Find next 1st of month
+      if (userNow.day === 1 && userNow.hour < hour) {
+        // It's the 1st and before target hour - keep current date
+      } else {
+        // Schedule for 1st of next month
+        targetDate = new Date(Date.UTC(userNow.year, userNow.month, 1))
       }
     }
 
-    return targetDate
-  } catch {
-    // Fallback: return tomorrow at 8am UTC
-    const fallback = new Date(tomorrow)
-    fallback.setUTCHours(hour, 0, 0, 0)
+    // Build target time string in local timezone
+    const targetYear = targetDate.getUTCFullYear()
+    const targetMonth = targetDate.getUTCMonth() + 1
+    const targetDay = targetDate.getUTCDate()
+    const localTimeStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}T${String(hour).padStart(2, '0')}:00:00`
+
+    // Get timezone offset at target date
+    const testDate = new Date(`${localTimeStr}Z`)
+    const offsetFormatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'shortOffset',
+    })
+    const offsetParts = offsetFormatter.formatToParts(testDate)
+    const offsetPart = offsetParts.find(p => p.type === 'timeZoneName')?.value || ''
+
+    const offsetMatch = offsetPart.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/)
+    if (offsetMatch) {
+      const sign = offsetMatch[1] === '+' ? 1 : -1
+      const offsetHours = parseInt(offsetMatch[2], 10)
+      const offsetMins = parseInt(offsetMatch[3] || '0', 10)
+      const totalOffsetMins = sign * (offsetHours * 60 + offsetMins)
+
+      // Convert local time to UTC by subtracting offset
+      // Example: 08:00 GMT+5 = 03:00 UTC
+      // Example: 08:00 GMT-5 = 13:00 UTC
+      const utcDate = new Date(`${localTimeStr}Z`)
+      utcDate.setMinutes(utcDate.getMinutes() - totalOffsetMins)
+
+      console.log(`📅 Scheduled for ${timezone}: ${localTimeStr} (local) = ${utcDate.toISOString()} (UTC)`)
+      return utcDate
+    }
+
+    // Fallback: interpret as UTC
+    return new Date(`${localTimeStr}Z`)
+  } catch (error) {
+    console.error('Error calculating scheduled time:', error)
+    // Fallback: 8 hours from now
+    const fallback = new Date()
+    fallback.setHours(fallback.getHours() + 8)
     return fallback
   }
 }
