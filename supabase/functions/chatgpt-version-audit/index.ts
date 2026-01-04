@@ -193,7 +193,7 @@ Respond with valid JSON in this exact format:
 {
   "outdated": [
     {
-      "software_name": "exact name from input",
+      "software_name": "Software Name Only",
       "current_version": "version from input",
       "suggested_version": "latest version found via web search",
       "confidence": "high",
@@ -202,6 +202,11 @@ Respond with valid JSON in this exact format:
   ],
   "summary": "brief summary"
 }
+
+IMPORTANT:
+- In "software_name", include ONLY the software name (e.g., "WATCHOUT"), NOT the version number
+- The format is "Software Name Only" without any version numbers or colons
+- Example: Use "WATCHOUT" not "WATCHOUT: 7.6"
 
 If all software is up to date or you cannot verify, return: {"outdated": [], "summary": "All software appears up to date or could not be verified."}`
 
@@ -380,16 +385,31 @@ If all software is up to date or you cannot verify, return: {"outdated": [], "su
     // Send admin notification email
     console.log('📧 Sending admin notification...')
 
-    // Get all admins
+    // Get all admins - query admin_users and fetch emails from auth
     console.log('📧 Fetching admin users for notification...')
-    const { data: admins, error: adminsError } = await supabase
+    const { data: adminUsers, error: adminUsersError } = await supabase
       .from('admin_users')
-      .select(`
-        user_id,
-        users:user_id (
-          email
-        )
-      `)
+      .select('user_id')
+
+    if (adminUsersError) {
+      console.error('❌ Error fetching admin users:', adminUsersError)
+    }
+
+    const adminUserIds = adminUsers?.map(a => a.user_id) || []
+
+    // Fetch emails from auth.users
+    const admins: { user_id: string; email: string }[] = []
+    for (const userId of adminUserIds) {
+      const { data: userData } = await supabase.auth.admin.getUserById(userId)
+      if (userData?.user?.email) {
+        admins.push({
+          user_id: userId,
+          email: userData.user.email
+        })
+      }
+    }
+
+    const adminsError = admins.length === 0 && adminUserIds.length > 0 ? new Error('No emails found') : null
 
     if (adminsError) {
       console.error('❌ Error fetching admins:', adminsError)
@@ -407,7 +427,7 @@ If all software is up to date or you cannot verify, return: {"outdated": [], "su
       let sentCount = 0
 
       for (const admin of admins) {
-        const userEmail = (admin.users as any)?.email
+        const userEmail = admin.email
         if (!userEmail) continue
 
         try {
