@@ -144,8 +144,8 @@ serve(async (req) => {
     const allFlags: AuditFlag[] = []
     let totalApiTime = 0
 
-    // Call ChatGPT API with latest model
-    // Using GPT-5 for most up-to-date knowledge (2025+ cutoff)
+    // Call OpenAI Responses API with web search (same as release notes extraction)
+    // Using GPT-5 with agentic search for real-time version verification
     const chatGPTModel = 'gpt-5'
 
     // Process each batch
@@ -153,121 +153,102 @@ serve(async (req) => {
       const batch = batches[batchIndex]
       const batchNum = batchIndex + 1
 
-      console.log(`\n🔍 Batch ${batchNum}/${batches.length}: Auditing ${batch.length} items...`)
+      console.log(`\n🔍 Batch ${batchNum}/${batches.length}: Auditing ${batch.length} items with web search...`)
 
-      // Prepare data for ChatGPT
+      // Prepare data for audit
       const softwareList = batch
         .map((s: SoftwareItem) => `- ${s.name}: ${s.current_version || 'No version tracked'}`)
         .join('\n')
 
-    // Build API request based on model type
-    // o1 models: single user message, no system/temperature/response_format
-    // gpt-5 models: system messages supported, but temperature must be default (1)
-    // Standard models (gpt-4o, gpt-4.5): full parameter support
-    const isO1Model = chatGPTModel.startsWith('o1')
-    const isGPT5Model = chatGPTModel.startsWith('gpt-5')
+      const prompt = `Today's date is ${new Date().toISOString().split('T')[0]}.
 
-    const systemPrompt = `You are a software version tracking assistant. Your job is to identify if any software versions are outdated based on your knowledge.
+Search the web to verify if any of these software versions are outdated:
 
-CRITICAL: Only flag software if you are reasonably confident. Do not guess or hallucinate versions. If a version is already current or very recent, DO NOT flag it.
+${softwareList}
 
-For each outdated software, provide:
-1. The software name (must match exactly from the input)
-2. The latest version you know about
-3. Confidence level (high/medium/low) based on:
-   - high: Recent knowledge (within 6 months), certain this version exists
-   - medium: Somewhat recent knowledge, likely accurate
-   - low: Older knowledge, may need verification
-4. Brief reasoning (one sentence)
+For each software, search their official website for the current version number.
 
-Respond ONLY with valid JSON in this exact format:
+CRITICAL RULES:
+- ONLY flag software if you find definitive proof on the official website that a newer version exists
+- Do NOT flag based on your training data alone - you MUST verify via web search
+- If you cannot find version information, DO NOT flag it
+- Cite the source URL where you found the version
+
+Respond with valid JSON in this exact format:
 {
   "outdated": [
     {
       "software_name": "exact name from input",
       "current_version": "version from input",
-      "suggested_version": "latest version you know",
-      "confidence": "high|medium|low",
-      "reasoning": "brief explanation"
+      "suggested_version": "latest version found via web search",
+      "confidence": "high",
+      "reasoning": "Found on [URL]"
     }
   ],
-  "summary": "brief summary of findings"
+  "summary": "brief summary"
 }
 
-If no software is outdated, return: {"outdated": [], "summary": "All software appears up to date based on available knowledge."}`
+If all software is up to date or you cannot verify, return: {"outdated": [], "summary": "All software appears up to date or could not be verified."}`
 
-    const userPrompt = `Today's date is ${new Date().toISOString().split('T')[0]}.
+      const apiCallStart = Date.now()
+      let content: string
+      let sources: string[] = []
 
-Check if any of these software versions are outdated:
+      try {
+        // Use Responses API with web_search tool (same as ai-utils.ts)
+        const response = await fetch('https://api.openai.com/v1/responses', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${openaiApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: chatGPTModel,
+            reasoning: { effort: 'medium' }, // Agentic search
+            tools: [{
+              type: 'web_search',
+              // No domain filtering - allow searching any official software sites
+            }],
+            tool_choice: 'auto',
+            include: ['web_search_call.action.sources'],
+            input: prompt,
+          }),
+        })
 
-${softwareList}`
+        const apiCallDuration = Date.now() - apiCallStart
+        console.log(`⏱️  API call took ${apiCallDuration}ms`)
 
-    const requestBody: any = {
-      model: chatGPTModel,
-      messages: isO1Model
-        ? [{ role: 'user', content: `${systemPrompt}\n\n${userPrompt}` }]
-        : [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ]
-    }
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error(`❌ Batch ${batchNum} API error:`, response.status, errorText)
+          continue // Skip this batch
+        }
 
-    // Add parameters based on model capabilities
-    if (!isO1Model && !isGPT5Model) {
-      // Only older models (gpt-4o, gpt-4-turbo) support custom temperature
-      requestBody.temperature = 0.1
-    }
+        const result = await response.json()
 
-    if (!isO1Model) {
-      // Both GPT-5 and older models support JSON mode
-      requestBody.response_format = { type: 'json_object' }
-    }
+        // Extract sources from web_search_call items
+        const webSearchCalls = result.output?.filter((item: any) => item.type === 'web_search_call') || []
+        for (const call of webSearchCalls) {
+          if (call.action?.sources) {
+            sources.push(...call.action.sources.map((s: any) => s.url || s))
+          }
+        }
 
-    // GPT-5 can take longer to respond - set generous timeout (3 minutes)
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 180000) // 3 minutes
+        // Get the text output
+        const messageItems = result.output?.filter((item: any) => item.type === 'message') || []
+        content = messageItems[0]?.content?.find((c: any) => c.type === 'output_text')?.text || ''
 
-    const apiCallStart = Date.now()
-    let content: string
+        if (!content) {
+          console.error(`❌ Batch ${batchNum} - No text content in response`)
+          continue
+        }
 
-    try {
-      const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openaiApiKey}`,
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeoutId)
-      const apiCallDuration = Date.now() - apiCallStart
-      console.log(`⏱️  API call took ${apiCallDuration}ms`)
-
-      if (!chatResponse.ok) {
-        const errorText = await chatResponse.text()
-        throw new Error(`ChatGPT API error: ${chatResponse.status} ${errorText}`)
-      }
-
-      const chatData = await chatResponse.json()
-      content = chatData.choices[0]?.message?.content
-
-      if (!content) {
-        throw new Error('No response from ChatGPT')
-      }
-
-      console.log('✅ ChatGPT response received')
-      totalApiTime += apiCallDuration
-    } catch (error) {
-      clearTimeout(timeoutId)
-      if (error.name === 'AbortError') {
-        console.error(`❌ Batch ${batchNum} timeout after 3 minutes`)
-        // Continue to next batch instead of failing completely
+        console.log(`✅ Batch ${batchNum} - Web search completed (${webSearchCalls.length} searches, ${sources.length} sources)`)
+        totalApiTime += apiCallDuration
+      } catch (error) {
+        console.error(`❌ Batch ${batchNum} - Error:`, error.message)
         continue
       }
-      throw error
-    }
 
       // Parse response
       let parsedResponse: ChatGPTResponse
@@ -275,13 +256,13 @@ ${softwareList}`
         parsedResponse = JSON.parse(content)
       } catch (e) {
         console.error(`❌ Batch ${batchNum} - Failed to parse response:`, content)
-        // Continue to next batch
         continue
       }
 
       console.log(`🎯 Batch ${batchNum}: Found ${parsedResponse.outdated.length} outdated items`)
       if (parsedResponse.outdated.length > 0) {
         console.log(`📝 Summary: ${parsedResponse.summary}`)
+        console.log(`📚 Sources consulted: ${sources.slice(0, 5).join(', ')}${sources.length > 5 ? '...' : ''}`)
       }
 
       // Add to overall results
