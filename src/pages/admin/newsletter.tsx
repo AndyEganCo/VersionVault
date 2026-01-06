@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/auth-context';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
@@ -124,6 +125,7 @@ const defaultSponsorForm: SponsorFormData = {
 
 export function AdminNewsletter() {
   const { user, isAdmin } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [queueSummary, setQueueSummary] = useState<QueueSummary>({
     pending: 0,
@@ -762,10 +764,16 @@ export function AdminNewsletter() {
 
   return (
     <PageLayout>
-      <PageHeader
-        title="Newsletter Management"
-        description="Manage email digests, queue, and analytics"
-      />
+      <div className="flex items-center justify-between mb-6">
+        <PageHeader
+          title="Newsletter Management"
+          description="Manage email digests, queue, and analytics"
+        />
+        <Button onClick={() => navigate('/admin/newsletter/compose')}>
+          <Pencil className="h-4 w-4 mr-2" />
+          Compose Newsletter
+        </Button>
+      </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
