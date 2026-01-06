@@ -40,7 +40,7 @@ export function Home() {
     <>
       <Helmet>
         <title>VersionVault - Never Miss a Software Update Again</title>
-        <meta name="description" content="Track 400+ software applications and receive automatic email notifications when new versions are released. Free software version tracking with AI-powered monitoring from official sources." />
+        <meta name="description" content="Track 400+ apps and get email alerts when new versions release. Free AI-powered software version tracking. Never miss updates again." />
         <link rel="canonical" href="https://versionvault.dev/" />
 
         {/* Open Graph */}

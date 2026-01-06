@@ -6,7 +6,7 @@ export function Login() {
   return (
     <>
       <Helmet>
-        <title>Sign In - VersionVault</title>
+        <title>Sign In to VersionVault - Track Software Updates</title>
         <meta name="description" content="Sign in to your VersionVault account to track software updates and manage your notifications." />
         <link rel="canonical" href="https://versionvault.dev/login" />
         <meta name="robots" content="noindex, nofollow" />

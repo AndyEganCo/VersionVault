@@ -215,7 +215,7 @@ export function Software() {
     <PageLayout>
       <Helmet>
         <title>Software Catalog - Track 400+ Applications | VersionVault</title>
-        <meta name="description" content="Browse our catalog of 400+ software applications including development tools, creative software, and business apps. Track version updates and get notified instantly." />
+        <meta name="description" content="Browse 400+ software apps including dev tools, creative software, and business apps. Track updates and get instant email notifications." />
         <link rel="canonical" href="https://versionvault.dev/software" />
 
         {/* Open Graph */}
