@@ -231,6 +231,9 @@ export function Home() {
           </div>
         </div>
 
+        {/* Ad Banner */}
+        <AdBanner />
+
         {/* Software Browse Section */}
         {!softwareLoading && software.length > 0 && (
           <div className="space-y-6">
@@ -328,9 +331,6 @@ export function Home() {
             software={selectedSoftware}
           />
         )}
-
-        {/* Ad at bottom of page */}
-        <AdBanner />
       </div>
     </div>
   );
