@@ -207,10 +207,6 @@ export function Software() {
     setSearchParams(searchParams);
   };
 
-  if (loading) {
-    return <LoadingPage />;
-  }
-
   return (
     <PageLayout>
       <Helmet>
