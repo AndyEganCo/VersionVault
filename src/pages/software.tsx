@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { SoftwareCard } from '@/components/software/software-card';
 import { SoftwareFilters } from '@/components/software/software-filters';
 import { useAuth } from '@/contexts/auth-context';
@@ -14,6 +15,7 @@ import { RequestSoftwareModal } from '@/components/software/request-software-mod
 import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
+import { AdBanner } from '@/components/dashboard/ad-banner';
 import type { Software as SoftwareType } from '@/lib/software/types';
 
 export function Software() {
@@ -211,11 +213,31 @@ export function Software() {
 
   return (
     <PageLayout>
-      <PageHeader 
+      <Helmet>
+        <title>Software Catalog - Track 400+ Applications | VersionVault</title>
+        <meta name="description" content="Browse our catalog of 400+ software applications including development tools, creative software, and business apps. Track version updates and get notified instantly." />
+        <link rel="canonical" href="https://versionvault.dev/software" />
+
+        {/* Open Graph */}
+        <meta property="og:title" content="Software Catalog - Track 400+ Applications | VersionVault" />
+        <meta property="og:description" content="Browse and track 400+ software applications. Get instant notifications when new versions are released." />
+        <meta property="og:url" content="https://versionvault.dev/software" />
+        <meta property="og:type" content="website" />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content="Software Catalog - Track 400+ Applications" />
+        <meta name="twitter:description" content="Browse and track 400+ software applications with VersionVault." />
+      </Helmet>
+
+      <PageHeader
         title="Software"
         description="Browse and track software updates"
       />
       <div className="space-y-6">
+        {/* Ad Banner */}
+        <AdBanner />
+
         <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
           <h1 className="text-2xl font-bold">Software Updates</h1>
           <div className="flex items-center gap-2">

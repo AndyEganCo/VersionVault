@@ -57,6 +57,7 @@
     "react-dom": "^18.2.0",
     "react-email": "^5.0.5",
     "react-error-boundary": "^4.1.2",
+    "react-helmet-async": "^2.0.5",
     "react-hook-form": "^7.54.2",
     "react-markdown": "^9.1.0",
     "react-resizable-panels": "^2.1.7",
