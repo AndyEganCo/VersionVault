@@ -15,11 +15,13 @@ export function Signup() {
         <meta property="og:description" content="Create a free account and never miss a software update again." />
         <meta property="og:url" content="https://versionvault.dev/signup" />
         <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://versionvault.dev/favicon.svg" />
 
         {/* Twitter Card */}
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:title" content="Sign Up for VersionVault" />
         <meta name="twitter:description" content="Track 400+ software applications for free." />
+        <meta name="twitter:image" content="https://versionvault.dev/favicon.svg" />
       </Helmet>
 
       <div className="flex min-h-[400px] items-center justify-center">
