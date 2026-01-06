@@ -19,6 +19,7 @@ import { VerifyEmail } from '@/pages/verify-email';
 import { AuthCallback } from '@/pages/auth-callback';
 import { ForgotPassword } from '@/pages/forgot-password';
 import { ResetPassword } from '@/pages/reset-password';
+import { NotFound } from '@/pages/not-found';
 
 export function Routes() {
   return (
@@ -55,8 +56,8 @@ export function Routes() {
         </Route>
       </Route>
 
-      {/* Catch all */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* Catch all - 404 */}
+      <Route path="*" element={<NotFound />} />
     </RouterRoutes>
   );
 }

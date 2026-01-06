@@ -228,6 +228,32 @@ export function Software() {
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:title" content="Software Catalog - Track 400+ Applications" />
         <meta name="twitter:description" content="Browse and track 400+ software applications with VersionVault." />
+
+        {/* Structured Data - ItemList for Software Catalog */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "Software Applications Tracked by VersionVault",
+            "description": "Comprehensive catalog of software applications with version tracking",
+            "numberOfItems": software.length,
+            "itemListElement": sortedSoftware.slice(0, 10).map((item, index) => ({
+              "@type": "ListItem",
+              "position": index + 1,
+              "item": {
+                "@type": "SoftwareApplication",
+                "name": item.name,
+                "applicationCategory": item.category,
+                "softwareVersion": item.current_version || "Unknown",
+                "author": {
+                  "@type": "Organization",
+                  "name": item.manufacturer
+                },
+                "url": item.official_website
+              }
+            }))
+          })}
+        </script>
       </Helmet>
 
       <PageHeader

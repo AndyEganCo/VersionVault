@@ -54,6 +54,42 @@ export function Home() {
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="VersionVault - Never Miss a Software Update Again" />
         <meta name="twitter:description" content="Track 400+ software applications and get notified when new versions are released." />
+
+        {/* Structured Data - WebApplication */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "WebApplication",
+            "name": "VersionVault",
+            "description": "Track software versions and receive automatic email notifications when new versions are released",
+            "url": "https://versionvault.dev",
+            "applicationCategory": "BusinessApplication",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "featureList": [
+              "AI-powered version tracking",
+              "Email notifications",
+              "400+ software applications tracked",
+              "Customizable notification frequency"
+            ]
+          })}
+        </script>
+
+        {/* Structured Data - Organization */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "name": "VersionVault",
+            "url": "https://versionvault.dev",
+            "logo": "https://versionvault.dev/favicon.svg",
+            "description": "Software version tracking and update notification service",
+            "sameAs": []
+          })}
+        </script>
       </Helmet>
 
       <div className="flex flex-col px-4 py-8">
