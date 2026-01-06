@@ -24,4 +24,4 @@ User-agent: Mediapartners-Google
 Allow: /
 
 # Sitemap location
-Sitemap: https://YOUR_DOMAIN_HERE/sitemap.xml
+Sitemap: https://versionvault.dev/sitemap.xml
