@@ -1,18 +1,27 @@
 import { Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { AuthForm } from '@/components/auth/auth-form';
 
 export function Login() {
   return (
-    <div className="flex min-h-[400px] items-center justify-center">
-      <div className="mx-auto w-[350px] space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Welcome back
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Sign in to your account to continue
-          </p>
-        </div>
+    <>
+      <Helmet>
+        <title>Sign In - VersionVault</title>
+        <meta name="description" content="Sign in to your VersionVault account to track software updates and manage your notifications." />
+        <link rel="canonical" href="https://versionvault.dev/login" />
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
+
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="mx-auto w-[350px] space-y-6">
+          <div className="text-center">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Welcome back
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Sign in to your account to continue
+            </p>
+          </div>
         <AuthForm mode="signin" />
         <div className="space-y-4">
           <p className="text-center text-sm">
@@ -33,7 +42,8 @@ export function Login() {
             </Link>
           </p>
         </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

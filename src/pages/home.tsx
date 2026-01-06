@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { Navigate } from 'react-router-dom';
@@ -36,10 +37,29 @@ export function Home() {
   );
 
   return (
-    <div className="flex flex-col px-4 py-8">
-      <div className="mx-auto max-w-6xl w-full space-y-16">
-        {/* Hero Section */}
-        <div className="text-center space-y-6 pt-8">
+    <>
+      <Helmet>
+        <title>VersionVault - Never Miss a Software Update Again</title>
+        <meta name="description" content="Track 400+ software applications and receive automatic email notifications when new versions are released. Free software version tracking with AI-powered monitoring from official sources." />
+        <link rel="canonical" href="https://versionvault.dev/" />
+
+        {/* Open Graph */}
+        <meta property="og:title" content="VersionVault - Never Miss a Software Update Again" />
+        <meta property="og:description" content="Track 400+ software applications and receive automatic email notifications when new versions are released. Free software version tracking service." />
+        <meta property="og:url" content="https://versionvault.dev/" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="VersionVault" />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="VersionVault - Never Miss a Software Update Again" />
+        <meta name="twitter:description" content="Track 400+ software applications and get notified when new versions are released." />
+      </Helmet>
+
+      <div className="flex flex-col px-4 py-8">
+        <div className="mx-auto max-w-6xl w-full space-y-16">
+          {/* Hero Section */}
+          <div className="text-center space-y-6 pt-8">
           <div className="space-y-4">
             <h1 className="text-4xl font-bold tracking-tight sm:text-6xl bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               Never Miss a Software Update
@@ -331,7 +351,8 @@ export function Home() {
             software={selectedSoftware}
           />
         )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
