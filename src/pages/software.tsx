@@ -215,7 +215,7 @@ export function Software() {
     <PageLayout>
       <Helmet>
         <title>Software Catalog - Track 400+ Applications | VersionVault</title>
-        <meta name="description" content="Browse our catalog of 400+ software applications including development tools, creative software, and business apps. Track version updates and get notified instantly." />
+        <meta name="description" content="Browse 400+ software apps including dev tools, creative software, and business apps. Track updates and get instant email notifications." />
         <link rel="canonical" href="https://versionvault.dev/software" />
 
         {/* Open Graph */}
@@ -228,6 +228,32 @@ export function Software() {
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:title" content="Software Catalog - Track 400+ Applications" />
         <meta name="twitter:description" content="Browse and track 400+ software applications with VersionVault." />
+
+        {/* Structured Data - ItemList for Software Catalog */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "Software Applications Tracked by VersionVault",
+            "description": "Comprehensive catalog of software applications with version tracking",
+            "numberOfItems": software.length,
+            "itemListElement": sortedSoftware.slice(0, 10).map((item, index) => ({
+              "@type": "ListItem",
+              "position": index + 1,
+              "item": {
+                "@type": "SoftwareApplication",
+                "name": item.name,
+                "applicationCategory": item.category,
+                "softwareVersion": item.current_version || "Unknown",
+                "author": {
+                  "@type": "Organization",
+                  "name": item.manufacturer
+                },
+                "url": item.official_website
+              }
+            }))
+          })}
+        </script>
       </Helmet>
 
       <PageHeader
