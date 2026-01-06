@@ -223,11 +223,13 @@ export function Software() {
         <meta property="og:description" content="Browse and track 400+ software applications. Get instant notifications when new versions are released." />
         <meta property="og:url" content="https://versionvault.dev/software" />
         <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://versionvault.dev/favicon.svg" />
 
         {/* Twitter Card */}
         <meta name="twitter:card" content="summary" />
         <meta name="twitter:title" content="Software Catalog - Track 400+ Applications" />
         <meta name="twitter:description" content="Browse and track 400+ software applications with VersionVault." />
+        <meta name="twitter:image" content="https://versionvault.dev/favicon.svg" />
 
         {/* Structured Data - ItemList for Software Catalog */}
         <script type="application/ld+json">
@@ -249,7 +251,7 @@ export function Software() {
                   "@type": "Organization",
                   "name": item.manufacturer
                 },
-                "url": item.official_website
+                "url": item.website
               }
             }))
           })}

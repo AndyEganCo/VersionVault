@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { BetaBanner } from '@/components/beta-banner';
-import { ExternalLink, Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
+import { Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
 import type { Software } from '@/lib/software/types';
 import { formatDate } from '@/lib/date';
 
@@ -49,11 +49,13 @@ export function Home() {
         <meta property="og:url" content="https://versionvault.dev/" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="VersionVault" />
+        <meta property="og:image" content="https://versionvault.dev/favicon.svg" />
 
         {/* Twitter Card */}
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="VersionVault - Never Miss a Software Update Again" />
         <meta name="twitter:description" content="Track 400+ software applications and get notified when new versions are released." />
+        <meta name="twitter:image" content="https://versionvault.dev/favicon.svg" />
 
         {/* Structured Data - WebApplication */}
         <script type="application/ld+json">
@@ -101,7 +103,7 @@ export function Home() {
               Never Miss a Software Update
             </h1>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Track the software you care about and receive automatic email notifications when new versions are released.
+              <Link to="/software" className="text-primary hover:underline">Track the software</Link> you care about and receive automatic email notifications when new versions are released.
               Stay current without the constant checking.
             </p>
           </div>
@@ -113,6 +115,12 @@ export function Home() {
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6">
+              <Link to="/software">
+                <Search className="mr-2 h-5 w-5" />
+                Browse Software
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" size="lg" className="text-lg px-8 py-6">
               <Link to="/login">
                 Sign In
               </Link>
