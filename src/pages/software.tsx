@@ -251,7 +251,7 @@ export function Software() {
                   "@type": "Organization",
                   "name": item.manufacturer
                 },
-                "url": item.official_website
+                "url": item.website
               }
             }))
           })}

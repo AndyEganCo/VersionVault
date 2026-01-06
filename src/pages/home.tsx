@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { BetaBanner } from '@/components/beta-banner';
-import { ExternalLink, Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
+import { Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
 import type { Software } from '@/lib/software/types';
 import { formatDate } from '@/lib/date';
 
