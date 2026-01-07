@@ -19,9 +19,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { addVersionHistory, getVersionHistory, deleteVersionHistory } from '@/lib/software/api/api';
+import { addVersionHistory, getVersionHistory, deleteVersionHistory, setVersionAsCurrent } from '@/lib/software/api/api';
 import type { Software } from '@/lib/software/types';
-import { Plus, Upload, Link as LinkIcon, Loader2, Check, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Plus, Upload, Link as LinkIcon, Loader2, Check, X, ChevronDown, ChevronUp, Trash2, Star } from 'lucide-react';
 import { extractVersionsFromURL, extractVersionsFromPDF, type ExtractedVersion } from '@/lib/software/release-notes/extractor';
 import { parsePDFFile } from '@/lib/software/release-notes/pdf-parser';
 import { toast } from 'sonner';
@@ -62,6 +62,7 @@ export function ReleaseNotesDialog({
   const [newVersion, setNewVersion] = useState('');
   const [releaseDate, setReleaseDate] = useState(formatDateForInput(new Date().toISOString()));
   const [deleting, setDeleting] = useState(false);
+  const [settingCurrent, setSettingCurrent] = useState(false);
 
   // Calculate current version from version history (replaces software.current_version which was removed from DB)
   const currentVersionEntry = getCurrentVersionFromHistory(versionHistory, true);
@@ -261,6 +262,38 @@ export function ReleaseNotesDialog({
     }
   };
 
+  const handleSetAsCurrent = async () => {
+    // Determine the actual version to set as current
+    let versionToSet = selectedVersion;
+    if (selectedVersion === 'current') {
+      versionToSet = currentVersion || '';
+    }
+
+    // Find the version entry
+    const versionEntry = versionHistory.find(v => v.version === versionToSet);
+
+    if (!versionEntry) {
+      toast.error('Version not found');
+      return;
+    }
+
+    setSettingCurrent(true);
+    try {
+      const success = await setVersionAsCurrent(versionEntry.id, software.id);
+
+      if (success) {
+        // Reload version history to reflect the change
+        const history = await getVersionHistory(software.id);
+        setVersionHistory(history);
+
+        await onSuccess();
+      }
+    } catch (error) {
+      console.error('Error setting version as current:', error);
+    } finally {
+      setSettingCurrent(false);
+    }
+  };
 
   const handleExtractFromURL = async () => {
     if (!bulkImportUrl.trim()) {
@@ -469,6 +502,23 @@ export function ReleaseNotesDialog({
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                  {/* Show "Set as Current" button for non-current versions */}
+                  {selectedVersion !== 'new' && selectedVersion !== 'current' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={handleSetAsCurrent}
+                      disabled={settingCurrent}
+                      title="Set this version as current (manual override)"
+                    >
+                      {settingCurrent ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Star className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
                   {/* Show delete button for all existing versions */}
                   {selectedVersion !== 'new' && (
                     <Button
