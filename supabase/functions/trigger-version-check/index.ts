@@ -1,7 +1,7 @@
 // Supabase Edge Function for automated version checking
 // Triggered by cron jobs to check all software versions overnight
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.9'
 import { extractWithWebSearch, smartMergeNotes, getAIConfig } from '../_shared/ai-utils.ts'
 import { normalizeVersion } from '../_shared/version-utils.ts'
 
