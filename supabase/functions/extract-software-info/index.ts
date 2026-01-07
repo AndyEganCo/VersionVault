@@ -363,7 +363,9 @@ async function fetchWebpageContent(
     const isKnownDifficult = urlObj.hostname.includes('adobe.com') ||
                             urlObj.hostname.includes('helpx.adobe') ||
                             urlObj.hostname.includes('autodesk.com') ||
-                            urlObj.hostname.includes('apple.com')
+                            urlObj.hostname.includes('apple.com') ||
+                            urlObj.hostname.includes('pushpay.com') ||
+                            urlObj.hostname.includes('force.com') // Salesforce Community pages
 
     if (isKnownDifficult) {
       console.warn('⚠️ Known difficult domain detected - using enhanced bot blocking protection')
@@ -1639,6 +1641,43 @@ serve(async (req) => {
         if (versionContent.length > 2000) {
           console.log(`✅ SUCCESS: Browserless extracted much more content!`)
         }
+
+        // LONG-TERM FIX: Detect loader/framework code patterns
+        // Common patterns in JavaScript frameworks that indicate page hasn't fully loaded
+        const loaderPatterns = [
+          /Loading.*Sorry to interrupt/i,
+          /Loading.*CSS Error/i,
+          /Please wait.*loading/i,
+          /<div id="root"><\/div>/i,
+          /<div id="app"><\/div>/i,
+          /cookieEnabled.*cookieMessage/i,
+          /slds-modal.*slds-fade-in-open/i, // Salesforce Lightning
+        ]
+
+        const hasLoaderCode = loaderPatterns.some(pattern => pattern.test(versionContent))
+        const hasMinimalActualContent = versionContent.replace(/<[^>]+>/g, '').trim().length < 500
+
+        if (hasLoaderCode && hasMinimalActualContent && fetchMethod === 'browserless') {
+          console.log(`⚠️ LOADER CODE DETECTED: Page returned framework/loader code instead of content`)
+          console.log(`🔄 Retrying with EXTENDED timeout (60s) for slow-loading page...`)
+
+          // Retry with extended Browserless timeout (60 seconds)
+          const extendedRetry = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy)
+          versionContent = extendedRetry.content
+          fetchMethod = extendedRetry.method
+
+          console.log(`\n=== AFTER EXTENDED BROWSERLESS ===`)
+          console.log(`Version content length: ${versionContent.length}`)
+          console.log(`Fetch method: ${fetchMethod}`)
+
+          // Check if we still have loader code
+          const stillHasLoaderCode = loaderPatterns.some(pattern => pattern.test(versionContent))
+          if (stillHasLoaderCode) {
+            console.warn(`⚠️ Still detecting loader code after extended timeout - page may require interactive scraping`)
+          } else {
+            console.log(`✅ SUCCESS: Extended timeout resolved loader code issue!`)
+          }
+        }
       }
     }
 
@@ -1700,7 +1739,9 @@ serve(async (req) => {
     const isKnownDifficultDomain = versionUrl && (
       versionUrl.includes('adobe.com') ||
       versionUrl.includes('apple.com') ||
-      versionUrl.includes('autodesk.com')
+      versionUrl.includes('autodesk.com') ||
+      versionUrl.includes('pushpay.com') ||
+      versionUrl.includes('force.com')
     )
 
     // Try sitemap discovery if webpage content is low and this is a webpage source
