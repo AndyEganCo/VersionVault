@@ -39,7 +39,6 @@ SELECT
   source_type,
   forum_config,
   scraping_strategy,
-  current_version,
   last_checked
 FROM software
 WHERE name ILIKE '%vmix%';
