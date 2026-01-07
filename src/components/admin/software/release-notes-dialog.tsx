@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { breakPhonePattern } from '@/lib/utils/version-display';
+import { getCurrentVersionFromHistory } from '@/lib/utils/version-utils';
 
 interface ReleaseNotesDialogProps {
   software: Software;
@@ -56,11 +57,15 @@ export function ReleaseNotesDialog({
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState<string>('');
   const [type, setType] = useState<'major' | 'minor' | 'patch'>('minor');
-  const [versionHistory, setVersionHistory] = useState<Array<{id: string, version: string, notes: any, type: string, release_date: string}>>([]);
+  const [versionHistory, setVersionHistory] = useState<Array<{id: string, version: string, notes: any, type: string, release_date: string, newsletter_verified?: boolean, is_current_override?: boolean, detected_at?: string}>>([]);
   const [selectedVersion, setSelectedVersion] = useState<string>('current');
   const [newVersion, setNewVersion] = useState('');
   const [releaseDate, setReleaseDate] = useState(formatDateForInput(new Date().toISOString()));
   const [deleting, setDeleting] = useState(false);
+
+  // Calculate current version from version history (replaces software.current_version which was removed from DB)
+  const currentVersionEntry = getCurrentVersionFromHistory(versionHistory, true);
+  const currentVersion = currentVersionEntry?.version || null;
 
   // Bulk import states
   const [bulkImportUrl, setBulkImportUrl] = useState('');
@@ -89,18 +94,20 @@ export function ReleaseNotesDialog({
         // Set selected version to current by default
         setSelectedVersion('current');
 
-        const currentVersionEntry = validHistory.find(
-          entry => entry.version === software.current_version
+        // Calculate current version from history
+        const calculatedCurrentVersion = getCurrentVersionFromHistory(validHistory, true);
+        const currentVersionData = validHistory.find(
+          entry => entry.version === calculatedCurrentVersion?.version
         );
 
-        if (currentVersionEntry) {
-          setType(currentVersionEntry.type);
-          const noteText = Array.isArray(currentVersionEntry.notes)
-            ? currentVersionEntry.notes.join('\n')
-            : (currentVersionEntry.notes || '');
+        if (currentVersionData) {
+          setType(currentVersionData.type);
+          const noteText = Array.isArray(currentVersionData.notes)
+            ? currentVersionData.notes.join('\n')
+            : (currentVersionData.notes || '');
           setNotes(noteText);
-          if (currentVersionEntry.release_date) {
-            setReleaseDate(formatDateForInput(currentVersionEntry.release_date));
+          if (currentVersionData.release_date) {
+            setReleaseDate(formatDateForInput(currentVersionData.release_date));
           }
         } else {
           setType('minor');
@@ -111,7 +118,7 @@ export function ReleaseNotesDialog({
       }
     }
     loadVersionHistory();
-  }, [open, software.id, software.current_version]);
+  }, [open, software.id]); // Removed software.current_version dependency as it no longer exists
 
   const handleVersionChange = (value: string) => {
     setSelectedVersion(value);
@@ -123,19 +130,20 @@ export function ReleaseNotesDialog({
       setReleaseDate(formatDateForInput(new Date().toISOString()));
       setNewVersion('');
     } else if (value === 'current') {
-      // Load current version data
-      const currentVersionEntry = versionHistory.find(
-        entry => entry.version === software.current_version
+      // Load current version data - calculate from history
+      const calculatedCurrentVersion = getCurrentVersionFromHistory(versionHistory, true);
+      const currentVersionData = versionHistory.find(
+        entry => entry.version === calculatedCurrentVersion?.version
       );
 
-      if (currentVersionEntry) {
-        setType(currentVersionEntry.type as 'major' | 'minor' | 'patch');
-        const noteText = Array.isArray(currentVersionEntry.notes)
-          ? currentVersionEntry.notes.join('\n')
-          : (currentVersionEntry.notes || '');
+      if (currentVersionData) {
+        setType(currentVersionData.type as 'major' | 'minor' | 'patch');
+        const noteText = Array.isArray(currentVersionData.notes)
+          ? currentVersionData.notes.join('\n')
+          : (currentVersionData.notes || '');
         setNotes(noteText);
-        if (currentVersionEntry.release_date) {
-          setReleaseDate(formatDateForInput(currentVersionEntry.release_date));
+        if (currentVersionData.release_date) {
+          setReleaseDate(formatDateForInput(currentVersionData.release_date));
         }
       }
     } else {
@@ -167,7 +175,8 @@ export function ReleaseNotesDialog({
       if (selectedVersion === 'new') {
         versionToSave = newVersion;
       } else if (selectedVersion === 'current') {
-        versionToSave = software.current_version || '';
+        // Calculate current version from history
+        versionToSave = currentVersion || '';
       } else {
         versionToSave = selectedVersion;
       }
@@ -195,7 +204,8 @@ export function ReleaseNotesDialog({
     // Determine the actual version to delete (convert 'current' to actual version number)
     let versionToDelete = selectedVersion;
     if (selectedVersion === 'current') {
-      versionToDelete = software.current_version || '';
+      // Calculate current version from history
+      versionToDelete = currentVersion || '';
     }
 
     // Find the version entry to delete
@@ -432,13 +442,13 @@ export function ReleaseNotesDialog({
                     </SelectTrigger>
                     <SelectContent>
                       {/* Only show "current" option if current version exists in history */}
-                      {versionHistory.some(v => v.version === software.current_version) && (
+                      {currentVersion && versionHistory.some(v => v.version === currentVersion) && (
                         <SelectItem value="current">
-                          {breakPhonePattern(software.current_version || 'Current Version')} (Current)
+                          {breakPhonePattern(currentVersion)} (Current)
                         </SelectItem>
                       )}
                       {versionHistory
-                        .filter(v => v.version !== software.current_version)
+                        .filter(v => v.version !== currentVersion)
                         // Remove duplicates by version number (keep first occurrence)
                         .filter((v, index, self) =>
                           index === self.findIndex(t => t.version === v.version)
