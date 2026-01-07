@@ -278,12 +278,12 @@ export async function addVersionHistory(softwareId: string, data: {
       last_checked: new Date().toISOString()
     };
 
-    const { error: softwareError } = await supabase
+    const { error: updateError } = await supabase
       .from('software')
       .update(softwareUpdateData)
       .eq('id', softwareId);
 
-    if (softwareError) throw softwareError;
+    if (updateError) throw updateError;
 
     return true;
   } catch (error) {
