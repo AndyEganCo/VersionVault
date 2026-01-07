@@ -302,8 +302,24 @@ export async function getVersionHistory(softwareId: string) {
 
     if (error) throw error;
 
-    // Sort by version number (highest first) instead of date
+    // Sort by version number (highest first) using semantic versioning
     const sorted = (data || []).sort((a, b) => compareVersions(b.version, a.version));
+
+    // Check if all versions are semantically equal (e.g., name-based versions like "Config 2025")
+    // If so, fall back to date-based sorting to match getCurrentVersionFromHistory() logic
+    const allVersionsSame = sorted.every((entry, index) => {
+      if (index === 0) return true;
+      return compareVersions(sorted[0].version, entry.version) === 0;
+    });
+
+    // If semantic versioning didn't differentiate, fall back to date sorting
+    if (allVersionsSame && sorted.length > 1) {
+      return sorted.sort((a, b) => {
+        const dateA = a.release_date || a.detected_at || '1970-01-01';
+        const dateB = b.release_date || b.detected_at || '1970-01-01';
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+      });
+    }
 
     return sorted;
   });
