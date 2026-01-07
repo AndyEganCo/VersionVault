@@ -249,13 +249,13 @@ export function extractVersionWindows(
 export function extractSmartContent(
   fullContent: string,
   productName: string,
-  maxChars: number = 30000
+  maxChars: number = 60000  // Increased from 30000 to capture more versions on long changelog pages
 ): { content: string; foundProduct: boolean; method: string } {
   console.log(`\n🔍 Smart extraction for "${productName}" (${fullContent.length} total chars)`);
 
   // STRATEGY 1: Look for version patterns first (best for release notes pages)
   console.log('📍 Strategy 1: Searching for version patterns...');
-  const versionWindows = extractVersionWindows(fullContent, 5000, 5);
+  const versionWindows = extractVersionWindows(fullContent, 5000, 15);  // Increased from 5 to 15 windows to capture more versions
 
   if (versionWindows.length > 0) {
     // Found versions! Use those windows
@@ -271,7 +271,7 @@ export function extractSmartContent(
 
   // STRATEGY 2: Look for product name mentions (fallback)
   console.log('📍 Strategy 2: Searching for product mentions...');
-  const productWindows = extractContentWindows(fullContent, productName, 5000, 5);
+  const productWindows = extractContentWindows(fullContent, productName, 5000, 15);  // Increased from 5 to 15 windows
 
   if (productWindows.length > 0) {
     const optimized = createOptimizedContent(productWindows, maxChars);

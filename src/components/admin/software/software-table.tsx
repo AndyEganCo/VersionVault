@@ -126,7 +126,10 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
         software.name,
         software.website,
         software.version_website,
-        `Current version: ${software.current_version || 'unknown'}`
+        `Checking for latest version`,
+        software.source_type,
+        software.forum_config,
+        software.scraping_strategy
       );
 
       // Update software with last_checked timestamp

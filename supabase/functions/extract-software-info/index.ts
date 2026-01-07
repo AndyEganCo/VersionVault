@@ -1625,7 +1625,7 @@ serve(async (req) => {
         console.log(`🗨️ Source type: Forum`)
         console.log(`Forum config:`, forumConfig)
         try {
-          versionContent = await fetchForumContent(versionUrl, forumConfig || {})
+          versionContent = await fetchForumContent(versionUrl, forumConfig || {}, false, 10, scrapingStrategy)
           fetchMethod = 'forum'
         } catch (forumError) {
           console.error('Forum fetch failed:', forumError)
@@ -1664,7 +1664,7 @@ serve(async (req) => {
         // Fetch content from both URLs in parallel (try regular fetch first)
         // Phase 3: Pass scraping strategy if provided
         const [versionResult, mainResult] = await Promise.all([
-          fetchWebpageContent(versionUrl, 30000, false, scrapingStrategy),
+          fetchWebpageContent(versionUrl, 60000, false, scrapingStrategy),
           // Only fetch main website if it's different from version URL
           versionUrl.toLowerCase() !== website.toLowerCase()
             ? fetchWebpageContent(website, 20000, false)
@@ -1700,7 +1700,7 @@ serve(async (req) => {
         console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
 
         // Retry with Browserless for JavaScript pages
-        const retryResult = await fetchWebpageContent(versionUrl, 30000, true, scrapingStrategy)
+        const retryResult = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy)
         versionContent = retryResult.content
         fetchMethod = retryResult.method
 
@@ -1765,7 +1765,7 @@ serve(async (req) => {
     // This ensures we find the product even if buried deep in the page
     if (versionContent.length > 1000 && name) {
       console.log('\n🎯 Applying smart content extraction...')
-      const smartResult = extractSmartContent(versionContent, name, 30000)
+      const smartResult = extractSmartContent(versionContent, name, 60000)
 
       if (smartResult.foundProduct) {
         console.log(`✅ Smart extraction successful - found product! (${smartResult.method})`)
@@ -1774,10 +1774,10 @@ serve(async (req) => {
         console.log(`⚠️ Product not found in ${versionContent.length} chars, using first chunk (${smartResult.method})`)
         versionContent = smartResult.content
       }
-    } else if (versionContent.length > 30000) {
+    } else if (versionContent.length > 60000) {
       // If no product name provided, just truncate to reasonable size
-      console.log(`⚠️ No product name for smart extraction, truncating to 30K`)
-      versionContent = versionContent.substring(0, 30000)
+      console.log(`⚠️ No product name for smart extraction, truncating to 60K`)
+      versionContent = versionContent.substring(0, 60000)
     }
 
     // CRITICAL: Also limit mainWebsiteContent to prevent token limit errors

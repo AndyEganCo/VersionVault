@@ -1,7 +1,7 @@
 // Shared AI utilities for enhanced release notes extraction and merging
 // Handles: web search, AI tracking, smart merging, cost control
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.9'
 import type { StructuredNotes, MergeMetadata } from './types.ts'
 
 // ============================================

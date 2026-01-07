@@ -24,7 +24,10 @@ export async function extractSoftwareInfo(
   name: string,
   website: string,
   versionUrl: string,
-  description?: string
+  description?: string,
+  sourceType?: 'webpage' | 'rss' | 'forum' | 'pdf',
+  forumConfig?: any,
+  scrapingStrategy?: any
 ): Promise<ExtractedSoftwareInfo> {
   try {
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -53,7 +56,10 @@ export async function extractSoftwareInfo(
           name,
           website,
           versionUrl,
-          description
+          description,
+          sourceType,
+          forumConfig,
+          scrapingStrategy
         }),
         signal: controller.signal
       });
