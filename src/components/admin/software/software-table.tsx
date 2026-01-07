@@ -129,10 +129,10 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
         `Current version: ${software.current_version || 'unknown'}`
       );
 
-      // Update software with latest version info
+      // Update software with last_checked timestamp
+      // NOTE: We DO NOT update current_version here anymore.
+      // Current version is computed from software_version_history table.
       await updateSoftware(software.id, {
-        current_version: extracted.currentVersion || software.current_version,
-        release_date: extracted.releaseDate || software.release_date,
         last_checked: new Date().toISOString()
       });
 

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import type { SoftwareUpdateSummary, SponsorData, NewsletterPayload, NewSoftwareSummary } from './types';
 import { isNewerVersion, getUpdateType } from './version-compare';
 import { getRandomAllQuietMessage, MAX_UPDATES_PER_EMAIL } from './index';
+import { compareVersions, getCurrentVersionFromHistory } from '@/lib/utils/version-utils';
 
 interface TrackedSoftwareWithHistory {
   software_id: string;
@@ -72,15 +73,12 @@ export async function generateUserDigest(
   const softwareIds = trackedSoftware.map(t => t.software_id);
 
   // Get ALL verified version history for tracked software
-  // We need the full history to find the previous version for each software
+  // We need the full history to find the current and previous versions
   const { data: allVersionHistory, error: historyError } = await supabase
     .from('software_version_history')
-    .select('software_id, version, release_date, detected_at, notes, type')
+    .select('software_id, version, release_date, detected_at, notes, type, newsletter_verified')
     .in('software_id', softwareIds)
-    .eq('newsletter_verified', true)
-    .order('software_id')
-    .order('release_date', { ascending: false, nullsLast: true })
-    .order('detected_at', { ascending: false });
+    .eq('newsletter_verified', true);
 
   if (historyError) {
     console.error('Failed to fetch version history:', historyError);
@@ -102,7 +100,7 @@ export async function generateUserDigest(
     }
   }
 
-  // Group version history by software_id
+  // Group version history by software_id and sort by SEMANTIC VERSION (not date!)
   const versionHistoryBySoftware = new Map<string, VersionHistoryItem[]>();
   for (const history of (allVersionHistory || []) as VersionHistoryItem[]) {
     if (!versionHistoryBySoftware.has(history.software_id)) {
@@ -111,30 +109,37 @@ export async function generateUserDigest(
     versionHistoryBySoftware.get(history.software_id)!.push(history);
   }
 
+  // Sort each software's version history by semantic version (highest first)
+  for (const [softwareId, histories] of versionHistoryBySoftware.entries()) {
+    histories.sort((a, b) => compareVersions(b.version, a.version));
+    versionHistoryBySoftware.set(softwareId, histories);
+  }
+
   // Process each tracked software to find updates
   const updates: SoftwareUpdateSummary[] = [];
 
   for (const tracked of trackedSoftware as unknown as TrackedSoftwareWithHistory[]) {
     const software = tracked.software;
-    if (!software || !software.current_version) continue;
+    if (!software) continue;
 
     const histories = versionHistoryBySoftware.get(tracked.software_id) || [];
     if (histories.length === 0) continue;
 
-    // Find the current version in the history
-    const currentVersionEntry = histories.find(h => h.version === software.current_version);
-    if (!currentVersionEntry) continue;
+    // Get current version from history using semantic versioning (highest version = current)
+    // This is the single source of truth, NOT software.current_version field
+    const currentVersion = getCurrentVersionFromHistory(histories, true);
+    if (!currentVersion) continue;
 
     // Check if the current version was released in the time period
-    const releaseDate = currentVersionEntry.release_date || currentVersionEntry.detected_at;
+    const releaseDate = currentVersion.release_date || currentVersion.detected_at;
     const releaseDateObj = new Date(releaseDate);
     if (releaseDateObj < sinceDate) {
       // Current version was released before the time period, skip
       continue;
     }
 
-    // Find the previous version (the next one in the sorted array)
-    const currentIndex = histories.indexOf(currentVersionEntry);
+    // Find the previous version (the next one in the semantically sorted array)
+    const currentIndex = histories.indexOf(currentVersion);
     const previousVersionEntry = currentIndex < histories.length - 1 ? histories[currentIndex + 1] : null;
 
     // Determine old version
@@ -146,10 +151,10 @@ export async function generateUserDigest(
       manufacturer: software.manufacturer,
       category: software.category,
       old_version: oldVersion,
-      new_version: software.current_version,
+      new_version: currentVersion.version,
       release_date: releaseDate,
-      release_notes: currentVersionEntry.notes || undefined,
-      update_type: currentVersionEntry.type || getUpdateType(oldVersion, software.current_version),
+      release_notes: currentVersion.notes || undefined,
+      update_type: currentVersion.type || getUpdateType(oldVersion, currentVersion.version),
     });
   }
 

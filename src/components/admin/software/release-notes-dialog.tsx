@@ -19,9 +19,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { addVersionHistory, getVersionHistory, deleteVersionHistory } from '@/lib/software/api/api';
+import { addVersionHistory, getVersionHistory, deleteVersionHistory, setVersionAsCurrent } from '@/lib/software/api/api';
 import type { Software } from '@/lib/software/types';
-import { Plus, Upload, Link as LinkIcon, Loader2, Check, X, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { Plus, Upload, Link as LinkIcon, Loader2, Check, X, ChevronDown, ChevronUp, Trash2, Star } from 'lucide-react';
 import { extractVersionsFromURL, extractVersionsFromPDF, type ExtractedVersion } from '@/lib/software/release-notes/extractor';
 import { parsePDFFile } from '@/lib/software/release-notes/pdf-parser';
 import { toast } from 'sonner';
@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { breakPhonePattern } from '@/lib/utils/version-display';
+import { getCurrentVersionFromHistory } from '@/lib/utils/version-utils';
 
 interface ReleaseNotesDialogProps {
   software: Software;
@@ -56,11 +57,16 @@ export function ReleaseNotesDialog({
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState<string>('');
   const [type, setType] = useState<'major' | 'minor' | 'patch'>('minor');
-  const [versionHistory, setVersionHistory] = useState<Array<{id: string, version: string, notes: any, type: string, release_date: string}>>([]);
+  const [versionHistory, setVersionHistory] = useState<Array<{id: string, version: string, notes: any, type: string, release_date: string, newsletter_verified?: boolean, is_current_override?: boolean, detected_at?: string}>>([]);
   const [selectedVersion, setSelectedVersion] = useState<string>('current');
   const [newVersion, setNewVersion] = useState('');
   const [releaseDate, setReleaseDate] = useState(formatDateForInput(new Date().toISOString()));
   const [deleting, setDeleting] = useState(false);
+  const [settingCurrent, setSettingCurrent] = useState(false);
+
+  // Calculate current version from version history (replaces software.current_version which was removed from DB)
+  const currentVersionEntry = getCurrentVersionFromHistory(versionHistory, true);
+  const currentVersion = currentVersionEntry?.version || null;
 
   // Bulk import states
   const [bulkImportUrl, setBulkImportUrl] = useState('');
@@ -89,18 +95,20 @@ export function ReleaseNotesDialog({
         // Set selected version to current by default
         setSelectedVersion('current');
 
-        const currentVersionEntry = validHistory.find(
-          entry => entry.version === software.current_version
+        // Calculate current version from history
+        const calculatedCurrentVersion = getCurrentVersionFromHistory(validHistory, true);
+        const currentVersionData = validHistory.find(
+          entry => entry.version === calculatedCurrentVersion?.version
         );
 
-        if (currentVersionEntry) {
-          setType(currentVersionEntry.type);
-          const noteText = Array.isArray(currentVersionEntry.notes)
-            ? currentVersionEntry.notes.join('\n')
-            : (currentVersionEntry.notes || '');
+        if (currentVersionData) {
+          setType(currentVersionData.type);
+          const noteText = Array.isArray(currentVersionData.notes)
+            ? currentVersionData.notes.join('\n')
+            : (currentVersionData.notes || '');
           setNotes(noteText);
-          if (currentVersionEntry.release_date) {
-            setReleaseDate(formatDateForInput(currentVersionEntry.release_date));
+          if (currentVersionData.release_date) {
+            setReleaseDate(formatDateForInput(currentVersionData.release_date));
           }
         } else {
           setType('minor');
@@ -111,7 +119,7 @@ export function ReleaseNotesDialog({
       }
     }
     loadVersionHistory();
-  }, [open, software.id, software.current_version]);
+  }, [open, software.id]); // Removed software.current_version dependency as it no longer exists
 
   const handleVersionChange = (value: string) => {
     setSelectedVersion(value);
@@ -123,19 +131,20 @@ export function ReleaseNotesDialog({
       setReleaseDate(formatDateForInput(new Date().toISOString()));
       setNewVersion('');
     } else if (value === 'current') {
-      // Load current version data
-      const currentVersionEntry = versionHistory.find(
-        entry => entry.version === software.current_version
+      // Load current version data - calculate from history
+      const calculatedCurrentVersion = getCurrentVersionFromHistory(versionHistory, true);
+      const currentVersionData = versionHistory.find(
+        entry => entry.version === calculatedCurrentVersion?.version
       );
 
-      if (currentVersionEntry) {
-        setType(currentVersionEntry.type as 'major' | 'minor' | 'patch');
-        const noteText = Array.isArray(currentVersionEntry.notes)
-          ? currentVersionEntry.notes.join('\n')
-          : (currentVersionEntry.notes || '');
+      if (currentVersionData) {
+        setType(currentVersionData.type as 'major' | 'minor' | 'patch');
+        const noteText = Array.isArray(currentVersionData.notes)
+          ? currentVersionData.notes.join('\n')
+          : (currentVersionData.notes || '');
         setNotes(noteText);
-        if (currentVersionEntry.release_date) {
-          setReleaseDate(formatDateForInput(currentVersionEntry.release_date));
+        if (currentVersionData.release_date) {
+          setReleaseDate(formatDateForInput(currentVersionData.release_date));
         }
       }
     } else {
@@ -167,7 +176,8 @@ export function ReleaseNotesDialog({
       if (selectedVersion === 'new') {
         versionToSave = newVersion;
       } else if (selectedVersion === 'current') {
-        versionToSave = software.current_version || '';
+        // Calculate current version from history
+        versionToSave = currentVersion || '';
       } else {
         versionToSave = selectedVersion;
       }
@@ -195,7 +205,8 @@ export function ReleaseNotesDialog({
     // Determine the actual version to delete (convert 'current' to actual version number)
     let versionToDelete = selectedVersion;
     if (selectedVersion === 'current') {
-      versionToDelete = software.current_version || '';
+      // Calculate current version from history
+      versionToDelete = currentVersion || '';
     }
 
     // Find the version entry to delete
@@ -251,6 +262,38 @@ export function ReleaseNotesDialog({
     }
   };
 
+  const handleSetAsCurrent = async () => {
+    // Determine the actual version to set as current
+    let versionToSet = selectedVersion;
+    if (selectedVersion === 'current') {
+      versionToSet = currentVersion || '';
+    }
+
+    // Find the version entry
+    const versionEntry = versionHistory.find(v => v.version === versionToSet);
+
+    if (!versionEntry) {
+      toast.error('Version not found');
+      return;
+    }
+
+    setSettingCurrent(true);
+    try {
+      const success = await setVersionAsCurrent(versionEntry.id, software.id);
+
+      if (success) {
+        // Reload version history to reflect the change
+        const history = await getVersionHistory(software.id);
+        setVersionHistory(history);
+
+        await onSuccess();
+      }
+    } catch (error) {
+      console.error('Error setting version as current:', error);
+    } finally {
+      setSettingCurrent(false);
+    }
+  };
 
   const handleExtractFromURL = async () => {
     if (!bulkImportUrl.trim()) {
@@ -432,13 +475,13 @@ export function ReleaseNotesDialog({
                     </SelectTrigger>
                     <SelectContent>
                       {/* Only show "current" option if current version exists in history */}
-                      {versionHistory.some(v => v.version === software.current_version) && (
+                      {currentVersion && versionHistory.some(v => v.version === currentVersion) && (
                         <SelectItem value="current">
-                          {breakPhonePattern(software.current_version || 'Current Version')} (Current)
+                          {breakPhonePattern(currentVersion)} (Current)
                         </SelectItem>
                       )}
                       {versionHistory
-                        .filter(v => v.version !== software.current_version)
+                        .filter(v => v.version !== currentVersion)
                         // Remove duplicates by version number (keep first occurrence)
                         .filter((v, index, self) =>
                           index === self.findIndex(t => t.version === v.version)
@@ -459,6 +502,23 @@ export function ReleaseNotesDialog({
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                  {/* Show "Set as Current" button for non-current versions */}
+                  {selectedVersion !== 'new' && selectedVersion !== 'current' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={handleSetAsCurrent}
+                      disabled={settingCurrent}
+                      title="Set this version as current (manual override)"
+                    >
+                      {settingCurrent ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Star className="h-4 w-4" />
+                      )}
+                    </Button>
+                  )}
                   {/* Show delete button for all existing versions */}
                   {selectedVersion !== 'new' && (
                     <Button

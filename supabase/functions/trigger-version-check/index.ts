@@ -3,6 +3,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { extractWithWebSearch, smartMergeNotes, getAIConfig } from '../_shared/ai-utils.ts'
+import { normalizeVersion } from '../_shared/version-utils.ts'
 
 // Declare EdgeRuntime for background task support
 // This keeps the function alive after returning a response
@@ -30,25 +31,6 @@ interface CheckSummary {
   failed: number
   totalVersionsAdded: number
   results: VersionCheckResult[]
-}
-
-/**
- * Normalize version numbers for software that uses non-standard formats
- * For disguise: strip the 'r' prefix (e.g., "r32.2" -> "32.2")
- */
-function normalizeVersion(version: string, softwareName: string): string {
-  const lowerName = softwareName.toLowerCase()
-
-  // Handle disguise versions - strip 'r' prefix
-  if (lowerName.includes('disguise') || lowerName.includes('designer')) {
-    // Match versions like "r32.2", "r32.1.4" but not "version 32.2"
-    const match = version.match(/^r(\d+(?:\.\d+)*)$/i)
-    if (match) {
-      return match[1]
-    }
-  }
-
-  return version
 }
 
 serve(async (req) => {
@@ -233,16 +215,13 @@ serve(async (req) => {
               hasReleaseDate: !!extracted.releaseDate
             })
 
-            // Always update last_checked timestamp, regardless of version found
+            // Always update last_checked timestamp
+            // NOTE: We DO NOT update current_version here anymore.
+            // Current version is now COMPUTED from software_version_history table
+            // using semantic version comparison (highest version = current version).
+            // This prevents the "version downgrade" bug where scrapers extract old versions.
             const updateData: any = {
               last_checked: new Date().toISOString()
-            }
-
-            // Update with new version if found
-            if (extracted.currentVersion) {
-              // Normalize version for consistent storage
-              updateData.current_version = normalizeVersion(extracted.currentVersion, software.name)
-              updateData.release_date = extracted.releaseDate || null
             }
 
             await supabase
@@ -251,9 +230,9 @@ serve(async (req) => {
               .eq('id', software.id)
 
             if (extracted.currentVersion) {
-              console.log(`  ✅ Updated to version ${extracted.currentVersion}`)
+              console.log(`  ✅ Found version ${extracted.currentVersion} (will be saved to history)`)
             } else {
-              console.log(`  ⏭️  No new version found, updated last_checked`)
+              console.log(`  ⏭️  No version found, updated last_checked`)
             }
 
             // Save all versions to database
