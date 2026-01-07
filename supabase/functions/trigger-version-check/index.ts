@@ -130,7 +130,7 @@ serve(async (req) => {
       // 3. Oldest checked items
       const { data: allSoftware, error: fetchError } = await supabase
         .from('software')
-        .select('id, name, website, version_website, current_version, source_type, forum_config, last_checked')
+        .select('id, name, website, version_website, current_version, source_type, forum_config, scraping_strategy, last_checked')
         .not('version_website', 'is', null)
         .neq('version_website', '')
 
@@ -196,7 +196,8 @@ serve(async (req) => {
                 versionUrl: software.version_website,
                 description: `Current version: ${software.current_version || 'unknown'}`,
                 sourceType: software.source_type || 'webpage',
-                forumConfig: software.forum_config || undefined
+                forumConfig: software.forum_config || undefined,
+                scrapingStrategy: software.scraping_strategy || undefined
               })
             })
 

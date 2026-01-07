@@ -1625,7 +1625,7 @@ serve(async (req) => {
         console.log(`🗨️ Source type: Forum`)
         console.log(`Forum config:`, forumConfig)
         try {
-          versionContent = await fetchForumContent(versionUrl, forumConfig || {})
+          versionContent = await fetchForumContent(versionUrl, forumConfig || {}, false, 10, scrapingStrategy)
           fetchMethod = 'forum'
         } catch (forumError) {
           console.error('Forum fetch failed:', forumError)

@@ -4,6 +4,7 @@
  */
 
 import { DOMParser } from 'https://deno.land/x/deno_dom@v0.1.38/deno-dom-wasm.ts';
+import { fetchWithInteraction, type ScrapingStrategy } from './interactive-scraping.ts';
 
 export interface ForumConfig {
   forumType?: 'phpbb' | 'discourse' | 'generic';
@@ -28,24 +29,26 @@ export async function fetchForumContent(
   forumUrl: string,
   config: ForumConfig = {},
   useBrowserless: boolean = false,
-  maxTopics: number = 10
+  maxTopics: number = 10,
+  scrapingStrategy?: ScrapingStrategy
 ): Promise<string> {
   console.log(`🗨️ Fetching forum: ${forumUrl}`);
   console.log(`Config:`, JSON.stringify(config, null, 2));
   console.log(`Max topics to fetch: ${maxTopics}`);
+  console.log(`Interactive scraping: ${scrapingStrategy ? '🎭 YES' : '❌ NO'}`);
 
   try {
-    // Step 1: Fetch forum index page
-    const indexHtml = await fetchForumIndex(forumUrl, useBrowserless);
+    // Step 1: Fetch forum index page with interactive scraping if strategy provided
+    const indexHtml = await fetchForumIndex(forumUrl, useBrowserless, scrapingStrategy);
 
     console.log(`📄 Fetched ${indexHtml.length} characters from forum`);
     console.log(`HTML preview (first 500 chars): ${indexHtml.substring(0, 500)}`);
 
     if (!indexHtml || indexHtml.length < 500) {
       console.warn('⚠️ Forum index has very low content, may need Browserless');
-      if (!useBrowserless) {
+      if (!useBrowserless && !scrapingStrategy) {
         console.log('🔄 Retrying with Browserless...');
-        return await fetchForumContent(forumUrl, config, true, maxTopics);
+        return await fetchForumContent(forumUrl, config, true, maxTopics, scrapingStrategy);
       }
     }
 
@@ -84,7 +87,8 @@ export async function fetchForumContent(
         const content = await fetchTopicContent(
           topic.link,
           forumType,
-          useBrowserless
+          useBrowserless,
+          scrapingStrategy
         );
 
         if (content && content.length > 0) {
@@ -120,7 +124,20 @@ export async function fetchForumContent(
 /**
  * Fetch forum index page
  */
-async function fetchForumIndex(url: string, useBrowserless: boolean): Promise<string> {
+async function fetchForumIndex(url: string, useBrowserless: boolean, scrapingStrategy?: ScrapingStrategy): Promise<string> {
+  // If interactive scraping strategy provided, use it
+  if (scrapingStrategy) {
+    const apiKey = Deno.env.get('BROWSERLESS_API_KEY');
+    if (!apiKey) {
+      console.warn('BROWSERLESS_API_KEY not set, cannot use interactive scraping. Falling back to regular fetch.');
+      return await fetchForumIndex(url, false);
+    }
+
+    console.log('🎭 Using interactive scraping with custom strategy');
+    return await fetchWithInteraction(url, scrapingStrategy, apiKey);
+  }
+
+  // Otherwise use existing logic
   if (useBrowserless) {
     const apiKey = Deno.env.get('BROWSERLESS_API_KEY');
     if (!apiKey) {
@@ -453,11 +470,12 @@ function filterOfficialTopics(topics: ForumTopic[], config: ForumConfig): ForumT
 async function fetchTopicContent(
   topicUrl: string,
   forumType: 'phpbb' | 'discourse' | 'generic',
-  useBrowserless: boolean
+  useBrowserless: boolean,
+  scrapingStrategy?: ScrapingStrategy
 ): Promise<string> {
   console.log(`Fetching topic page: ${topicUrl}`);
 
-  const html = await fetchForumIndex(topicUrl, useBrowserless);
+  const html = await fetchForumIndex(topicUrl, useBrowserless, scrapingStrategy);
 
   if (forumType === 'phpbb') {
     return extractPhpBBFirstPost(html);
