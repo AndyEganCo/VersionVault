@@ -293,6 +293,16 @@ export async function addVersionHistory(softwareId: string, data: {
   }
 }
 
+/**
+ * Check if a version string looks like valid semantic versioning
+ * @param version Version string to check
+ * @returns true if version starts with digits (likely semver), false otherwise
+ */
+function isValidSemver(version: string): boolean {
+  // Check if version starts with a number (e.g., "1.2.3", "2.0", "5.0.512")
+  return /^\d+(\.\d+)*/.test(version.trim());
+}
+
 export async function getVersionHistory(softwareId: string) {
   return withRetry(async () => {
     const { data, error } = await supabase
@@ -302,26 +312,23 @@ export async function getVersionHistory(softwareId: string) {
 
     if (error) throw error;
 
-    // Sort by version number (highest first) using semantic versioning
-    const sorted = (data || []).sort((a, b) => compareVersions(b.version, a.version));
+    if (!data || data.length === 0) return [];
 
-    // Check if all versions are semantically equal (e.g., name-based versions like "Config 2025")
-    // If so, fall back to date-based sorting to match getCurrentVersionFromHistory() logic
-    const allVersionsSame = sorted.every((entry, index) => {
-      if (index === 0) return true;
-      return compareVersions(sorted[0].version, entry.version) === 0;
-    });
+    // Check if versions are valid semver or name-based
+    // If ANY version is not valid semver, treat all as name-based and sort by date
+    const allVersionsAreSemver = data.every(entry => isValidSemver(entry.version));
 
-    // If semantic versioning didn't differentiate, fall back to date sorting
-    if (allVersionsSame && sorted.length > 1) {
-      return sorted.sort((a, b) => {
+    if (!allVersionsAreSemver) {
+      // Name-based versions: sort by date (newest first)
+      return data.sort((a, b) => {
         const dateA = a.release_date || a.detected_at || '1970-01-01';
         const dateB = b.release_date || b.detected_at || '1970-01-01';
         return new Date(dateB).getTime() - new Date(dateA).getTime();
       });
     }
 
-    return sorted;
+    // Valid semver versions: sort by semantic version (highest first)
+    return data.sort((a, b) => compareVersions(b.version, a.version));
   });
 }
 

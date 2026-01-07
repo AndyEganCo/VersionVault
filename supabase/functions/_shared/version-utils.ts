@@ -76,11 +76,21 @@ export function sortVersionsDescending(versions: string[]): string[] {
 }
 
 /**
+ * Check if a version string looks like valid semantic versioning
+ * @param version Version string to check
+ * @returns true if version starts with digits (likely semver), false otherwise
+ */
+function isValidSemver(version: string): boolean {
+  // Check if version starts with a number (e.g., "1.2.3", "2.0", "5.0.512")
+  return /^\d+(\.\d+)*/.test(version.trim())
+}
+
+/**
  * Get the highest (current) version from an array of version history entries
  * This is how we determine "current version" using the following priority:
  * 1. Manual override (is_current_override = true)
- * 2. Highest semantic version
- * 3. Fallback to most recent date (for name-based versions)
+ * 2. Highest semantic version (if versions are valid semver)
+ * 3. Most recent date (for name-based versions)
  *
  * MANUAL OVERRIDE:
  * Admins can manually set a version as "current" by setting is_current_override = true.
@@ -88,7 +98,7 @@ export function sortVersionsDescending(versions: string[]): string[] {
  *
  * FALLBACK FOR NAME-BASED VERSIONS:
  * For software that uses name-based versions (e.g., "Config 2025", "February Update"),
- * semantic versioning won't work. In these cases, we fall back to sorting by date.
+ * we detect that they're not valid semver and fall back to sorting by date.
  *
  * @param history Array of version history entries with 'version' field
  * @param onlyVerified If true, only consider newsletter_verified versions (default: true)
@@ -113,20 +123,13 @@ export function getCurrentVersionFromHistory<T extends { version: string; newsle
     return manualOverride
   }
 
-  // PRIORITY 2: Try semantic version sorting
-  const sorted = [...filteredHistory].sort((a, b) => compareVersions(b.version, a.version))
+  // PRIORITY 2/3: Check if versions are valid semver or name-based
+  // If ANY version is not valid semver, treat all as name-based and sort by date
+  const allVersionsAreSemver = filteredHistory.every(entry => isValidSemver(entry.version))
 
-  // Check if semantic versioning worked (if all versions are the same after sorting, it didn't work)
-  // This handles name-based versions like "Config 2025" where semantic comparison returns 0
-  const allVersionsSame = sorted.every((entry, index) => {
-    if (index === 0) return true
-    return compareVersions(sorted[0].version, entry.version) === 0
-  })
-
-  // PRIORITY 3: If semantic versioning didn't differentiate versions, fallback to date sorting
-  if (allVersionsSame && sorted.length > 1) {
-    // Sort by date (newest first) - use release_date if available, otherwise detected_at
-    const dateSorted = sorted.sort((a, b) => {
+  if (!allVersionsAreSemver) {
+    // Name-based versions: sort by date (newest first)
+    const dateSorted = [...filteredHistory].sort((a, b) => {
       const dateA = a.release_date || a.detected_at || '1970-01-01'
       const dateB = b.release_date || b.detected_at || '1970-01-01'
       return new Date(dateB).getTime() - new Date(dateA).getTime()
@@ -134,7 +137,8 @@ export function getCurrentVersionFromHistory<T extends { version: string; newsle
     return dateSorted[0]
   }
 
-  // Return the highest semantic version
+  // Valid semver versions: sort by semantic version (highest first)
+  const sorted = [...filteredHistory].sort((a, b) => compareVersions(b.version, a.version))
   return sorted[0]
 }
 
