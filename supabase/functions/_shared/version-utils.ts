@@ -143,26 +143,47 @@ export function getCurrentVersionFromHistory<T extends { version: string; newsle
 }
 
 /**
- * Normalize version numbers for software that uses non-standard formats
- * For disguise: strip the 'r' prefix (e.g., "r32.2" -> "32.2")
+ * Normalize version numbers to merge duplicates with slight format variations
  *
- * This should be called BEFORE storing versions in the database
+ * Handles cases like:
+ * - "r32" and "32" → "32"
+ * - "v125" and "125" → "125"
+ * - "cobra_v125" and "v125" → "125"
+ * - "version 1.2.3" and "1.2.3" → "1.2.3"
+ *
+ * But preserves different actual versions:
+ * - "2025.252" and "2025.255" → kept as different versions
+ *
+ * This should be called BEFORE storing versions in the database and BEFORE
+ * checking for duplicates.
+ *
+ * @param version Raw version string
+ * @param softwareName Software name for context-specific normalization
+ * @returns Normalized version string
  */
 export function normalizeVersion(version: string, softwareName: string): string {
   if (!version) return version
 
+  let normalized = version.trim()
   const lowerName = softwareName.toLowerCase()
 
-  // Handle disguise versions - strip 'r' prefix
-  if (lowerName.includes('disguise') || lowerName.includes('designer')) {
-    // Match versions like "r32.2", "r32.1.4" but not "version 32.2"
-    const match = version.match(/^r(\d+(?:\.\d+)*)$/i)
-    if (match) {
-      return match[1]
-    }
+  // Step 1: Strip software-specific prefixes (e.g., "cobra_v125" → "v125")
+  // Create regex pattern that matches: softwarename_v, softwarename_version, softwarename-v, etc.
+  const softwarePrefix = lowerName.replace(/[^a-z0-9]/g, '') // Remove spaces/special chars
+  if (softwarePrefix) {
+    const softwarePattern = new RegExp(`^${softwarePrefix}[_\\-\\s]*(v|version)?[_\\-\\s]*`, 'i')
+    normalized = normalized.replace(softwarePattern, '')
   }
 
-  return version
+  // Step 2: Strip common version prefixes
+  // Match: "v", "r", "version ", "ver ", "release " followed by a number
+  // But NOT if it's part of a larger word (e.g., "Config 2025" should keep "Config")
+  normalized = normalized.replace(/^(v|r|version|ver|release)[\s\-_]*(?=\d)/i, '')
+
+  // Step 3: Clean up whitespace
+  normalized = normalized.trim()
+
+  return normalized
 }
 
 /**

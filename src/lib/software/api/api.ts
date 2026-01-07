@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Software, SoftwareUpdate } from '../types';
 import { toast } from 'sonner';
-import { compareVersions } from '@/lib/utils/version-utils';
+import { compareVersions, normalizeVersion } from '@/lib/utils/version-utils';
 
 interface ApiResponse<T> {
   readonly data: T | null;
@@ -125,12 +125,24 @@ export async function addVersionHistory(softwareId: string, data: {
   search_sources?: string[];
 }): Promise<boolean> {
   try {
-    // First check if this version already exists
+    // Get software name for version normalization
+    const { data: softwareData, error: softwareError } = await supabase
+      .from('software')
+      .select('name')
+      .eq('id', softwareId)
+      .single();
+
+    if (softwareError) throw softwareError;
+
+    // Normalize version to merge duplicates like "r32" and "32", "cobra_v125" and "v125"
+    const normalizedVersion = normalizeVersion(data.version, softwareData.name);
+
+    // Check if this normalized version already exists
     const { data: existing } = await supabase
       .from('software_version_history')
       .select('id, notes_source, notes, structured_notes, search_sources')
       .eq('software_id', softwareId)
-      .eq('version', data.version)
+      .eq('version', normalizedVersion)
       .maybeSingle();
 
     const notesArray = typeof data.notes === 'string'
@@ -221,13 +233,6 @@ export async function addVersionHistory(softwareId: string, data: {
 
       if (error) throw error;
     } else {
-      // Get the current version from the software table to use as previous_version
-      const { data: softwareData } = await supabase
-        .from('software')
-        .select('current_version')
-        .eq('id', softwareId)
-        .single();
-
       // Insert new version - use provided date or null if not available
       const releaseDate = (data.release_date && data.release_date !== 'null')
         ? data.release_date
@@ -237,8 +242,8 @@ export async function addVersionHistory(softwareId: string, data: {
       const insertData: any = {
         id: crypto.randomUUID(),
         software_id: data.software_id,
-        version: data.version,
-        previous_version: softwareData?.current_version || null,
+        version: normalizedVersion,  // Use normalized version
+        previous_version: null,  // Could be calculated from version history if needed
         release_date: releaseDate,
         notes: notesArray,
         type: data.type,
