@@ -340,6 +340,47 @@ function formatAppleVersionHistory(versions: any[]): string {
 }
 
 /**
+ * Get domain-specific scraping strategy for known difficult sites
+ * AUTO-FIX: Automatically applies custom wait conditions for sites with complex JS rendering
+ */
+function getDomainSpecificStrategy(url: string): ScrapingStrategy | undefined {
+  const hostname = new URL(url).hostname.toLowerCase()
+
+  // Barco - Vue.js with slow API data loading
+  if (hostname.includes('barco.com')) {
+    return {
+      waitForSelector: '.software-version, [class*="latest-software"], [class*="version"]',
+      waitTime: 15000, // Give API time to respond
+      customScript: `
+        // Wait for Vue.js data binding to complete (no more "data.displayVersion" placeholders)
+        console.log('⏳ Waiting for Barco Vue.js to populate version data...');
+        await page.waitForFunction(() => {
+          const bodyText = document.body.textContent || '';
+          // Check if placeholders are gone and actual version numbers appear
+          const hasPlaceholders = bodyText.includes('data.displayVersion') ||
+                                 bodyText.includes('data.displayName');
+          const hasVersionNumbers = /v?\\d+\\.\\d+\\.\\d+/.test(bodyText);
+
+          if (!hasPlaceholders && hasVersionNumbers) {
+            console.log('✅ Version data populated!');
+            return true;
+          }
+          return false;
+        }, { timeout: 45000 });
+      `
+    }
+  }
+
+  // Add more domain-specific strategies here as needed
+  // Example:
+  // if (hostname.includes('example.com')) {
+  //   return { waitForSelector: '.version-info', waitTime: 10000 }
+  // }
+
+  return undefined
+}
+
+/**
  * Fetches webpage content and extracts text, with intelligent content limits
  * Phase 3: Now supports interactive scraping strategies
  * Returns: { content: string, method: string }
@@ -365,7 +406,8 @@ async function fetchWebpageContent(
                             urlObj.hostname.includes('autodesk.com') ||
                             urlObj.hostname.includes('apple.com') ||
                             urlObj.hostname.includes('pushpay.com') ||
-                            urlObj.hostname.includes('force.com') // Salesforce Community pages
+                            urlObj.hostname.includes('force.com') || // Salesforce Community pages
+                            urlObj.hostname.includes('barco.com') // Vue.js template placeholders
 
     if (isKnownDifficult) {
       console.warn('⚠️ Known difficult domain detected - using enhanced bot blocking protection')
@@ -1503,7 +1545,7 @@ serve(async (req) => {
   }
 
   try {
-    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy, sourceType, forumConfig } = await req.json() as ExtractRequest
+    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy: providedStrategy, sourceType, forumConfig } = await req.json() as ExtractRequest
 
     if (!name || !website) {
       return new Response(
@@ -1513,6 +1555,16 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       )
+    }
+
+    // AUTO-FIX: Apply domain-specific strategy if none provided
+    let scrapingStrategy = providedStrategy
+    if (!scrapingStrategy && versionUrl) {
+      const autoStrategy = getDomainSpecificStrategy(versionUrl)
+      if (autoStrategy) {
+        console.log(`🎯 AUTO-APPLIED domain-specific scraping strategy for ${new URL(versionUrl).hostname}`)
+        scrapingStrategy = autoStrategy
+      }
     }
 
     console.log(`\n${'='.repeat(60)}`)
@@ -1670,6 +1722,10 @@ serve(async (req) => {
           /<div id="app"><\/div>/i,
           /cookieEnabled.*cookieMessage/i,
           /slds-modal.*slds-fade-in-open/i, // Salesforce Lightning
+          /data\.display(Version|version|Name|name)/i, // Vue.js data binding (e.g., "Version data.displayVersion")
+          /\{\{.*version.*\}\}/i, // Mustache/Vue templates (e.g., "{{version}}")
+          /\$\{.*version.*\}/i, // Template literals (e.g., "${version}")
+          /\[\[.*version.*\]\]/i, // Angular/other framework bindings
         ]
 
         const hasLoaderCode = loaderPatterns.some(pattern => pattern.test(versionContent))
@@ -1692,6 +1748,11 @@ serve(async (req) => {
           const stillHasLoaderCode = loaderPatterns.some(pattern => pattern.test(versionContent))
           if (stillHasLoaderCode) {
             console.warn(`⚠️ Still detecting loader code after extended timeout - page may require interactive scraping`)
+            console.warn(`💡 RECOMMENDATION: This page likely needs one of the following:`)
+            console.warn(`   1. Interactive scraping (click buttons, wait for API responses)`)
+            console.warn(`   2. Authentication to view version data`)
+            console.warn(`   3. Scroll/interaction to trigger lazy loading`)
+            console.warn(`   Detected placeholders in content: ${loaderPatterns.filter(p => p.test(versionContent)).map(p => p.source).join(', ')}`)
           } else {
             console.log(`✅ SUCCESS: Extended timeout resolved loader code issue!`)
           }
@@ -1759,7 +1820,8 @@ serve(async (req) => {
       versionUrl.includes('apple.com') ||
       versionUrl.includes('autodesk.com') ||
       versionUrl.includes('pushpay.com') ||
-      versionUrl.includes('force.com')
+      versionUrl.includes('force.com') ||
+      versionUrl.includes('barco.com')
     )
 
     // Try sitemap discovery if webpage content is low and this is a webpage source
