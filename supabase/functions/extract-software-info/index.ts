@@ -1697,6 +1697,11 @@ serve(async (req) => {
           const stillHasLoaderCode = loaderPatterns.some(pattern => pattern.test(versionContent))
           if (stillHasLoaderCode) {
             console.warn(`⚠️ Still detecting loader code after extended timeout - page may require interactive scraping`)
+            console.warn(`💡 RECOMMENDATION: This page likely needs one of the following:`)
+            console.warn(`   1. Interactive scraping (click buttons, wait for API responses)`)
+            console.warn(`   2. Authentication to view version data`)
+            console.warn(`   3. Scroll/interaction to trigger lazy loading`)
+            console.warn(`   Detected placeholders in content: ${loaderPatterns.filter(p => p.test(versionContent)).map(p => p.source).join(', ')}`)
           } else {
             console.log(`✅ SUCCESS: Extended timeout resolved loader code issue!`)
           }
