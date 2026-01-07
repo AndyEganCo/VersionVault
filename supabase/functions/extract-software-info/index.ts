@@ -991,39 +991,54 @@ ${description ? `- Description: ${description}` : ''}
    - COMPLETELY IGNORE version numbers for other products
    - Return null if you cannot confidently identify which version belongs to "${name}"
 
-3. **VALIDATION REQUIREMENTS:**
-   - The version number MUST appear in the same section/paragraph as "${name}"
+3. **PRODUCT NAME MATCHING - SMART RULES:**
+   - **EXACT MATCH**: If the FULL product name "${name}" appears on the page → productNameFound=true
+   - **IMPLIED MANUFACTURER**: If the page is clearly about ${manufacturer} products (e.g., manufacturer's official domain, branded header/footer) AND contains the product-specific part of the name (without manufacturer prefix), this counts as finding the product
+     * Example: Looking for "Resi Encoder" on support.pushpay.com → "Encoder Version 1.2.3" IS valid (manufacturer implied by domain)
+     * Example: Looking for "DaVinci Resolve" on blackmagicdesign.com → "Resolve 19.1" IS valid (manufacturer implied)
+     * Example: Looking for "Adobe Photoshop" on adobe.com → "Photoshop 2024" IS valid
+   - **DISAMBIGUATION**: If the page contains multiple ${manufacturer} products, you MUST verify the version is for the correct product variant
+     * Example: On a page with both "Encoder" and "Decoder", look for headers/sections to distinguish which version belongs to which
+   - Mark productNameFound=true if EITHER exact match OR implied manufacturer match (as long as no ambiguity with other products)
+
+4. **VERSION EXTRACTION REQUIREMENTS:**
+   - The version number MUST appear in the same section/paragraph as the product identifier (full or partial name)
    - If you see other product names with version numbers, IGNORE them completely
-   - If you cannot find "${name}" mentioned on the page, return null for version
    - Provide a confidence score (0-100) for your extraction
-   - Mark productNameFound as true only if "${name}" appears on page
+   - Use lower confidence (50-70) for implied manufacturer matches vs higher (80-100) for exact matches
 
 **EXAMPLES OF CORRECT BEHAVIOR:**
 
-✅ CORRECT Example 1:
+✅ CORRECT Example 1 - Exact Match:
 Page: "DaVinci Resolve 19.1.3 released Dec 1. Fusion Studio 19.1.3 also available."
 Target: "DaVinci Resolve"
 Response: { version: "19.1.3", releaseDate: "2024-12-01", confidence: 95, productNameFound: true }
+
+✅ CORRECT Example 2 - Implied Manufacturer:
+Page: "Encoder Version 1.15.4.33 - Dec 2, 2025" (on support.pushpay.com/resi domain)
+Target: "Resi Encoder"
+Manufacturer: "Resi"
+Response: { version: "1.15.4.33", releaseDate: "2025-12-02", confidence: 85, productNameFound: true, validationNotes: "Found 'Encoder' on official Resi support page, manufacturer implied by domain" }
+
+✅ CORRECT Example 3 - Disambiguation Required:
+Page: "Encoder Version 1.15.4 released. Decoder Version 2.9.6 also available." (on resi.io)
+Target: "Resi Encoder"
+Response: { version: "1.15.4", confidence: 85, productNameFound: true, validationNotes: "Found Encoder section distinct from Decoder section" }
 
 ❌ WRONG Example 1:
 Page: "DaVinci Resolve 19.1.3 released Dec 1. Fusion Studio 19.1.3 also available."
 Target: "DaVinci Resolve"
 Response: { version: "19.1.3", confidence: 50, productNameFound: false }  ← WRONG! Product name WAS found
 
-✅ CORRECT Example 2:
-Page: "ATEM Mini 9.6.1 is now available"
-Target: "DaVinci Resolve"
-Response: { version: null, confidence: 0, productNameFound: false, validationNotes: "Target product not found on page" }
-
 ❌ WRONG Example 2:
 Page: "ATEM Mini 9.6.1 is now available"
 Target: "DaVinci Resolve"
 Response: { version: "9.6.1", confidence: 95 }  ← WRONG! This is ATEM's version, not DaVinci's
 
-✅ CORRECT Example 3:
-Page: "Version 2.5.0 released today"
-Target: "QLab"
-Response: { version: "2.5.0", confidence: 40, productNameFound: false, validationNotes: "Version found but product name not mentioned" }
+❌ WRONG Example 3 - Implied Manufacturer Used Incorrectly:
+Page: "Encoder Version 1.2.3" (on generic tech blog)
+Target: "Resi Encoder"
+Response: { version: "1.2.3", productNameFound: true }  ← WRONG! Not on official Resi domain, manufacturer not implied
 
 ${hasVersionContent ? `
 VERSION PAGE CONTENT (from ${versionUrl}):
@@ -1086,13 +1101,14 @@ Extract the following information:
 
 6. **Validation Fields** (REQUIRED):
    - **confidence**: 0-100 score for how confident you are this is correct
-     - 90-100: Very confident, product name found, version nearby
-     - 70-89: Confident, product name found, version present
-     - 50-69: Moderate, product name found OR version present
-     - 30-49: Low, unclear which product
+     - 90-100: Very confident, exact product name found with version nearby
+     - 80-89: Confident, exact product name found with version present
+     - 70-79: Good confidence, implied manufacturer match with clear context
+     - 50-69: Moderate, implied match but some ambiguity possible
+     - 30-49: Low, unclear which product or weak context
      - 0-29: Very low, likely wrong product
-   - **productNameFound**: true/false - was "${name}" found on page?
-   - **validationNotes**: Brief explanation of confidence level
+   - **productNameFound**: true/false - was "${name}" (or its product-specific part on official domain) found?
+   - **validationNotes**: Brief explanation of confidence level and matching strategy used
 
 **CRITICAL INSTRUCTIONS:**
 - **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data
@@ -1143,7 +1159,9 @@ CRITICAL RULES:
 2. If multiple products appear on the page, distinguish between them carefully
 3. DO NOT make up or guess release dates - use null if not found
 4. Provide HONEST confidence scores - use low confidence if uncertain
-5. Mark productNameFound=true ONLY if the exact product name appears on page
+5. Mark productNameFound=true if EITHER:
+   a) The exact product name appears on page, OR
+   b) The product-specific part appears AND manufacturer is clearly implied by domain/branding (see validation rules)
 6. ONLY use information from provided webpage content, NOT your training data
 7. Return only valid JSON
 
