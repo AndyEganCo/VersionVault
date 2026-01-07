@@ -365,7 +365,8 @@ async function fetchWebpageContent(
                             urlObj.hostname.includes('autodesk.com') ||
                             urlObj.hostname.includes('apple.com') ||
                             urlObj.hostname.includes('pushpay.com') ||
-                            urlObj.hostname.includes('force.com') // Salesforce Community pages
+                            urlObj.hostname.includes('force.com') || // Salesforce Community pages
+                            urlObj.hostname.includes('barco.com') // Vue.js template placeholders
 
     if (isKnownDifficult) {
       console.warn('⚠️ Known difficult domain detected - using enhanced bot blocking protection')
@@ -1670,6 +1671,10 @@ serve(async (req) => {
           /<div id="app"><\/div>/i,
           /cookieEnabled.*cookieMessage/i,
           /slds-modal.*slds-fade-in-open/i, // Salesforce Lightning
+          /data\.display(Version|version|Name|name)/i, // Vue.js data binding (e.g., "Version data.displayVersion")
+          /\{\{.*version.*\}\}/i, // Mustache/Vue templates (e.g., "{{version}}")
+          /\$\{.*version.*\}/i, // Template literals (e.g., "${version}")
+          /\[\[.*version.*\]\]/i, // Angular/other framework bindings
         ]
 
         const hasLoaderCode = loaderPatterns.some(pattern => pattern.test(versionContent))
@@ -1759,7 +1764,8 @@ serve(async (req) => {
       versionUrl.includes('apple.com') ||
       versionUrl.includes('autodesk.com') ||
       versionUrl.includes('pushpay.com') ||
-      versionUrl.includes('force.com')
+      versionUrl.includes('force.com') ||
+      versionUrl.includes('barco.com')
     )
 
     // Try sitemap discovery if webpage content is low and this is a webpage source
