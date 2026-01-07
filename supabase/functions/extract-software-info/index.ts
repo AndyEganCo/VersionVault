@@ -340,6 +340,47 @@ function formatAppleVersionHistory(versions: any[]): string {
 }
 
 /**
+ * Get domain-specific scraping strategy for known difficult sites
+ * AUTO-FIX: Automatically applies custom wait conditions for sites with complex JS rendering
+ */
+function getDomainSpecificStrategy(url: string): ScrapingStrategy | undefined {
+  const hostname = new URL(url).hostname.toLowerCase()
+
+  // Barco - Vue.js with slow API data loading
+  if (hostname.includes('barco.com')) {
+    return {
+      waitForSelector: '.software-version, [class*="latest-software"], [class*="version"]',
+      waitTime: 15000, // Give API time to respond
+      customScript: `
+        // Wait for Vue.js data binding to complete (no more "data.displayVersion" placeholders)
+        console.log('⏳ Waiting for Barco Vue.js to populate version data...');
+        await page.waitForFunction(() => {
+          const bodyText = document.body.textContent || '';
+          // Check if placeholders are gone and actual version numbers appear
+          const hasPlaceholders = bodyText.includes('data.displayVersion') ||
+                                 bodyText.includes('data.displayName');
+          const hasVersionNumbers = /v?\\d+\\.\\d+\\.\\d+/.test(bodyText);
+
+          if (!hasPlaceholders && hasVersionNumbers) {
+            console.log('✅ Version data populated!');
+            return true;
+          }
+          return false;
+        }, { timeout: 45000 });
+      `
+    }
+  }
+
+  // Add more domain-specific strategies here as needed
+  // Example:
+  // if (hostname.includes('example.com')) {
+  //   return { waitForSelector: '.version-info', waitTime: 10000 }
+  // }
+
+  return undefined
+}
+
+/**
  * Fetches webpage content and extracts text, with intelligent content limits
  * Phase 3: Now supports interactive scraping strategies
  * Returns: { content: string, method: string }
@@ -1504,7 +1545,7 @@ serve(async (req) => {
   }
 
   try {
-    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy, sourceType, forumConfig } = await req.json() as ExtractRequest
+    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy: providedStrategy, sourceType, forumConfig } = await req.json() as ExtractRequest
 
     if (!name || !website) {
       return new Response(
@@ -1514,6 +1555,16 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       )
+    }
+
+    // AUTO-FIX: Apply domain-specific strategy if none provided
+    let scrapingStrategy = providedStrategy
+    if (!scrapingStrategy && versionUrl) {
+      const autoStrategy = getDomainSpecificStrategy(versionUrl)
+      if (autoStrategy) {
+        console.log(`🎯 AUTO-APPLIED domain-specific scraping strategy for ${new URL(versionUrl).hostname}`)
+        scrapingStrategy = autoStrategy
+      }
     }
 
     console.log(`\n${'='.repeat(60)}`)
