@@ -77,13 +77,24 @@ export function sortVersionsDescending(versions: string[]): string[] {
 
 /**
  * Get the highest (current) version from an array of version history entries
- * This is how we determine "current version" - always take the highest semantic version
+ * This is how we determine "current version" using the following priority:
+ * 1. Manual override (is_current_override = true)
+ * 2. Highest semantic version
+ * 3. Fallback to most recent date (for name-based versions)
+ *
+ * MANUAL OVERRIDE:
+ * Admins can manually set a version as "current" by setting is_current_override = true.
+ * This overrides all automatic detection.
+ *
+ * FALLBACK FOR NAME-BASED VERSIONS:
+ * For software that uses name-based versions (e.g., "Config 2025", "February Update"),
+ * semantic versioning won't work. In these cases, we fall back to sorting by date.
  *
  * @param history Array of version history entries with 'version' field
  * @param onlyVerified If true, only consider newsletter_verified versions (default: true)
- * @returns The version history entry with the highest semantic version, or null
+ * @returns The version history entry that is considered "current", or null
  */
-export function getCurrentVersionFromHistory<T extends { version: string; newsletter_verified?: boolean }>(
+export function getCurrentVersionFromHistory<T extends { version: string; newsletter_verified?: boolean; release_date?: string; detected_at?: string; is_current_override?: boolean }>(
   history: T[],
   onlyVerified: boolean = true
 ): T | null {
@@ -96,8 +107,34 @@ export function getCurrentVersionFromHistory<T extends { version: string; newsle
 
   if (filteredHistory.length === 0) return null;
 
-  // Sort by semantic version (highest first) and return the first one
-  const sorted = filteredHistory.sort((a, b) => compareVersions(b.version, a.version));
+  // PRIORITY 1: Check for manual override first
+  const manualOverride = filteredHistory.find(h => h.is_current_override === true);
+  if (manualOverride) {
+    return manualOverride;
+  }
+
+  // PRIORITY 2: Try semantic version sorting
+  const sorted = [...filteredHistory].sort((a, b) => compareVersions(b.version, a.version));
+
+  // Check if semantic versioning worked (if all versions are the same after sorting, it didn't work)
+  // This handles name-based versions like "Config 2025" where semantic comparison returns 0
+  const allVersionsSame = sorted.every((entry, index) => {
+    if (index === 0) return true;
+    return compareVersions(sorted[0].version, entry.version) === 0;
+  });
+
+  // PRIORITY 3: If semantic versioning didn't differentiate versions, fallback to date sorting
+  if (allVersionsSame && sorted.length > 1) {
+    // Sort by date (newest first) - use release_date if available, otherwise detected_at
+    const dateSorted = sorted.sort((a, b) => {
+      const dateA = a.release_date || a.detected_at || '1970-01-01';
+      const dateB = b.release_date || b.detected_at || '1970-01-01';
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
+    });
+    return dateSorted[0];
+  }
+
+  // Return the highest semantic version
   return sorted[0];
 }
 

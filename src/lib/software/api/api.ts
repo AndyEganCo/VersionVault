@@ -297,7 +297,7 @@ export async function getVersionHistory(softwareId: string) {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('software_version_history')
-      .select('id, version, notes, type, release_date, detected_at, notes_source, structured_notes, merge_metadata, search_sources')
+      .select('id, version, notes, type, release_date, detected_at, notes_source, structured_notes, merge_metadata, search_sources, is_current_override, newsletter_verified')
       .eq('software_id', softwareId);
 
     if (error) throw error;
@@ -307,6 +307,30 @@ export async function getVersionHistory(softwareId: string) {
 
     return sorted;
   });
+}
+
+/**
+ * Set a version as the current version (manual override)
+ */
+export async function setVersionAsCurrent(versionId: string, softwareId: string): Promise<boolean> {
+  try {
+    // Set is_current_override to true for this version
+    // The database trigger will automatically set all other versions for this software to false
+    const { error } = await supabase
+      .from('software_version_history')
+      .update({ is_current_override: true })
+      .eq('id', versionId)
+      .eq('software_id', softwareId); // Extra safety check
+
+    if (error) throw error;
+
+    toast.success('Version set as current');
+    return true;
+  } catch (error) {
+    console.error('Error setting version as current:', error);
+    toast.error('Failed to set version as current');
+    return false;
+  }
 }
 
 /**

@@ -21,7 +21,7 @@ export async function getAllSoftwareWithVersions(): Promise<Software[]> {
       // Fetch ALL verified versions
       const { data: allVersions } = await supabase
         .from('software_version_history')
-        .select('version, notes, type, release_date, detected_at, newsletter_verified')
+        .select('version, notes, type, release_date, detected_at, newsletter_verified, is_current_override')
         .eq('software_id', software.id)
         .eq('newsletter_verified', true);
 
@@ -71,7 +71,7 @@ export async function getLatestVersionInfo(softwareId: string): Promise<{
     // Fetch ALL verified versions
     const { data, error } = await supabase
       .from('software_version_history')
-      .select('version, notes, release_date, detected_at, type, newsletter_verified')
+      .select('version, notes, release_date, detected_at, type, newsletter_verified, is_current_override')
       .eq('software_id', softwareId)
       .eq('newsletter_verified', true);
 
