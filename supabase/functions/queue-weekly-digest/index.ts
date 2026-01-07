@@ -2,6 +2,7 @@
 // Triggered by cron job on Sunday evening to prepare Monday's emails
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { compareVersions, getCurrentVersionFromHistory } from '../_shared/version-utils.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -252,20 +253,17 @@ serve(async (req) => {
         }))
 
         // Get ALL verified version history for tracked software
-        // We need the full history to find the previous version for each software
+        // We need the full history to find the current and previous versions
         const sinceDate = new Date()
         sinceDate.setDate(sinceDate.getDate() - sinceDays)
 
         const { data: allVersionHistory } = await supabase
           .from('software_version_history')
-          .select('software_id, version, release_date, detected_at, notes, type')
+          .select('software_id, version, release_date, detected_at, notes, type, newsletter_verified')
           .in('software_id', softwareIds)
           .eq('newsletter_verified', true)
-          .order('software_id')
-          .order('release_date', { ascending: false, nullsLast: true })
-          .order('detected_at', { ascending: false })
 
-        // Group version history by software_id
+        // Group version history by software_id and sort by SEMANTIC VERSION (not date!)
         const versionHistoryBySoftware = new Map<string, any[]>()
         for (const history of (allVersionHistory || [])) {
           if (!versionHistoryBySoftware.has(history.software_id)) {
@@ -274,30 +272,37 @@ serve(async (req) => {
           versionHistoryBySoftware.get(history.software_id)!.push(history)
         }
 
+        // Sort each software's version history by semantic version (highest first)
+        for (const [softwareId, histories] of versionHistoryBySoftware.entries()) {
+          histories.sort((a, b) => compareVersions(b.version, a.version))
+          versionHistoryBySoftware.set(softwareId, histories)
+        }
+
         // Process each tracked software to find updates
         const updates: any[] = []
 
         for (const tracked of trackedSoftware) {
           const software = tracked.software as any
-          if (!software || !software.current_version) continue
+          if (!software) continue
 
           const histories = versionHistoryBySoftware.get(tracked.software_id) || []
           if (histories.length === 0) continue
 
-          // Find the current version in the history
-          const currentVersionEntry = histories.find((h: any) => h.version === software.current_version)
-          if (!currentVersionEntry) continue
+          // Get current version from history using semantic versioning (highest version = current)
+          // This is the single source of truth, NOT software.current_version field
+          const currentVersion = getCurrentVersionFromHistory(histories, true)
+          if (!currentVersion) continue
 
           // Check if the current version was released in the time period
-          const releaseDate = currentVersionEntry.release_date || currentVersionEntry.detected_at
+          const releaseDate = currentVersion.release_date || currentVersion.detected_at
           const releaseDateObj = new Date(releaseDate)
           if (releaseDateObj < sinceDate) {
             // Current version was released before the time period, skip
             continue
           }
 
-          // Find the previous version (the next one in the sorted array)
-          const currentIndex = histories.indexOf(currentVersionEntry)
+          // Find the previous version (the next one in the semantically sorted array)
+          const currentIndex = histories.indexOf(currentVersion)
           const previousVersionEntry = currentIndex < histories.length - 1 ? histories[currentIndex + 1] : null
 
           // Determine old version
@@ -309,10 +314,10 @@ serve(async (req) => {
             manufacturer: software.manufacturer,
             category: software.category,
             old_version: oldVersion,
-            new_version: software.current_version,
+            new_version: currentVersion.version,
             release_date: releaseDate,
-            release_notes: currentVersionEntry.notes || [],
-            update_type: currentVersionEntry.type || 'patch',
+            release_notes: currentVersion.notes || [],
+            update_type: currentVersion.type || 'patch',
           })
         }
 

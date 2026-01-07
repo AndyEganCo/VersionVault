@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Software, SoftwareUpdate } from '../types';
 import { toast } from 'sonner';
+import { compareVersions } from '@/lib/utils/version-utils';
 
 interface ApiResponse<T> {
   readonly data: T | null;
@@ -264,16 +265,13 @@ export async function addVersionHistory(softwareId: string, data: {
       if (error) throw error;
     }
 
-    // Update the software table with the new version info and last_checked
+    // Update the software table with last_checked timestamp
+    // NOTE: We DO NOT update current_version here anymore.
+    // Current version is now COMPUTED from software_version_history table
+    // using semantic version comparison (highest version = current version).
     const softwareUpdateData: any = {
-      current_version: data.version,
       last_checked: new Date().toISOString()
     };
-
-    // Only update release_date if a valid date is provided
-    if (data.release_date && data.release_date !== 'null') {
-      softwareUpdateData.release_date = data.release_date;
-    }
 
     const { error: softwareError } = await supabase
       .from('software')
@@ -293,32 +291,6 @@ export async function addVersionHistory(softwareId: string, data: {
     });
     return false;
   }
-}
-
-/**
- * Compare two version strings (semantic versioning)
- * Returns: -1 if v1 < v2, 0 if equal, 1 if v1 > v2
- */
-function compareVersions(v1: string, v2: string): number {
-  // Remove common prefixes like 'v', 'r', 'version', etc.
-  const clean1 = v1.replace(/^[vr]|version\s*/i, '').trim();
-  const clean2 = v2.replace(/^[vr]|version\s*/i, '').trim();
-
-  // Split into parts (1.5.0 -> [1, 5, 0])
-  const parts1 = clean1.split(/[.-]/).map(p => parseInt(p) || 0);
-  const parts2 = clean2.split(/[.-]/).map(p => parseInt(p) || 0);
-
-  // Compare each part
-  const maxLength = Math.max(parts1.length, parts2.length);
-  for (let i = 0; i < maxLength; i++) {
-    const part1 = parts1[i] || 0;
-    const part2 = parts2[i] || 0;
-
-    if (part1 > part2) return 1;
-    if (part1 < part2) return -1;
-  }
-
-  return 0;
 }
 
 export async function getVersionHistory(softwareId: string) {

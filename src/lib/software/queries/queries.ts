@@ -1,31 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import type { Software } from '../types';
-
-/**
- * Compare two version strings (semantic versioning)
- * Returns: -1 if v1 < v2, 0 if equal, 1 if v1 > v2
- */
-function compareVersions(v1: string, v2: string): number {
-  // Remove common prefixes like 'v', 'r', 'version', etc.
-  const clean1 = v1.replace(/^[vr]|version\s*/i, '').trim();
-  const clean2 = v2.replace(/^[vr]|version\s*/i, '').trim();
-
-  // Split into parts (1.5.0 -> [1, 5, 0])
-  const parts1 = clean1.split(/[.-]/).map(p => parseInt(p) || 0);
-  const parts2 = clean2.split(/[.-]/).map(p => parseInt(p) || 0);
-
-  // Compare each part
-  const maxLength = Math.max(parts1.length, parts2.length);
-  for (let i = 0; i < maxLength; i++) {
-    const part1 = parts1[i] || 0;
-    const part2 = parts2[i] || 0;
-
-    if (part1 > part2) return 1;
-    if (part1 < part2) return -1;
-  }
-
-  return 0;
-}
+import { compareVersions, getCurrentVersionFromHistory } from '@/lib/utils/version-utils';
 
 export async function getAllSoftwareWithVersions(): Promise<Software[]> {
   // First get all software
@@ -39,28 +14,29 @@ export async function getAllSoftwareWithVersions(): Promise<Software[]> {
     throw new Error('Failed to fetch software');
   }
 
-  // Then get latest version for each software
+  // Then get latest version for each software from version history
+  // NOTE: current_version is COMPUTED from software_version_history using semantic versioning
   const softwareWithVersions = await Promise.all(
     softwareData.map(async (software) => {
-      // Fetch ALL versions and sort by version number (not date)
+      // Fetch ALL verified versions
       const { data: allVersions } = await supabase
         .from('software_version_history')
-        .select('version, notes, type, release_date, detected_at')
-        .eq('software_id', software.id);
+        .select('version, notes, type, release_date, detected_at, newsletter_verified')
+        .eq('software_id', software.id)
+        .eq('newsletter_verified', true);
 
-      // Sort by version number to get the true latest version
-      const sortedVersions = (allVersions || []).sort((a, b) => compareVersions(b.version, a.version));
-      const versionHistory = sortedVersions[0];
+      // Get current version using semantic version comparison (highest version = current)
+      const currentVersion = getCurrentVersionFromHistory(allVersions || [], true);
 
       return {
         ...software,
-        current_version: versionHistory?.version || software.current_version,
-        release_date: versionHistory?.release_date || versionHistory?.detected_at || software.release_date,
-        release_notes: versionHistory ? [{
-          version: versionHistory.version,
-          date: versionHistory.release_date || versionHistory.detected_at,
-          notes: Array.isArray(versionHistory.notes) ? versionHistory.notes : [versionHistory.notes],
-          type: versionHistory.type
+        current_version: currentVersion?.version || null,
+        release_date: currentVersion?.release_date || currentVersion?.detected_at || null,
+        release_notes: currentVersion ? [{
+          version: currentVersion.version,
+          date: currentVersion.release_date || currentVersion.detected_at,
+          notes: Array.isArray(currentVersion.notes) ? currentVersion.notes : [currentVersion.notes],
+          type: currentVersion.type
         }] : []
       };
     })
@@ -92,11 +68,12 @@ export async function getLatestVersionInfo(softwareId: string): Promise<{
   type: 'major' | 'minor' | 'patch' | null;
 }> {
   try {
-    // Fetch ALL versions and sort by version number (not date)
+    // Fetch ALL verified versions
     const { data, error } = await supabase
       .from('software_version_history')
-      .select('version, notes, release_date, detected_at, type')
-      .eq('software_id', softwareId);
+      .select('version, notes, release_date, detected_at, type, newsletter_verified')
+      .eq('software_id', softwareId)
+      .eq('newsletter_verified', true);
 
     if (error) {
       console.error('Supabase error:', error);
@@ -112,15 +89,23 @@ export async function getLatestVersionInfo(softwareId: string): Promise<{
       };
     }
 
-    // Sort by version number to get the true latest version
-    const sortedVersions = data.sort((a, b) => compareVersions(b.version, a.version));
-    const latestVersion = sortedVersions[0];
+    // Get current version using semantic version comparison (highest version = current)
+    const currentVersion = getCurrentVersionFromHistory(data, true);
+
+    if (!currentVersion) {
+      return {
+        version: null,
+        notes: null,
+        release_date: null,
+        type: null
+      };
+    }
 
     return {
-      version: latestVersion.version,
-      notes: latestVersion.notes,
-      release_date: latestVersion.release_date || latestVersion.detected_at,
-      type: latestVersion.type
+      version: currentVersion.version,
+      notes: currentVersion.notes,
+      release_date: currentVersion.release_date || currentVersion.detected_at,
+      type: currentVersion.type
     };
   } catch (err) {
     console.error('Error fetching latest version:', err);
