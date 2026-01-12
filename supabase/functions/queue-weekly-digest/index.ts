@@ -327,18 +327,47 @@ serve(async (req) => {
         // Get new software added in the time period
         const { data: newSoftwareData } = await supabase
           .from('software')
-          .select('id, name, manufacturer, category, current_version, created_at')
+          .select('id, name, manufacturer, category, created_at')
           .gte('created_at', sinceDate.toISOString())
           .order('created_at', { ascending: false })
 
-        const newSoftware = (newSoftwareData || []).map(s => ({
-          software_id: s.id,
-          name: s.name,
-          manufacturer: s.manufacturer,
-          category: s.category,
-          initial_version: s.current_version || 'N/A',
-          added_date: s.created_at,
-        }))
+        // Get version history for all new software to compute current version
+        const newSoftwareIds = (newSoftwareData || []).map(s => s.id)
+        let newSoftwareVersions: any[] = []
+
+        if (newSoftwareIds.length > 0) {
+          const { data } = await supabase
+            .from('software_version_history')
+            .select('software_id, version, release_date, detected_at, newsletter_verified, is_current_override')
+            .in('software_id', newSoftwareIds)
+            .eq('newsletter_verified', true)
+
+          newSoftwareVersions = data || []
+        }
+
+        // Group versions by software_id
+        const newSoftwareVersionsBySoftware = new Map<string, any[]>()
+        for (const version of newSoftwareVersions) {
+          if (!newSoftwareVersionsBySoftware.has(version.software_id)) {
+            newSoftwareVersionsBySoftware.set(version.software_id, [])
+          }
+          newSoftwareVersionsBySoftware.get(version.software_id)!.push(version)
+        }
+
+        // Map to newSoftware with computed current version
+        const newSoftware = (newSoftwareData || []).map(s => {
+          const versions = newSoftwareVersionsBySoftware.get(s.id) || []
+          const currentVer = getCurrentVersionFromHistory(versions, true)
+
+          return {
+            software_id: s.id,
+            name: s.name,
+            manufacturer: s.manufacturer,
+            category: s.category,
+            initial_version: currentVer?.version || 'N/A',
+            added_date: s.created_at,
+          }
+        })
 
         // Generate idempotency key
         const today = new Date().toISOString().split('T')[0]
