@@ -7,7 +7,7 @@ import { Sparkles, Package, Bell, CheckCircle2, Loader2, User, Globe, Search, Pl
 import { useAuth } from '@/contexts/auth-context';
 import { getSoftwareList } from '@/lib/software/api/api';
 import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
-import { updateUserSettings, NotificationFrequency } from '@/lib/settings';
+import { updateUserSettings, NotificationFrequency, AllQuietPreference } from '@/lib/settings';
 import { Software } from '@/lib/software/types';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +46,7 @@ export function OnboardingModal() {
   // Step 3 state
   const [selectedFrequency, setSelectedFrequency] = useState<NotificationFrequency>('weekly');
   const [selectedTimezone, setSelectedTimezone] = useState('America/New_York');
+  const [selectedAllQuietPref, setSelectedAllQuietPref] = useState<AllQuietPreference>('always');
 
   useEffect(() => {
     const checkOnboarding = async () => {
@@ -175,6 +176,9 @@ export function OnboardingModal() {
 
       // Save timezone
       await updateUserSettings(user.id, 'timezone', selectedTimezone);
+
+      // Save all quiet preference
+      await updateUserSettings(user.id, 'allQuietPreference', selectedAllQuietPref);
 
       toast.success('Setup complete! Welcome to VersionVault.');
 
@@ -427,6 +431,41 @@ export function OnboardingModal() {
                 </div>
               </div>
 
+              {/* All Quiet Email Preference */}
+              <div className="space-y-3">
+                <Label>When should we send "all quiet" emails?</Label>
+                <p className="text-xs text-muted-foreground">
+                  We send an "all quiet" email when you have no version updates to let you know we're still watching.
+                </p>
+                <div className="space-y-2">
+                  {[
+                    { value: 'always' as AllQuietPreference, label: 'Always send', desc: "You'll know when everything is up to date" },
+                    { value: 'new_software_only' as AllQuietPreference, label: 'Only with new software', desc: 'Stay informed about new additions to the platform' },
+                    { value: 'never' as AllQuietPreference, label: 'Never send', desc: 'Only notify me about version updates' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setSelectedAllQuietPref(option.value)}
+                      className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                        selectedAllQuietPref === option.value
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{option.label}</p>
+                          <p className="text-sm text-muted-foreground">{option.desc}</p>
+                        </div>
+                        {selectedAllQuietPref === option.value && (
+                          <CheckCircle2 className="h-5 w-5 text-primary" />
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Timezone Selection */}
               <div className="space-y-3">
                 <Label htmlFor="timezone">
@@ -488,6 +527,15 @@ export function OnboardingModal() {
                   <p className="font-medium text-sm mb-2">🔔 Email Digest</p>
                   <p className="text-sm text-muted-foreground">
                     {selectedFrequency.charAt(0).toUpperCase() + selectedFrequency.slice(1)} updates
+                  </p>
+                </div>
+
+                <div className="rounded-lg border bg-muted/50 p-4">
+                  <p className="font-medium text-sm mb-2">🌙 All Quiet Emails</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedAllQuietPref === 'always' && 'Always send'}
+                    {selectedAllQuietPref === 'new_software_only' && 'Only with new software'}
+                    {selectedAllQuietPref === 'never' && 'Never send'}
                   </p>
                 </div>
 

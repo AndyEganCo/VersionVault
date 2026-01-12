@@ -130,7 +130,7 @@ serve(async (req) => {
     // Get users who want this frequency of emails
     const { data: userSettings, error: subError } = await supabase
       .from('user_settings')
-      .select('user_id, timezone')
+      .select('user_id, timezone, all_quiet_preference')
       .eq('email_notifications', true)
       .eq('notification_frequency', frequency)
 
@@ -173,6 +173,7 @@ serve(async (req) => {
       .map(settings => ({
         user_id: settings.user_id,
         timezone: settings.timezone,
+        all_quiet_preference: settings.all_quiet_preference || 'always',
         email: userEmailMap.get(settings.user_id)
       }))
       .filter(sub => sub.email) // Only keep users with valid emails
@@ -371,6 +372,23 @@ serve(async (req) => {
             added_date: s.created_at,
           }
         })
+
+        // Check if we should send an all_quiet email based on user preference
+        if (!hasUpdates) {
+          const allQuietPref = sub.all_quiet_preference || 'always'
+
+          // Determine if we should send all quiet email
+          const shouldSendAllQuiet =
+            allQuietPref === 'always' ||
+            (allQuietPref === 'new_software_only' && newSoftware.length > 0)
+
+          if (!shouldSendAllQuiet) {
+            // Skip this user - no email sent
+            console.log(`⏭️  Skipping ${userEmail} - no updates and all_quiet_preference is '${allQuietPref}'`)
+            skipped++
+            continue
+          }
+        }
 
         // Generate idempotency key
         const today = new Date().toISOString().split('T')[0]
