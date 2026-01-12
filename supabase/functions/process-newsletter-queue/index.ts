@@ -299,6 +299,11 @@ serve(async (req) => {
 
 // Generate email content based on queue item
 function generateEmailContent(item: any): { subject: string; html: string; text: string } {
+  // Handle no_tracking_reminder separately
+  if (item.email_type === 'no_tracking_reminder') {
+    return generateNoTrackingReminderContent(item)
+  }
+
   const updates = item.payload.updates || []
   const updateCount = updates.length
   const hasUpdates = updateCount > 0
@@ -557,6 +562,203 @@ function generateTextEmail(data: any): string {
     }
   }
 
+  text += `---\n`
+  text += `Manage Preferences: ${VERSIONVAULT_URL}/user/notifications\n`
+  text += `Unsubscribe: ${VERSIONVAULT_URL}/unsubscribe\n\n`
+  text += `© ${new Date().getFullYear()} VersionVault`
+
+  return text
+}
+
+// Generate no tracking reminder email content
+function generateNoTrackingReminderContent(item: any): { subject: string; html: string; text: string } {
+  const popularSoftware = item.payload.popularSoftware || []
+  const sponsor = item.payload.sponsor
+  const subjectLine = item.payload.subject_line || "Your software tracker is looking a bit empty..."
+
+  // Extract username from email
+  const userName = item.email.split('@')[0]
+
+  // Generate HTML
+  const html = generateNoTrackingReminderHtml({
+    userName,
+    popularSoftware,
+    sponsor,
+    userId: item.user_id,
+  })
+
+  // Generate plain text
+  const text = generateNoTrackingReminderText({
+    userName,
+    popularSoftware,
+  })
+
+  return { subject: subjectLine, html, text }
+}
+
+// Generate HTML for no tracking reminder
+function generateNoTrackingReminderHtml(data: any): string {
+  const { userName, popularSoftware, sponsor, userId } = data
+
+  const softwareCards = popularSoftware.map((s: any) => `
+    <a href="${VERSIONVAULT_URL}/software?software_id=${s.software_id}" style="text-decoration: none; display: block; color: inherit;">
+      <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+        <div style="font-size: 16px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">${s.name}</div>
+        <div style="font-size: 13px; color: #a3a3a3; margin-bottom: 12px;">${s.manufacturer} • ${s.category}</div>
+        <div style="font-size: 14px; color: #737373; font-family: monospace; margin-bottom: 12px;">
+          Latest: <span style="color: #22c55e; font-weight: 600;">${s.current_version}</span>
+        </div>
+        <div style="font-size: 13px; font-weight: 500; color: #3b82f6;">Track This →</div>
+      </div>
+    </a>
+  `).join('')
+
+  const sponsorHtml = sponsor ? `
+    <div style="padding: 24px;">
+      <div style="font-size: 10px; font-weight: 600; color: #525252; text-align: center; margin-bottom: 8px; letter-spacing: 1px;">SPONSOR</div>
+      <a href="${sponsor.cta_url}" style="text-decoration: none;">
+        <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px;">
+          <div style="font-size: 14px; font-weight: 600; color: #ffffff;">${sponsor.name}</div>
+          ${sponsor.tagline ? `<div style="font-size: 13px; color: #3b82f6; margin-top: 4px;">${sponsor.tagline}</div>` : ''}
+          ${sponsor.description ? `<div style="font-size: 13px; color: #a3a3a3; margin-top: 8px; line-height: 1.5;">${sponsor.description}</div>` : ''}
+          <div style="display: inline-block; font-size: 12px; font-weight: 600; color: #ffffff; background-color: #2563eb; padding: 8px 16px; border-radius: 6px; margin-top: 12px;">${sponsor.cta_text}</div>
+        </div>
+      </a>
+    </div>
+  ` : ''
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #0a0a0a;">
+    <!-- Header -->
+    <div style="padding: 32px 24px 24px 24px; border-bottom: 1px solid #262626;">
+      <a href="${VERSIONVAULT_URL}" style="text-decoration: none;">
+        <div style="font-size: 20px; font-weight: 600; color: #ffffff; font-family: monospace;">
+          <span style="color: #a3a3a3;">&gt;_</span> VersionVault
+        </div>
+      </a>
+      <div style="font-size: 14px; color: #a3a3a3; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;">
+        TRACKING REMINDER
+      </div>
+    </div>
+
+    <!-- Greeting -->
+    <div style="padding: 24px 24px 0 24px;">
+      <div style="font-size: 16px; color: #ffffff; margin-bottom: 12px;">Hey ${userName},</div>
+      <div style="font-size: 14px; color: #a3a3a3; line-height: 1.6;">
+        We noticed you haven't tracked any software yet. You're missing out on automatic version updates!
+      </div>
+    </div>
+
+    <!-- Main Message -->
+    <div style="padding: 32px 24px; text-align: center;">
+      <div style="font-size: 48px; margin-bottom: 16px;">📭</div>
+      <div style="font-size: 20px; font-weight: 600; color: #ffffff; margin-bottom: 12px;">Your watchlist is feeling lonely</div>
+      <div style="font-size: 14px; color: #a3a3a3; line-height: 1.5;">Track software to get notified about updates, security patches, and new releases — all automatically.</div>
+    </div>
+
+    <!-- Benefits -->
+    <div style="padding: 0 24px 24px 24px;">
+      <div style="font-size: 12px; font-weight: 600; color: #525252; letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 16px;">WHY TRACK SOFTWARE?</div>
+
+      <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;">
+        <div style="font-size: 20px; margin-bottom: 8px;">🔔</div>
+        <div style="font-size: 13px; color: #a3a3a3; line-height: 1.5;">
+          <strong style="color: #ffffff;">Never miss critical updates</strong><br />
+          Get notified when your tools release new versions
+        </div>
+      </div>
+
+      <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;">
+        <div style="font-size: 20px; margin-bottom: 8px;">🛡️</div>
+        <div style="font-size: 13px; color: #a3a3a3; line-height: 1.5;">
+          <strong style="color: #ffffff;">Stay ahead of breaking changes</strong><br />
+          See major, minor, and patch releases at a glance
+        </div>
+      </div>
+
+      <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;">
+        <div style="font-size: 20px; margin-bottom: 8px;">🔐</div>
+        <div style="font-size: 13px; color: #a3a3a3; line-height: 1.5;">
+          <strong style="color: #ffffff;">Security patch alerts</strong><br />
+          Know when security updates are available
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div style="padding: 8px 24px 32px 24px; text-align: center;">
+      <a href="${VERSIONVAULT_URL}/software" style="display: inline-block; font-size: 14px; font-weight: 600; color: #ffffff; background-color: #2563eb; padding: 12px 32px; border-radius: 8px; text-decoration: none;">Browse Software</a>
+      <div style="font-size: 12px; color: #525252; margin-top: 12px;">Start tracking your favorite tools</div>
+    </div>
+
+    ${popularSoftware.length > 0 ? `
+      <!-- Popular Software -->
+      <div style="padding: 24px 24px 0 24px;">
+        <div style="font-size: 18px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">🔥 Popular Software</div>
+        <div style="font-size: 13px; color: #a3a3a3; margin-bottom: 16px;">Most tracked by the community</div>
+        ${softwareCards}
+        <div style="text-align: center; margin-top: 16px; margin-bottom: 24px;">
+          <a href="${VERSIONVAULT_URL}/software" style="font-size: 13px; color: #3b82f6; text-decoration: none;">View all software →</a>
+        </div>
+      </div>
+    ` : ''}
+
+    ${sponsorHtml}
+
+    <!-- Footer -->
+    <div style="padding: 24px; border-top: 1px solid #262626;">
+      <div style="font-size: 13px; color: #a3a3a3; text-align: center; margin-bottom: 16px;">
+        <a href="${VERSIONVAULT_URL}/user/notifications" style="color: #a3a3a3; text-decoration: underline;">Manage Preferences</a>
+        <span style="margin: 0 12px; color: #525252;">•</span>
+        <a href="${VERSIONVAULT_URL}/unsubscribe?uid=${userId}" style="color: #a3a3a3; text-decoration: underline;">Unsubscribe</a>
+        <span style="margin: 0 12px; color: #525252;">•</span>
+        <a href="${VERSIONVAULT_URL}" style="color: #a3a3a3; text-decoration: underline;">Open Dashboard</a>
+      </div>
+      <div style="font-size: 12px; color: #525252; text-align: center; margin-bottom: 8px;">VersionVault • Software Version Tracking</div>
+      <div style="font-size: 12px; color: #404040; text-align: center;">© ${new Date().getFullYear()} VersionVault. All rights reserved.</div>
+    </div>
+  </div>
+</body>
+</html>
+  `
+}
+
+// Generate plain text for no tracking reminder
+function generateNoTrackingReminderText(data: any): string {
+  const { userName, popularSoftware } = data
+
+  let text = `>_ VersionVault - Tracking Reminder\n\n`
+  text += `Hey ${userName},\n\n`
+  text += `We noticed you haven't tracked any software yet. You're missing out on automatic version updates!\n\n`
+  text += `Your watchlist is feeling lonely. Track software to get notified about updates, security patches, and new releases — all automatically.\n\n`
+
+  text += `WHY TRACK SOFTWARE?\n\n`
+  text += `🔔 Never miss critical updates\n`
+  text += `   Get notified when your tools release new versions\n\n`
+  text += `🛡️ Stay ahead of breaking changes\n`
+  text += `   See major, minor, and patch releases at a glance\n\n`
+  text += `🔐 Security patch alerts\n`
+  text += `   Know when security updates are available\n\n`
+
+  if (popularSoftware.length > 0) {
+    text += `🔥 POPULAR SOFTWARE\n\n`
+    text += `Most tracked by the community:\n\n`
+
+    for (const s of popularSoftware) {
+      text += `${s.name}\n`
+      text += `${s.manufacturer} • ${s.category}\n`
+      text += `Latest: ${s.current_version}\n\n`
+    }
+  }
+
+  text += `Browse Software: ${VERSIONVAULT_URL}/software\n\n`
   text += `---\n`
   text += `Manage Preferences: ${VERSIONVAULT_URL}/user/notifications\n`
   text += `Unsubscribe: ${VERSIONVAULT_URL}/unsubscribe\n\n`
