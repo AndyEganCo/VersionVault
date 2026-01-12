@@ -154,7 +154,10 @@ serve(async (req) => {
     }
 
     // Get user emails from auth.users
-    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers()
+    // Note: listUsers() has a default limit of 50. Set perPage to ensure we get all users.
+    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
+      perPage: 1000 // Fetch up to 1000 users (covers growth)
+    })
 
     if (authError) {
       throw new Error(`Failed to fetch user emails: ${authError.message}`)
