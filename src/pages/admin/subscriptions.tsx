@@ -54,23 +54,31 @@ export function AdminSubscriptions() {
     try {
       setLoading(true);
 
-      // Fetch subscriptions with user emails
-      const { data, error } = await supabase
+      // Fetch subscriptions
+      const { data: subscriptionsData, error: subsError } = await supabase
         .from('subscriptions')
-        .select(`
-          *,
-          user:user_id (
-            email
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (subsError) throw subsError;
+
+      // Fetch user emails separately
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, email');
+
+      if (usersError) throw usersError;
+
+      // Create a map of user_id to email
+      const userEmailMap = (usersData || []).reduce((acc: any, user: any) => {
+        acc[user.id] = user.email;
+        return acc;
+      }, {});
 
       // Transform data to include user email
-      const subscriptionsWithEmail = (data || []).map((sub: any) => ({
+      const subscriptionsWithEmail = (subscriptionsData || []).map((sub: any) => ({
         ...sub,
-        user_email: sub.user?.email || 'Unknown',
+        user_email: userEmailMap[sub.user_id] || 'Unknown',
       }));
 
       setSubscriptions(subscriptionsWithEmail);

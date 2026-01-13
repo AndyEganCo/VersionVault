@@ -4,17 +4,31 @@ import { supabase } from '@/lib/supabase';
  * Create a Stripe Checkout session for premium subscription ($50/year)
  */
 export async function createPremiumCheckoutSession(userId: string): Promise<string> {
+  // Check if required environment variables are set
+  const priceId = import.meta.env.VITE_STRIPE_PREMIUM_PRICE_ID;
+  if (!priceId) {
+    throw new Error('Stripe is not configured. Please set VITE_STRIPE_PREMIUM_PRICE_ID in your .env file.');
+  }
+
   const { data, error } = await supabase.functions.invoke('create-checkout-session', {
     body: {
       userId,
       mode: 'subscription',
-      priceId: import.meta.env.VITE_STRIPE_PREMIUM_PRICE_ID,
+      priceId,
     },
   });
 
   if (error) {
     console.error('Error creating checkout session:', error);
-    throw new Error('Failed to create checkout session');
+    // Check if it's a function error with a message
+    if (error.message) {
+      throw new Error(error.message);
+    }
+    throw new Error('Failed to create checkout session. Please ensure Edge Functions are deployed and Stripe is configured.');
+  }
+
+  if (!data?.url) {
+    throw new Error('No checkout URL returned. Please check Edge Function logs.');
   }
 
   return data.url;
