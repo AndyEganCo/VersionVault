@@ -123,6 +123,7 @@ serve(async (req) => {
             quantity: 1,
           },
         ],
+        allow_promotion_codes: true, // Enable discount/promo code field
         success_url: `${siteUrl}/dashboard?session_id={CHECKOUT_SESSION_ID}&premium=success`,
         cancel_url: `${siteUrl}/premium?canceled=true`,
         metadata: {
@@ -163,6 +164,7 @@ serve(async (req) => {
             quantity: 1,
           },
         ],
+        allow_promotion_codes: true, // Enable discount/promo code field
         success_url: `${siteUrl}/dashboard?session_id={CHECKOUT_SESSION_ID}&donation=success`,
         cancel_url: `${siteUrl}/donate?canceled=true`,
         metadata: {
