@@ -124,18 +124,19 @@ export function NewsletterCompose() {
   const loadStats = async () => {
     try {
       // Get total active users with email notifications enabled
-      // Use select without head: true to get actual count
-      const { data, count, error } = await supabase
+      // Fetch all matching records and count client-side to avoid RLS/count issues
+      const { data: userSettings, error } = await supabase
         .from('user_settings')
-        .select('user_id', { count: 'exact' })
+        .select('user_id')
         .eq('email_notifications', true);
 
       if (error) {
         console.error('Error fetching user count:', error);
       }
 
-      console.log('📊 User count result:', { count, dataLength: data?.length });
-      setTotalUsers(count || 0);
+      const userCount = userSettings?.length || 0;
+      console.log('📊 User count result:', { userCount, rawData: userSettings?.length });
+      setTotalUsers(userCount);
 
       // Get active sponsor
       const { data: sponsorData } = await supabase
