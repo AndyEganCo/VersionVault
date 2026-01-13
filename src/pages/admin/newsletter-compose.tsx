@@ -283,21 +283,29 @@ export function NewsletterCompose() {
         `Newsletter sent successfully! ${result.sent_count} emails sent${result.failed_count > 0 ? `, ${result.failed_count} failed` : ''}`
       );
 
-      // Mark draft as sent if it exists
-      if (currentDraftId) {
-        await supabase
-          .from('newsletter_drafts')
-          .update({ sent_at: new Date().toISOString() })
-          .eq('id', currentDraftId);
-      }
+      // Only mark draft as sent and reset form if sending to all users (not test emails)
+      if (recipientType === 'all') {
+        // Mark draft as sent if it exists
+        if (currentDraftId) {
+          await supabase
+            .from('newsletter_drafts')
+            .update({ sent_at: new Date().toISOString() })
+            .eq('id', currentDraftId);
+        }
 
-      // Reset form
-      setSubject('');
-      setContent('');
-      setDraftName('');
-      setNotes('');
-      setCurrentDraftId(null);
-      loadDrafts();
+        // Reset form after sending to all users
+        setSubject('');
+        setContent('');
+        setDraftName('');
+        setNotes('');
+        setCurrentDraftId(null);
+        loadDrafts();
+      } else {
+        // For test emails, just save the current state as a draft if not already saved
+        if (!currentDraftId && subject && content) {
+          handleSaveDraft();
+        }
+      }
     } catch (error: any) {
       console.error('Error sending newsletter:', error);
       toast.error(error.message || 'Failed to send newsletter');
