@@ -179,7 +179,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
           // Call enhanced extraction edge function for better notes
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout for web search
+            const timeoutId = setTimeout(() => controller.abort(), 180000); // 180 second timeout for web search (increased from 120s)
 
             const enhancedResult = await fetch(
               `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-with-web-search`,
