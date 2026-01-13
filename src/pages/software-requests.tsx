@@ -76,8 +76,6 @@ export function SoftwareRequests() {
           website: request.website,
           version_website: request.version_url,
           category: extracted.category,
-          current_version: extracted.currentVersion || null,
-          release_date: extracted.releaseDate || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }]);
@@ -89,6 +87,25 @@ export function SoftwareRequests() {
           return;
         }
         throw insertError;
+      }
+
+      // Step 2.5: Add initial version to version history if extracted
+      if (extracted.currentVersion) {
+        const { error: versionError } = await supabase
+          .from('software_version_history')
+          .insert([{
+            software_id: softwareId,
+            version: extracted.currentVersion,
+            release_date: extracted.releaseDate || null,
+            detected_at: new Date().toISOString(),
+            newsletter_verified: true, // Mark as verified since it came from AI extraction
+            is_verified: true
+          }]);
+
+        if (versionError) {
+          console.warn('Failed to add initial version to history:', versionError);
+          // Don't fail the whole operation if version history insertion fails
+        }
       }
 
       // Step 3: Update request status to approved and link to software
