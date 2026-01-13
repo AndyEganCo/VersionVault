@@ -9,7 +9,7 @@ const corsHeaders = {
     'authorization, x-client-info, apikey, content-type',
 };
 
-const VERSIONVAULT_FROM = 'VersionVault <newsletter@versionvault.dev>';
+const VERSIONVAULT_FROM = 'VersionVault <newsletter@updates.versionvault.dev>';
 const VERSIONVAULT_URL = 'https://versionvault.dev';
 const RATE_LIMIT_DELAY_MS = 500; // Resend allows 2 req/sec
 
