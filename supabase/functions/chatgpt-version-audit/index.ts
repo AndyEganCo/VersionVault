@@ -4,6 +4,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Resend } from 'https://esm.sh/resend@2.0.0'
+import { getCurrentVersionFromHistory } from '../_shared/version-utils.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -112,10 +113,10 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     const resend = new Resend(resendApiKey)
 
-    // Fetch all software with current versions, ordered consistently
+    // Fetch all software, ordered consistently
     const { data: allSoftware, error: softwareError } = await supabase
       .from('software')
-      .select('id, name, current_version')
+      .select('id, name')
       .order('id') // Consistent ordering by ID
 
     if (softwareError) {
@@ -170,9 +171,40 @@ serve(async (req) => {
 
       console.log(`\n🔍 Batch ${batchNum}/${batches.length}: Auditing ${batch.length} items with web search...`)
 
-      // Prepare data for audit
+      // Calculate current versions from version history for this batch
+      // This is the single source of truth - NOT the software.current_version field
+      const softwareIds = batch.map(s => s.id)
+      const { data: versionHistory } = await supabase
+        .from('software_version_history')
+        .select('software_id, version, release_date, detected_at, newsletter_verified')
+        .in('software_id', softwareIds)
+        .eq('newsletter_verified', true)
+
+      // Group by software_id and calculate current version for each
+      const versionsBySoftware = new Map<string, string>()
+      const historyBySoftware = new Map<string, any[]>()
+
+      for (const history of (versionHistory || [])) {
+        if (!historyBySoftware.has(history.software_id)) {
+          historyBySoftware.set(history.software_id, [])
+        }
+        historyBySoftware.get(history.software_id)!.push(history)
+      }
+
+      // Calculate current version for each software using semantic versioning
+      for (const [softwareId, histories] of historyBySoftware.entries()) {
+        const currentVersion = getCurrentVersionFromHistory(histories, true)
+        if (currentVersion) {
+          versionsBySoftware.set(softwareId, currentVersion.version)
+        }
+      }
+
+      // Prepare data for audit with computed current versions
       const softwareList = batch
-        .map((s: SoftwareItem) => `- ${s.name}: ${s.current_version || 'No version tracked'}`)
+        .map((s: SoftwareItem) => {
+          const currentVersion = versionsBySoftware.get(s.id)
+          return `- ${s.name}: ${currentVersion || 'No version tracked'}`
+        })
         .join('\n')
 
       const prompt = `Today's date is ${new Date().toISOString().split('T')[0]}.

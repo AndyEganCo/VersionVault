@@ -1,0 +1,27 @@
+# Allow all crawlers
+User-agent: *
+Allow: /
+
+# Public pages
+Allow: /
+Allow: /login
+Allow: /signup
+Allow: /software
+Allow: /forgot-password
+
+# Disallow private/protected pages
+Disallow: /dashboard
+Disallow: /admin/
+Disallow: /user/
+Disallow: /requests
+Disallow: /reset-password
+Disallow: /verify-email
+Disallow: /auth/
+Disallow: /unsubscribe
+
+# AdSense crawler
+User-agent: Mediapartners-Google
+Allow: /
+
+# Sitemap location
+Sitemap: https://versionvault.dev/sitemap.xml

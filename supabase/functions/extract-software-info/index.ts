@@ -340,6 +340,47 @@ function formatAppleVersionHistory(versions: any[]): string {
 }
 
 /**
+ * Get domain-specific scraping strategy for known difficult sites
+ * AUTO-FIX: Automatically applies custom wait conditions for sites with complex JS rendering
+ */
+function getDomainSpecificStrategy(url: string): ScrapingStrategy | undefined {
+  const hostname = new URL(url).hostname.toLowerCase()
+
+  // Barco - Vue.js with slow API data loading
+  if (hostname.includes('barco.com')) {
+    return {
+      waitForSelector: '.software-version, [class*="latest-software"], [class*="version"]',
+      waitTime: 15000, // Give API time to respond
+      customScript: `
+        // Wait for Vue.js data binding to complete (no more "data.displayVersion" placeholders)
+        console.log('⏳ Waiting for Barco Vue.js to populate version data...');
+        await page.waitForFunction(() => {
+          const bodyText = document.body.textContent || '';
+          // Check if placeholders are gone and actual version numbers appear
+          const hasPlaceholders = bodyText.includes('data.displayVersion') ||
+                                 bodyText.includes('data.displayName');
+          const hasVersionNumbers = /v?\\d+\\.\\d+\\.\\d+/.test(bodyText);
+
+          if (!hasPlaceholders && hasVersionNumbers) {
+            console.log('✅ Version data populated!');
+            return true;
+          }
+          return false;
+        }, { timeout: 45000 });
+      `
+    }
+  }
+
+  // Add more domain-specific strategies here as needed
+  // Example:
+  // if (hostname.includes('example.com')) {
+  //   return { waitForSelector: '.version-info', waitTime: 10000 }
+  // }
+
+  return undefined
+}
+
+/**
  * Fetches webpage content and extracts text, with intelligent content limits
  * Phase 3: Now supports interactive scraping strategies
  * Returns: { content: string, method: string }
@@ -363,7 +404,10 @@ async function fetchWebpageContent(
     const isKnownDifficult = urlObj.hostname.includes('adobe.com') ||
                             urlObj.hostname.includes('helpx.adobe') ||
                             urlObj.hostname.includes('autodesk.com') ||
-                            urlObj.hostname.includes('apple.com')
+                            urlObj.hostname.includes('apple.com') ||
+                            urlObj.hostname.includes('pushpay.com') ||
+                            urlObj.hostname.includes('force.com') || // Salesforce Community pages
+                            urlObj.hostname.includes('barco.com') // Vue.js template placeholders
 
     if (isKnownDifficult) {
       console.warn('⚠️ Known difficult domain detected - using enhanced bot blocking protection')
@@ -989,39 +1033,54 @@ ${description ? `- Description: ${description}` : ''}
    - COMPLETELY IGNORE version numbers for other products
    - Return null if you cannot confidently identify which version belongs to "${name}"
 
-3. **VALIDATION REQUIREMENTS:**
-   - The version number MUST appear in the same section/paragraph as "${name}"
+3. **PRODUCT NAME MATCHING - SMART RULES:**
+   - **EXACT MATCH**: If the FULL product name "${name}" appears on the page → productNameFound=true
+   - **IMPLIED MANUFACTURER**: If the page is clearly about ${manufacturer} products (e.g., manufacturer's official domain, branded header/footer) AND contains the product-specific part of the name (without manufacturer prefix), this counts as finding the product
+     * Example: Looking for "Resi Encoder" on support.pushpay.com → "Encoder Version 1.2.3" IS valid (manufacturer implied by domain)
+     * Example: Looking for "DaVinci Resolve" on blackmagicdesign.com → "Resolve 19.1" IS valid (manufacturer implied)
+     * Example: Looking for "Adobe Photoshop" on adobe.com → "Photoshop 2024" IS valid
+   - **DISAMBIGUATION**: If the page contains multiple ${manufacturer} products, you MUST verify the version is for the correct product variant
+     * Example: On a page with both "Encoder" and "Decoder", look for headers/sections to distinguish which version belongs to which
+   - Mark productNameFound=true if EITHER exact match OR implied manufacturer match (as long as no ambiguity with other products)
+
+4. **VERSION EXTRACTION REQUIREMENTS:**
+   - The version number MUST appear in the same section/paragraph as the product identifier (full or partial name)
    - If you see other product names with version numbers, IGNORE them completely
-   - If you cannot find "${name}" mentioned on the page, return null for version
    - Provide a confidence score (0-100) for your extraction
-   - Mark productNameFound as true only if "${name}" appears on page
+   - Use lower confidence (50-70) for implied manufacturer matches vs higher (80-100) for exact matches
 
 **EXAMPLES OF CORRECT BEHAVIOR:**
 
-✅ CORRECT Example 1:
+✅ CORRECT Example 1 - Exact Match:
 Page: "DaVinci Resolve 19.1.3 released Dec 1. Fusion Studio 19.1.3 also available."
 Target: "DaVinci Resolve"
 Response: { version: "19.1.3", releaseDate: "2024-12-01", confidence: 95, productNameFound: true }
+
+✅ CORRECT Example 2 - Implied Manufacturer:
+Page: "Encoder Version 1.15.4.33 - Dec 2, 2025" (on support.pushpay.com/resi domain)
+Target: "Resi Encoder"
+Manufacturer: "Resi"
+Response: { version: "1.15.4.33", releaseDate: "2025-12-02", confidence: 85, productNameFound: true, validationNotes: "Found 'Encoder' on official Resi support page, manufacturer implied by domain" }
+
+✅ CORRECT Example 3 - Disambiguation Required:
+Page: "Encoder Version 1.15.4 released. Decoder Version 2.9.6 also available." (on resi.io)
+Target: "Resi Encoder"
+Response: { version: "1.15.4", confidence: 85, productNameFound: true, validationNotes: "Found Encoder section distinct from Decoder section" }
 
 ❌ WRONG Example 1:
 Page: "DaVinci Resolve 19.1.3 released Dec 1. Fusion Studio 19.1.3 also available."
 Target: "DaVinci Resolve"
 Response: { version: "19.1.3", confidence: 50, productNameFound: false }  ← WRONG! Product name WAS found
 
-✅ CORRECT Example 2:
-Page: "ATEM Mini 9.6.1 is now available"
-Target: "DaVinci Resolve"
-Response: { version: null, confidence: 0, productNameFound: false, validationNotes: "Target product not found on page" }
-
 ❌ WRONG Example 2:
 Page: "ATEM Mini 9.6.1 is now available"
 Target: "DaVinci Resolve"
 Response: { version: "9.6.1", confidence: 95 }  ← WRONG! This is ATEM's version, not DaVinci's
 
-✅ CORRECT Example 3:
-Page: "Version 2.5.0 released today"
-Target: "QLab"
-Response: { version: "2.5.0", confidence: 40, productNameFound: false, validationNotes: "Version found but product name not mentioned" }
+❌ WRONG Example 3 - Implied Manufacturer Used Incorrectly:
+Page: "Encoder Version 1.2.3" (on generic tech blog)
+Target: "Resi Encoder"
+Response: { version: "1.2.3", productNameFound: true }  ← WRONG! Not on official Resi domain, manufacturer not implied
 
 ${hasVersionContent ? `
 VERSION PAGE CONTENT (from ${versionUrl}):
@@ -1084,13 +1143,14 @@ Extract the following information:
 
 6. **Validation Fields** (REQUIRED):
    - **confidence**: 0-100 score for how confident you are this is correct
-     - 90-100: Very confident, product name found, version nearby
-     - 70-89: Confident, product name found, version present
-     - 50-69: Moderate, product name found OR version present
-     - 30-49: Low, unclear which product
+     - 90-100: Very confident, exact product name found with version nearby
+     - 80-89: Confident, exact product name found with version present
+     - 70-79: Good confidence, implied manufacturer match with clear context
+     - 50-69: Moderate, implied match but some ambiguity possible
+     - 30-49: Low, unclear which product or weak context
      - 0-29: Very low, likely wrong product
-   - **productNameFound**: true/false - was "${name}" found on page?
-   - **validationNotes**: Brief explanation of confidence level
+   - **productNameFound**: true/false - was "${name}" (or its product-specific part on official domain) found?
+   - **validationNotes**: Brief explanation of confidence level and matching strategy used
 
 **CRITICAL INSTRUCTIONS:**
 - **USE ONLY THE PROVIDED CONTENT** - Do NOT use your training data
@@ -1141,7 +1201,9 @@ CRITICAL RULES:
 2. If multiple products appear on the page, distinguish between them carefully
 3. DO NOT make up or guess release dates - use null if not found
 4. Provide HONEST confidence scores - use low confidence if uncertain
-5. Mark productNameFound=true ONLY if the exact product name appears on page
+5. Mark productNameFound=true if EITHER:
+   a) The exact product name appears on page, OR
+   b) The product-specific part appears AND manufacturer is clearly implied by domain/branding (see validation rules)
 6. ONLY use information from provided webpage content, NOT your training data
 7. Return only valid JSON
 
@@ -1483,7 +1545,7 @@ serve(async (req) => {
   }
 
   try {
-    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy, sourceType, forumConfig } = await req.json() as ExtractRequest
+    const { name, website, versionUrl, description, content, manufacturer, productIdentifier, scrapingStrategy: providedStrategy, sourceType, forumConfig } = await req.json() as ExtractRequest
 
     if (!name || !website) {
       return new Response(
@@ -1493,6 +1555,16 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       )
+    }
+
+    // AUTO-FIX: Apply domain-specific strategy if none provided
+    let scrapingStrategy = providedStrategy
+    if (!scrapingStrategy && versionUrl) {
+      const autoStrategy = getDomainSpecificStrategy(versionUrl)
+      if (autoStrategy) {
+        console.log(`🎯 AUTO-APPLIED domain-specific scraping strategy for ${new URL(versionUrl).hostname}`)
+        scrapingStrategy = autoStrategy
+      }
     }
 
     console.log(`\n${'='.repeat(60)}`)
@@ -1553,7 +1625,7 @@ serve(async (req) => {
         console.log(`🗨️ Source type: Forum`)
         console.log(`Forum config:`, forumConfig)
         try {
-          versionContent = await fetchForumContent(versionUrl, forumConfig || {})
+          versionContent = await fetchForumContent(versionUrl, forumConfig || {}, false, 10, scrapingStrategy)
           fetchMethod = 'forum'
         } catch (forumError) {
           console.error('Forum fetch failed:', forumError)
@@ -1592,7 +1664,7 @@ serve(async (req) => {
         // Fetch content from both URLs in parallel (try regular fetch first)
         // Phase 3: Pass scraping strategy if provided
         const [versionResult, mainResult] = await Promise.all([
-          fetchWebpageContent(versionUrl, 30000, false, scrapingStrategy),
+          fetchWebpageContent(versionUrl, 60000, false, scrapingStrategy),
           // Only fetch main website if it's different from version URL
           versionUrl.toLowerCase() !== website.toLowerCase()
             ? fetchWebpageContent(website, 20000, false)
@@ -1628,7 +1700,7 @@ serve(async (req) => {
         console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
 
         // Retry with Browserless for JavaScript pages
-        const retryResult = await fetchWebpageContent(versionUrl, 30000, true, scrapingStrategy)
+        const retryResult = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy)
         versionContent = retryResult.content
         fetchMethod = retryResult.method
 
@@ -1639,6 +1711,52 @@ serve(async (req) => {
         if (versionContent.length > 2000) {
           console.log(`✅ SUCCESS: Browserless extracted much more content!`)
         }
+
+        // LONG-TERM FIX: Detect loader/framework code patterns
+        // Common patterns in JavaScript frameworks that indicate page hasn't fully loaded
+        const loaderPatterns = [
+          /Loading.*Sorry to interrupt/i,
+          /Loading.*CSS Error/i,
+          /Please wait.*loading/i,
+          /<div id="root"><\/div>/i,
+          /<div id="app"><\/div>/i,
+          /cookieEnabled.*cookieMessage/i,
+          /slds-modal.*slds-fade-in-open/i, // Salesforce Lightning
+          /data\.display(Version|version|Name|name)/i, // Vue.js data binding (e.g., "Version data.displayVersion")
+          /\{\{.*version.*\}\}/i, // Mustache/Vue templates (e.g., "{{version}}")
+          /\$\{.*version.*\}/i, // Template literals (e.g., "${version}")
+          /\[\[.*version.*\]\]/i, // Angular/other framework bindings
+        ]
+
+        const hasLoaderCode = loaderPatterns.some(pattern => pattern.test(versionContent))
+        const hasMinimalActualContent = versionContent.replace(/<[^>]+>/g, '').trim().length < 500
+
+        if (hasLoaderCode && hasMinimalActualContent && fetchMethod === 'browserless') {
+          console.log(`⚠️ LOADER CODE DETECTED: Page returned framework/loader code instead of content`)
+          console.log(`🔄 Retrying with EXTENDED timeout (60s) for slow-loading page...`)
+
+          // Retry with extended Browserless timeout (60 seconds)
+          const extendedRetry = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy)
+          versionContent = extendedRetry.content
+          fetchMethod = extendedRetry.method
+
+          console.log(`\n=== AFTER EXTENDED BROWSERLESS ===`)
+          console.log(`Version content length: ${versionContent.length}`)
+          console.log(`Fetch method: ${fetchMethod}`)
+
+          // Check if we still have loader code
+          const stillHasLoaderCode = loaderPatterns.some(pattern => pattern.test(versionContent))
+          if (stillHasLoaderCode) {
+            console.warn(`⚠️ Still detecting loader code after extended timeout - page may require interactive scraping`)
+            console.warn(`💡 RECOMMENDATION: This page likely needs one of the following:`)
+            console.warn(`   1. Interactive scraping (click buttons, wait for API responses)`)
+            console.warn(`   2. Authentication to view version data`)
+            console.warn(`   3. Scroll/interaction to trigger lazy loading`)
+            console.warn(`   Detected placeholders in content: ${loaderPatterns.filter(p => p.test(versionContent)).map(p => p.source).join(', ')}`)
+          } else {
+            console.log(`✅ SUCCESS: Extended timeout resolved loader code issue!`)
+          }
+        }
       }
     }
 
@@ -1647,7 +1765,7 @@ serve(async (req) => {
     // This ensures we find the product even if buried deep in the page
     if (versionContent.length > 1000 && name) {
       console.log('\n🎯 Applying smart content extraction...')
-      const smartResult = extractSmartContent(versionContent, name, 30000)
+      const smartResult = extractSmartContent(versionContent, name, 60000)
 
       if (smartResult.foundProduct) {
         console.log(`✅ Smart extraction successful - found product! (${smartResult.method})`)
@@ -1656,10 +1774,10 @@ serve(async (req) => {
         console.log(`⚠️ Product not found in ${versionContent.length} chars, using first chunk (${smartResult.method})`)
         versionContent = smartResult.content
       }
-    } else if (versionContent.length > 30000) {
+    } else if (versionContent.length > 60000) {
       // If no product name provided, just truncate to reasonable size
-      console.log(`⚠️ No product name for smart extraction, truncating to 30K`)
-      versionContent = versionContent.substring(0, 30000)
+      console.log(`⚠️ No product name for smart extraction, truncating to 60K`)
+      versionContent = versionContent.substring(0, 60000)
     }
 
     // CRITICAL: Also limit mainWebsiteContent to prevent token limit errors
@@ -1700,7 +1818,10 @@ serve(async (req) => {
     const isKnownDifficultDomain = versionUrl && (
       versionUrl.includes('adobe.com') ||
       versionUrl.includes('apple.com') ||
-      versionUrl.includes('autodesk.com')
+      versionUrl.includes('autodesk.com') ||
+      versionUrl.includes('pushpay.com') ||
+      versionUrl.includes('force.com') ||
+      versionUrl.includes('barco.com')
     )
 
     // Try sitemap discovery if webpage content is low and this is a webpage source

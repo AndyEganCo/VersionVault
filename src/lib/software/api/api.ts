@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Software, SoftwareUpdate } from '../types';
 import { toast } from 'sonner';
+import { compareVersions, normalizeVersion } from '@/lib/utils/version-utils';
 
 interface ApiResponse<T> {
   readonly data: T | null;
@@ -124,12 +125,24 @@ export async function addVersionHistory(softwareId: string, data: {
   search_sources?: string[];
 }): Promise<boolean> {
   try {
-    // First check if this version already exists
+    // Get software name for version normalization
+    const { data: softwareData, error: softwareError } = await supabase
+      .from('software')
+      .select('name')
+      .eq('id', softwareId)
+      .single();
+
+    if (softwareError) throw softwareError;
+
+    // Normalize version to merge duplicates like "r32" and "32", "cobra_v125" and "v125"
+    const normalizedVersion = normalizeVersion(data.version, softwareData.name);
+
+    // Check if this normalized version already exists
     const { data: existing } = await supabase
       .from('software_version_history')
       .select('id, notes_source, notes, structured_notes, search_sources')
       .eq('software_id', softwareId)
-      .eq('version', data.version)
+      .eq('version', normalizedVersion)
       .maybeSingle();
 
     const notesArray = typeof data.notes === 'string'
@@ -220,13 +233,6 @@ export async function addVersionHistory(softwareId: string, data: {
 
       if (error) throw error;
     } else {
-      // Get the current version from the software table to use as previous_version
-      const { data: softwareData } = await supabase
-        .from('software')
-        .select('current_version')
-        .eq('id', softwareId)
-        .single();
-
       // Insert new version - use provided date or null if not available
       const releaseDate = (data.release_date && data.release_date !== 'null')
         ? data.release_date
@@ -236,8 +242,8 @@ export async function addVersionHistory(softwareId: string, data: {
       const insertData: any = {
         id: crypto.randomUUID(),
         software_id: data.software_id,
-        version: data.version,
-        previous_version: softwareData?.current_version || null,
+        version: normalizedVersion,  // Use normalized version
+        previous_version: null,  // Could be calculated from version history if needed
         release_date: releaseDate,
         notes: notesArray,
         type: data.type,
@@ -264,23 +270,20 @@ export async function addVersionHistory(softwareId: string, data: {
       if (error) throw error;
     }
 
-    // Update the software table with the new version info and last_checked
+    // Update the software table with last_checked timestamp
+    // NOTE: We DO NOT update current_version here anymore.
+    // Current version is now COMPUTED from software_version_history table
+    // using semantic version comparison (highest version = current version).
     const softwareUpdateData: any = {
-      current_version: data.version,
       last_checked: new Date().toISOString()
     };
 
-    // Only update release_date if a valid date is provided
-    if (data.release_date && data.release_date !== 'null') {
-      softwareUpdateData.release_date = data.release_date;
-    }
-
-    const { error: softwareError } = await supabase
+    const { error: updateError } = await supabase
       .from('software')
       .update(softwareUpdateData)
       .eq('id', softwareId);
 
-    if (softwareError) throw softwareError;
+    if (updateError) throw updateError;
 
     return true;
   } catch (error) {
@@ -296,45 +299,66 @@ export async function addVersionHistory(softwareId: string, data: {
 }
 
 /**
- * Compare two version strings (semantic versioning)
- * Returns: -1 if v1 < v2, 0 if equal, 1 if v1 > v2
+ * Check if a version string looks like valid semantic versioning
+ * @param version Version string to check
+ * @returns true if version starts with digits (likely semver), false otherwise
  */
-function compareVersions(v1: string, v2: string): number {
-  // Remove common prefixes like 'v', 'r', 'version', etc.
-  const clean1 = v1.replace(/^[vr]|version\s*/i, '').trim();
-  const clean2 = v2.replace(/^[vr]|version\s*/i, '').trim();
-
-  // Split into parts (1.5.0 -> [1, 5, 0])
-  const parts1 = clean1.split(/[.-]/).map(p => parseInt(p) || 0);
-  const parts2 = clean2.split(/[.-]/).map(p => parseInt(p) || 0);
-
-  // Compare each part
-  const maxLength = Math.max(parts1.length, parts2.length);
-  for (let i = 0; i < maxLength; i++) {
-    const part1 = parts1[i] || 0;
-    const part2 = parts2[i] || 0;
-
-    if (part1 > part2) return 1;
-    if (part1 < part2) return -1;
-  }
-
-  return 0;
+function isValidSemver(version: string): boolean {
+  // Check if version starts with a number (e.g., "1.2.3", "2.0", "5.0.512")
+  return /^\d+(\.\d+)*/.test(version.trim());
 }
 
 export async function getVersionHistory(softwareId: string) {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('software_version_history')
-      .select('id, version, notes, type, release_date, detected_at, notes_source, structured_notes, merge_metadata, search_sources')
+      .select('id, version, notes, type, release_date, detected_at, notes_source, structured_notes, merge_metadata, search_sources, is_current_override, newsletter_verified')
       .eq('software_id', softwareId);
 
     if (error) throw error;
 
-    // Sort by version number (highest first) instead of date
-    const sorted = (data || []).sort((a, b) => compareVersions(b.version, a.version));
+    if (!data || data.length === 0) return [];
 
-    return sorted;
+    // Check if versions are valid semver or name-based
+    // If ANY version is not valid semver, treat all as name-based and sort by date
+    const allVersionsAreSemver = data.every(entry => isValidSemver(entry.version));
+
+    if (!allVersionsAreSemver) {
+      // Name-based versions: sort by date (newest first)
+      return data.sort((a, b) => {
+        const dateA = a.release_date || a.detected_at || '1970-01-01';
+        const dateB = b.release_date || b.detected_at || '1970-01-01';
+        return new Date(dateB).getTime() - new Date(dateA).getTime();
+      });
+    }
+
+    // Valid semver versions: sort by semantic version (highest first)
+    return data.sort((a, b) => compareVersions(b.version, a.version));
   });
+}
+
+/**
+ * Set a version as the current version (manual override)
+ */
+export async function setVersionAsCurrent(versionId: string, softwareId: string): Promise<boolean> {
+  try {
+    // Set is_current_override to true for this version
+    // The database trigger will automatically set all other versions for this software to false
+    const { error } = await supabase
+      .from('software_version_history')
+      .update({ is_current_override: true })
+      .eq('id', versionId)
+      .eq('software_id', softwareId); // Extra safety check
+
+    if (error) throw error;
+
+    toast.success('Version set as current');
+    return true;
+  } catch (error) {
+    console.error('Error setting version as current:', error);
+    toast.error('Failed to set version as current');
+    return false;
+  }
 }
 
 /**

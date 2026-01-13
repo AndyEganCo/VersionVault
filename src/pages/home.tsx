@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { Navigate } from 'react-router-dom';
@@ -10,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { BetaBanner } from '@/components/beta-banner';
-import { ExternalLink, Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
+import { Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
 import type { Software } from '@/lib/software/types';
 import { formatDate } from '@/lib/date';
 
@@ -36,16 +37,73 @@ export function Home() {
   );
 
   return (
-    <div className="flex flex-col px-4 py-8">
-      <div className="mx-auto max-w-6xl w-full space-y-16">
-        {/* Hero Section */}
-        <div className="text-center space-y-6 pt-8">
+    <>
+      <Helmet>
+        <title>VersionVault - Never Miss a Software Update Again</title>
+        <meta name="description" content="Track 400+ apps and get email alerts when new versions release. Free AI-powered software version tracking. Never miss updates again." />
+        <link rel="canonical" href="https://versionvault.dev/" />
+
+        {/* Open Graph */}
+        <meta property="og:title" content="VersionVault - Never Miss a Software Update Again" />
+        <meta property="og:description" content="Track 400+ software applications and receive automatic email notifications when new versions are released. Free software version tracking service." />
+        <meta property="og:url" content="https://versionvault.dev/" />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="VersionVault" />
+        <meta property="og:image" content="https://versionvault.dev/favicon.svg" />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="VersionVault - Never Miss a Software Update Again" />
+        <meta name="twitter:description" content="Track 400+ software applications and get notified when new versions are released." />
+        <meta name="twitter:image" content="https://versionvault.dev/favicon.svg" />
+
+        {/* Structured Data - WebApplication */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "WebApplication",
+            "name": "VersionVault",
+            "description": "Track software versions and receive automatic email notifications when new versions are released",
+            "url": "https://versionvault.dev",
+            "applicationCategory": "BusinessApplication",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "featureList": [
+              "AI-powered version tracking",
+              "Email notifications",
+              "400+ software applications tracked",
+              "Customizable notification frequency"
+            ]
+          })}
+        </script>
+
+        {/* Structured Data - Organization */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "name": "VersionVault",
+            "url": "https://versionvault.dev",
+            "logo": "https://versionvault.dev/favicon.svg",
+            "description": "Software version tracking and update notification service",
+            "sameAs": []
+          })}
+        </script>
+      </Helmet>
+
+      <div className="flex flex-col px-4 py-8">
+        <div className="mx-auto max-w-6xl w-full space-y-16">
+          {/* Hero Section */}
+          <div className="text-center space-y-6 pt-8">
           <div className="space-y-4">
             <h1 className="text-4xl font-bold tracking-tight sm:text-6xl bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
               Never Miss a Software Update
             </h1>
             <p className="text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed">
-              Track the software you care about and receive automatic email notifications when new versions are released.
+              <Link to="/software" className="text-primary hover:underline">Track the software</Link> you care about and receive automatic email notifications when new versions are released.
               Stay current without the constant checking.
             </p>
           </div>
@@ -57,6 +115,12 @@ export function Home() {
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6">
+              <Link to="/software">
+                <Search className="mr-2 h-5 w-5" />
+                Browse Software
+              </Link>
+            </Button>
+            <Button asChild variant="ghost" size="lg" className="text-lg px-8 py-6">
               <Link to="/login">
                 Sign In
               </Link>
@@ -231,6 +295,9 @@ export function Home() {
           </div>
         </div>
 
+        {/* Ad Banner */}
+        <AdBanner />
+
         {/* Software Browse Section */}
         {!softwareLoading && software.length > 0 && (
           <div className="space-y-6">
@@ -328,10 +395,8 @@ export function Home() {
             software={selectedSoftware}
           />
         )}
-
-        {/* Ad at bottom of page */}
-        <AdBanner />
+        </div>
       </div>
-    </div>
+    </>
   );
 }

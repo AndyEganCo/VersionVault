@@ -2,12 +2,14 @@ import { supabase } from './supabase';
 import { toast } from 'sonner';
 
 export type NotificationFrequency = 'daily' | 'weekly' | 'monthly';
+export type AllQuietPreference = 'always' | 'new_software_only' | 'never';
 
 export type UserSettings = {
   emailNotifications: boolean;
   notificationFrequency: NotificationFrequency;
   appUpdateNotifications: boolean;
   timezone: string;
+  allQuietPreference: AllQuietPreference;
 };
 
 const DEFAULT_SETTINGS: UserSettings = {
@@ -15,6 +17,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   notificationFrequency: 'weekly',
   appUpdateNotifications: true,
   timezone: 'America/New_York',
+  allQuietPreference: 'always',
 };
 
 export async function getUserSettings(userId: string): Promise<UserSettings> {
@@ -45,6 +48,7 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
       notificationFrequency: data.notification_frequency,
       appUpdateNotifications: data.app_update_notifications,
       timezone: data.timezone || DEFAULT_SETTINGS.timezone,
+      allQuietPreference: data.all_quiet_preference || DEFAULT_SETTINGS.allQuietPreference,
     };
   } catch (error) {
     console.error('Error loading user settings:', error);
@@ -56,7 +60,7 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
 export async function updateUserSettings(
   userId: string,
   key: keyof UserSettings,
-  value: boolean | NotificationFrequency | string
+  value: boolean | NotificationFrequency | AllQuietPreference | string
 ): Promise<boolean> {
   try {
     const dbKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);

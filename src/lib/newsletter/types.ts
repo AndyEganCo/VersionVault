@@ -6,7 +6,8 @@ export type EmailType =
   | 'monthly_digest'
   | 'all_quiet'
   | 'welcome'
-  | 'instant_alert';
+  | 'instant_alert'
+  | 'no_tracking_reminder';
 
 export type QueueStatus = 'pending' | 'processing' | 'sent' | 'failed' | 'cancelled';
 
@@ -153,6 +154,26 @@ export interface WelcomeEmailProps {
   frequency: 'daily' | 'weekly' | 'monthly';
   preferencesUrl: string;
   dashboardUrl: string;
+}
+
+export interface PopularSoftware {
+  software_id: string;
+  name: string;
+  manufacturer: string;
+  category: string;
+  current_version: string;
+  tracker_count: number;
+}
+
+export interface NoTrackingReminderProps {
+  userName: string;
+  userEmail: string;
+  popularSoftware?: PopularSoftware[];
+  sponsor?: SponsorData | null;
+  unsubscribeUrl: string;
+  preferencesUrl: string;
+  dashboardUrl: string;
+  softwarePageUrl: string;
 }
 
 // Queue and processing types
