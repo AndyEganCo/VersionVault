@@ -19,7 +19,7 @@ import { AdBanner } from '@/components/dashboard/ad-banner';
 import type { Software as SoftwareType } from '@/lib/software/types';
 
 export function Software() {
-  const { user } = useAuth();
+  const { user, isPremium } = useAuth();
   const { software, loading: softwareLoading, refreshSoftware } = useSoftwareList();
   const { trackedIds, loading: trackingLoading, refreshTracking } = useTrackedSoftware();
   const [search, setSearch] = useState('');
@@ -260,7 +260,7 @@ export function Software() {
       />
       <div className="space-y-6">
         {/* Ad Banner */}
-        <AdBanner />
+        <AdBanner show={!isPremium} />
 
         <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
           <h1 className="text-2xl font-bold">Software Updates</h1>
