@@ -86,7 +86,7 @@ export function AdminSubscriptions() {
       // Calculate stats
       const active = subscriptionsWithEmail.filter((s: Subscription) => s.status === 'active').length;
       const canceled = subscriptionsWithEmail.filter((s: Subscription) => s.cancel_at_period_end).length;
-      const mrr = active * 50 / 12; // $50/year = ~$4.17/month
+      const mrr = active * 25 / 12; // $25/year = ~$2.08/month
 
       setStats({
         total: subscriptionsWithEmail.length,
@@ -210,7 +210,7 @@ export function AdminSubscriptions() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">
-                        {sub.plan_type === 'premium_yearly' ? '$50/year' : sub.plan_type}
+                        {sub.plan_type === 'premium_yearly' ? '$25/year' : sub.plan_type}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">

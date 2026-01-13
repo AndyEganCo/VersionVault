@@ -225,7 +225,7 @@ export function Donate() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Get an ad-free experience with Premium for $50/year.
+                Get an ad-free experience with Premium for $25/year.
               </p>
               <Button
                 variant="outline"

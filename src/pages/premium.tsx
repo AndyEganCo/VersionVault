@@ -99,7 +99,7 @@ export function Premium() {
             One simple plan, unlimited value
           </CardDescription>
           <div className="mt-6">
-            <span className="text-5xl font-bold">$50</span>
+            <span className="text-5xl font-bold">$25</span>
             <span className="text-muted-foreground">/year</span>
           </div>
         </CardHeader>

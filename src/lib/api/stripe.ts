@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 
 /**
- * Create a Stripe Checkout session for premium subscription ($50/year)
+ * Create a Stripe Checkout session for premium subscription ($25/year)
  */
 export async function createPremiumCheckoutSession(userId: string): Promise<string> {
   // Check if required environment variables are set
