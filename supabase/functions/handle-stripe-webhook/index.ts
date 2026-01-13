@@ -138,6 +138,32 @@ serve(async (req) => {
 })
 
 // ============================================
+// Helper Functions
+// ============================================
+
+/**
+ * Safely convert Unix timestamp to ISO string
+ * Handles null, undefined, and invalid timestamps
+ */
+function toISOString(unixTimestamp: number | null | undefined): string | null {
+  if (!unixTimestamp || unixTimestamp <= 0) {
+    return null
+  }
+
+  try {
+    const date = new Date(unixTimestamp * 1000)
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return null
+    }
+    return date.toISOString()
+  } catch (error) {
+    console.error(`❌ Error converting timestamp ${unixTimestamp}:`, error)
+    return null
+  }
+}
+
+// ============================================
 // Handler Functions
 // ============================================
 
@@ -172,8 +198,8 @@ async function handleCheckoutCompleted(
         stripe_checkout_session_id: session.id,
         status: subscription.status,
         plan_type: 'premium_yearly',
-        current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-        current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+        current_period_start: toISOString(subscription.current_period_start),
+        current_period_end: toISOString(subscription.current_period_end),
         cancel_at_period_end: subscription.cancel_at_period_end,
       }], {
         onConflict: 'stripe_subscription_id',
@@ -234,12 +260,10 @@ async function handleSubscriptionChange(
     .from('subscriptions')
     .update({
       status: subscription.status,
-      current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-      current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
+      current_period_start: toISOString(subscription.current_period_start),
+      current_period_end: toISOString(subscription.current_period_end),
       cancel_at_period_end: subscription.cancel_at_period_end,
-      canceled_at: subscription.canceled_at
-        ? new Date(subscription.canceled_at * 1000).toISOString()
-        : null,
+      canceled_at: toISOString(subscription.canceled_at),
     })
     .eq('stripe_subscription_id', subscription.id)
 
@@ -259,7 +283,7 @@ async function handleSubscriptionDeleted(
     .from('subscriptions')
     .update({
       status: 'canceled',
-      canceled_at: new Date().toISOString(),
+      canceled_at: toISOString(subscription.canceled_at) || new Date().toISOString(),
     })
     .eq('stripe_subscription_id', subscription.id)
 
