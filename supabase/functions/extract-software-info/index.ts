@@ -1558,12 +1558,20 @@ serve(async (req) => {
     }
 
     // AUTO-FIX: Apply domain-specific strategy if none provided
+    // Only apply if versionUrl is a valid URL (not for PDF uploads or other content-provided scenarios)
     let scrapingStrategy = providedStrategy
-    if (!scrapingStrategy && versionUrl) {
-      const autoStrategy = getDomainSpecificStrategy(versionUrl)
-      if (autoStrategy) {
-        console.log(`🎯 AUTO-APPLIED domain-specific scraping strategy for ${new URL(versionUrl).hostname}`)
-        scrapingStrategy = autoStrategy
+    if (!scrapingStrategy && versionUrl && !content) {
+      try {
+        // Validate that versionUrl is a valid URL before trying to parse it
+        new URL(versionUrl) // This will throw if invalid
+        const autoStrategy = getDomainSpecificStrategy(versionUrl)
+        if (autoStrategy) {
+          console.log(`🎯 AUTO-APPLIED domain-specific scraping strategy for ${new URL(versionUrl).hostname}`)
+          scrapingStrategy = autoStrategy
+        }
+      } catch (urlError) {
+        // versionUrl is not a valid URL (e.g., "PDF Upload"), skip strategy detection
+        console.log(`⚠️ Skipping domain strategy detection - versionUrl is not a valid URL: ${versionUrl}`)
       }
     }
 
