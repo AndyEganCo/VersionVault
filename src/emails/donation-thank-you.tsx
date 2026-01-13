@@ -94,7 +94,7 @@ export default function DonationThankYou({
             <Text style={noteText}>
               Consider upgrading to{' '}
               <Link href={premiumUrl} style={noteLink}>VersionVault Premium</Link>{' '}
-              for $50/year to enjoy an ad-free experience and support ongoing development.
+              for $25/year to enjoy an ad-free experience and support ongoing development.
             </Text>
           </Section>
 
