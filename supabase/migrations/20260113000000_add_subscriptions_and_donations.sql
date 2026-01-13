@@ -140,35 +140,42 @@ ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.donations ENABLE ROW LEVEL SECURITY;
 
 -- Subscriptions policies
+DROP POLICY IF EXISTS "Users can read their own subscriptions" ON public.subscriptions;
 CREATE POLICY "Users can read their own subscriptions" ON public.subscriptions
   FOR SELECT
   TO authenticated
   USING ((select auth.uid()) = user_id);
 
+DROP POLICY IF EXISTS "Admins can read all subscriptions" ON public.subscriptions;
 CREATE POLICY "Admins can read all subscriptions" ON public.subscriptions
   FOR SELECT
   TO authenticated
   USING ((select auth.uid()) IN (SELECT user_id FROM admin_users));
 
+DROP POLICY IF EXISTS "Service role can manage all subscriptions" ON public.subscriptions;
 CREATE POLICY "Service role can manage all subscriptions" ON public.subscriptions
   FOR ALL
   USING ((select auth.role()) = 'service_role');
 
 -- Donations policies
+DROP POLICY IF EXISTS "Users can read their own donations" ON public.donations;
 CREATE POLICY "Users can read their own donations" ON public.donations
   FOR SELECT
   TO authenticated
   USING ((select auth.uid()) = user_id);
 
+DROP POLICY IF EXISTS "Anyone can read public donations" ON public.donations;
 CREATE POLICY "Anyone can read public donations" ON public.donations
   FOR SELECT
   USING (is_public = TRUE);
 
+DROP POLICY IF EXISTS "Admins can read all donations" ON public.donations;
 CREATE POLICY "Admins can read all donations" ON public.donations
   FOR SELECT
   TO authenticated
   USING ((select auth.uid()) IN (SELECT user_id FROM admin_users));
 
+DROP POLICY IF EXISTS "Service role can manage all donations" ON public.donations;
 CREATE POLICY "Service role can manage all donations" ON public.donations
   FOR ALL
   USING ((select auth.role()) = 'service_role');
