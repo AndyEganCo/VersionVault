@@ -70,6 +70,28 @@ export function MainNav({
           >
             Newsletter
           </NavLink>
+          <NavLink
+            to="/admin/subscriptions"
+            className={({ isActive }) =>
+              cn(
+                'text-sm font-medium transition-colors hover:text-primary',
+                isActive ? 'text-primary' : 'text-muted-foreground'
+              )
+            }
+          >
+            Subscriptions
+          </NavLink>
+          <NavLink
+            to="/admin/donations"
+            className={({ isActive }) =>
+              cn(
+                'text-sm font-medium transition-colors hover:text-primary',
+                isActive ? 'text-primary' : 'text-muted-foreground'
+              )
+            }
+          >
+            Donations
+          </NavLink>
         </>
       )}
     </nav>
