@@ -107,7 +107,7 @@ export function SoftwareRequests() {
             detected_at: now,
             created_at: now,
             type: 'major', // Default to major for initial version
-            notes_source: 'ai_extraction',
+            notes_source: 'auto',
             notes_updated_at: now,
             newsletter_verified: true,
             verified_at: now
