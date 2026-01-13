@@ -124,18 +124,16 @@ export function NewsletterCompose() {
   const loadStats = async () => {
     try {
       // Get total active users with email notifications enabled
-      // Fetch all matching records and count client-side to avoid RLS/count issues
-      const { data: userSettings, error } = await supabase
-        .from('user_settings')
-        .select('user_id')
-        .eq('email_notifications', true);
+      // Use RPC function to bypass RLS policies
+      const { data: countData, error: countError } = await supabase
+        .rpc('get_newsletter_recipient_count');
 
-      if (error) {
-        console.error('Error fetching user count:', error);
+      if (countError) {
+        console.error('Error fetching user count:', countError);
       }
 
-      const userCount = userSettings?.length || 0;
-      console.log('📊 User count result:', { userCount, rawData: userSettings?.length });
+      const userCount = countData || 0;
+      console.log('📊 User count result:', { userCount });
       setTotalUsers(userCount);
 
       // Get active sponsor
