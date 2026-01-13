@@ -1,12 +1,22 @@
 import { cn } from '@/lib/utils';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/auth-context';
+import { ChevronDown } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 export function MainNav({
   className,
   ...props
 }: React.HTMLAttributes<HTMLElement>) {
   const { isAdmin } = useAuth();
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin');
 
   return (
     <nav
@@ -36,63 +46,45 @@ export function MainNav({
         Software
       </NavLink>
       {isAdmin && (
-        <>
-          <NavLink
-            to="/admin/software"
-            className={({ isActive }) =>
-              cn(
-                'text-sm font-medium transition-colors hover:text-primary',
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              )
-            }
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className={cn(
+              'flex items-center gap-1 text-sm font-medium transition-colors hover:text-primary outline-none',
+              isAdminRoute ? 'text-primary' : 'text-muted-foreground'
+            )}
           >
-            Manage Software
-          </NavLink>
-          <NavLink
-            to="/admin/users"
-            className={({ isActive }) =>
-              cn(
-                'text-sm font-medium transition-colors hover:text-primary',
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              )
-            }
-          >
-            Manage Users
-          </NavLink>
-          <NavLink
-            to="/admin/newsletter"
-            className={({ isActive }) =>
-              cn(
-                'text-sm font-medium transition-colors hover:text-primary',
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              )
-            }
-          >
-            Newsletter
-          </NavLink>
-          <NavLink
-            to="/admin/subscriptions"
-            className={({ isActive }) =>
-              cn(
-                'text-sm font-medium transition-colors hover:text-primary',
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              )
-            }
-          >
-            Subscriptions
-          </NavLink>
-          <NavLink
-            to="/admin/donations"
-            className={({ isActive }) =>
-              cn(
-                'text-sm font-medium transition-colors hover:text-primary',
-                isActive ? 'text-primary' : 'text-muted-foreground'
-              )
-            }
-          >
-            Donations
-          </NavLink>
-        </>
+            Admin
+            <ChevronDown className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem asChild>
+              <Link to="/admin/software" className="cursor-pointer">
+                Manage Software
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/admin/users" className="cursor-pointer">
+                Manage Users
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/admin/newsletter" className="cursor-pointer">
+                Newsletter
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/admin/subscriptions" className="cursor-pointer">
+                Subscriptions
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/admin/donations" className="cursor-pointer">
+                Donations
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </nav>
   );
