@@ -19,6 +19,7 @@ import { Check, X, Trash2, ExternalLink, Loader2, CheckCircle, User, Mail, Alert
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
+import { normalizeVersion } from '@/lib/utils/version-utils';
 import { RequestSoftwareModal } from '@/components/software/request-software-modal';
 import { RequestFeatureModal } from '@/components/software/request-feature-modal';
 import { RejectRequestDialog } from '@/components/software/reject-request-dialog';
@@ -76,8 +77,6 @@ export function SoftwareRequests() {
           website: request.website,
           version_website: request.version_url,
           category: extracted.category,
-          current_version: extracted.currentVersion || null,
-          release_date: extracted.releaseDate || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }]);
@@ -89,6 +88,35 @@ export function SoftwareRequests() {
           return;
         }
         throw insertError;
+      }
+
+      // Step 2.5: Add initial version to version history if extracted
+      if (extracted.currentVersion) {
+        const now = new Date().toISOString();
+        const normalizedVersion = normalizeVersion(extracted.currentVersion, request.name);
+        const releaseDate = (extracted.releaseDate && extracted.releaseDate !== 'null')
+          ? extracted.releaseDate
+          : now;
+
+        const { error: versionError } = await supabase
+          .from('software_version_history')
+          .insert([{
+            software_id: softwareId,
+            version: normalizedVersion,
+            release_date: releaseDate,
+            detected_at: now,
+            created_at: now,
+            type: 'major', // Default to major for initial version
+            notes_source: 'auto',
+            notes_updated_at: now,
+            newsletter_verified: true,
+            verified_at: now
+          }]);
+
+        if (versionError) {
+          console.warn('Failed to add initial version to history:', versionError);
+          // Don't fail the whole operation if version history insertion fails
+        }
       }
 
       // Step 3: Update request status to approved and link to software
