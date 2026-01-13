@@ -19,6 +19,7 @@ import { Check, X, Trash2, ExternalLink, Loader2, CheckCircle, User, Mail, Alert
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
+import { normalizeVersion } from '@/lib/utils/version-utils';
 import { RequestSoftwareModal } from '@/components/software/request-software-modal';
 import { RequestFeatureModal } from '@/components/software/request-feature-modal';
 import { RejectRequestDialog } from '@/components/software/reject-request-dialog';
@@ -91,15 +92,25 @@ export function SoftwareRequests() {
 
       // Step 2.5: Add initial version to version history if extracted
       if (extracted.currentVersion) {
+        const now = new Date().toISOString();
+        const normalizedVersion = normalizeVersion(extracted.currentVersion, request.name);
+        const releaseDate = (extracted.releaseDate && extracted.releaseDate !== 'null')
+          ? extracted.releaseDate
+          : now;
+
         const { error: versionError } = await supabase
           .from('software_version_history')
           .insert([{
             software_id: softwareId,
-            version: extracted.currentVersion,
-            release_date: extracted.releaseDate || null,
-            detected_at: new Date().toISOString(),
-            newsletter_verified: true, // Mark as verified since it came from AI extraction
-            is_verified: true
+            version: normalizedVersion,
+            release_date: releaseDate,
+            detected_at: now,
+            created_at: now,
+            type: 'major', // Default to major for initial version
+            notes_source: 'ai_extraction',
+            notes_updated_at: now,
+            newsletter_verified: true,
+            verified_at: now
           }]);
 
         if (versionError) {
