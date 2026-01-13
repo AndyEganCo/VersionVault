@@ -13,6 +13,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
 import type { Software } from '@/lib/software/types';
+import { toast } from 'sonner';
 
 export function Dashboard() {
   const { isPremium } = useAuth();
@@ -32,6 +33,32 @@ export function Dashboard() {
     const now = new Date();
     return (now.getTime() - date.getTime()) <= 7 * 24 * 60 * 60 * 1000;
   }).length;
+
+  // Handle payment success messages
+  useEffect(() => {
+    const donation = searchParams.get('donation');
+    const premium = searchParams.get('premium');
+
+    if (donation === 'success') {
+      toast.success('Thank you for your donation! 💙', {
+        description: 'Your support helps keep VersionVault running.',
+      });
+      // Clean up URL
+      searchParams.delete('donation');
+      searchParams.delete('session_id');
+      setSearchParams(searchParams, { replace: true });
+    }
+
+    if (premium === 'success') {
+      toast.success('Welcome to Premium! 🎉', {
+        description: 'Your subscription is now active. Enjoy ad-free browsing!',
+      });
+      // Clean up URL
+      searchParams.delete('premium');
+      searchParams.delete('session_id');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   // Handle deep linking from email - fetch software when software_id parameter is present
   useEffect(() => {
