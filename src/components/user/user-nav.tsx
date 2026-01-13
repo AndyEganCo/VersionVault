@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/auth-context';
 import { Link } from 'react-router-dom';
-import { User, Bell, LogOut, FileText } from 'lucide-react';
+import { User, Bell, LogOut, FileText, Heart } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface UserNavProps {
@@ -58,6 +58,15 @@ export function UserNav({ className }: UserNavProps) {
             <Link to="/requests" className="flex items-center cursor-pointer">
               <FileText className="mr-2 h-4 w-4" />
               Requests
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem asChild>
+            <Link to="/user/contribute" className="flex items-center cursor-pointer">
+              <Heart className="mr-2 h-4 w-4" />
+              Contribute
             </Link>
           </DropdownMenuItem>
         </DropdownMenuGroup>
