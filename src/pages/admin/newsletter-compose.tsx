@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/auth-context';
 import { PageHeader } from '@/components/layout/page-header';
@@ -42,7 +42,12 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle,
+  Code,
+  Type,
 } from 'lucide-react';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+import '@/styles/quill-custom.css';
 
 interface NewsletterDraft {
   id: string;
@@ -77,6 +82,7 @@ export function NewsletterCompose() {
   const [notes, setNotes] = useState('');
   const [recipientType, setRecipientType] = useState<RecipientType>('test');
   const [testEmail, setTestEmail] = useState(user?.email || '');
+  const [editorMode, setEditorMode] = useState<'text' | 'html'>('text');
 
   // UI state
   const [saving, setSaving] = useState(false);
@@ -118,12 +124,17 @@ export function NewsletterCompose() {
   const loadStats = async () => {
     try {
       // Get total active users with email notifications enabled
-      const { count } = await supabase
-        .from('user_settings')
-        .select('*', { count: 'exact', head: true })
-        .eq('email_notifications', true);
+      // Use RPC function to bypass RLS policies
+      const { data: countData, error: countError } = await supabase
+        .rpc('get_newsletter_recipient_count');
 
-      setTotalUsers(count || 0);
+      if (countError) {
+        console.error('Error fetching user count:', countError);
+      }
+
+      const userCount = countData || 0;
+      console.log('📊 User count result:', { userCount });
+      setTotalUsers(userCount);
 
       // Get active sponsor
       const { data: sponsorData } = await supabase
@@ -295,6 +306,21 @@ export function NewsletterCompose() {
     }
   };
 
+  // Quill editor modules configuration
+  const quillModules = useMemo(
+    () => ({
+      toolbar: [
+        [{ header: [1, 2, 3, false] }],
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        [{ color: [] }, { background: [] }],
+        ['link'],
+        ['clean'],
+      ],
+    }),
+    []
+  );
+
   if (!isAdmin) {
     return (
       <PageLayout>
@@ -346,17 +372,59 @@ export function NewsletterCompose() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="content">Email Content (HTML) *</Label>
-                <Textarea
-                  id="content"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="<h2>What's New</h2>&#10;<p>Here's what we shipped this month...</p>"
-                  rows={16}
-                  className="font-mono text-sm"
-                />
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="content">Email Content *</Label>
+                  <div className="inline-flex rounded-lg border p-1">
+                    <Button
+                      type="button"
+                      variant={editorMode === 'text' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setEditorMode('text')}
+                      className="h-7 px-3"
+                    >
+                      <Type className="h-3.5 w-3.5 mr-1.5" />
+                      Text
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={editorMode === 'html' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setEditorMode('html')}
+                      className="h-7 px-3"
+                    >
+                      <Code className="h-3.5 w-3.5 mr-1.5" />
+                      HTML
+                    </Button>
+                  </div>
+                </div>
+
+                {editorMode === 'text' ? (
+                  <div className="border rounded-md">
+                    <ReactQuill
+                      theme="snow"
+                      value={content}
+                      onChange={setContent}
+                      modules={quillModules}
+                      className="bg-background"
+                      placeholder="Write your newsletter content here..."
+                    />
+                  </div>
+                ) : (
+                  <Textarea
+                    id="content"
+                    value={content}
+                    onChange={(e) => setContent(e.target.value)}
+                    placeholder="<h2>What's New</h2>&#10;<p>Here's what we shipped this month...</p>"
+                    rows={16}
+                    className="font-mono text-sm"
+                  />
+                )}
+
                 <p className="text-xs text-muted-foreground">
-                  Use HTML for formatting. The content will be wrapped in the VersionVault email template automatically.
+                  {editorMode === 'text'
+                    ? 'Use the rich text editor to format your content. It will be converted to HTML automatically.'
+                    : 'Write HTML directly. The content will be wrapped in the VersionVault email template automatically.'
+                  }
                 </p>
               </div>
 
