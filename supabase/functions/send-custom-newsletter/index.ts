@@ -165,7 +165,10 @@ serve(async (req) => {
         const userIds = settingsData.map((s) => s.user_id);
 
         // Get user emails from auth.users
-        const { data: authData } = await supabase.auth.admin.listUsers();
+        // Note: listUsers() has a default limit of 50. Set perPage to ensure we get all users.
+        const { data: authData } = await supabase.auth.admin.listUsers({
+          perPage: 1000, // Fetch up to 1000 users (covers growth)
+        });
 
         if (authData.users) {
           const enabledUserIds = new Set(userIds);
