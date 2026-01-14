@@ -166,22 +166,36 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
 
         console.log(`📊 Search plan: ${versionsNeedingSearch.length} to enhance, ${versionsToSkip.length} to skip`);
 
-        // Process versions that need web search enhancement (in parallel!)
+        // HYBRID APPROACH: Save basic versions first, then trigger async enhancement
+        // This prevents 504 timeouts by not waiting for slow web searches
+
+        // First, save all versions with basic info immediately
+        for (const version of versionsNeedingSearch) {
+          const success = await addVersionHistory(software.id, {
+            software_id: software.id,
+            version: version.version,
+            release_date: version.releaseDate,
+            notes: version.notes,
+            type: version.type,
+            notes_source: 'auto'
+          });
+
+          if (success) {
+            savedCount++;
+          }
+        }
+
+        // Then trigger async web search enhancement (fire and forget)
+        // These will update the database in background without blocking the UI
         const enhancementPromises = versionsNeedingSearch.map(async (version) => {
-          // These versions definitely need search (already checked above)
-          let enhancedNotes = version.notes;
-          let structuredNotes = undefined;
-          let searchSources = undefined;
-          let enhancedReleaseDate = version.releaseDate; // Start with extracted date
+          console.log(`🔍 Triggering async web search for ${version.version}...`);
 
-          console.log(`🔍 Performing web search for ${version.version}...`);
-
-          // Call enhanced extraction edge function for better notes
           try {
+            // HYBRID: Use async mode with short timeout for 202 response
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 180000); // 180 second timeout for web search (increased from 120s)
+            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout just for 202 response
 
-            const enhancedResult = await fetch(
+            const response = await fetch(
               `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/extract-with-web-search`,
               {
                 method: 'POST',
@@ -194,7 +208,9 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                   manufacturer: software.manufacturer || 'Unknown',
                   version: version.version,
                   websiteUrl: software.version_website || software.website,
-                  additionalDomains: []
+                  additionalDomains: [],
+                  softwareId: software.id,  // Pass ID for direct DB update
+                  async: true  // Enable async mode (returns 202 immediately)
                 }),
                 signal: controller.signal
               }
@@ -202,61 +218,27 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
 
             clearTimeout(timeoutId);
 
-            if (enhancedResult.ok) {
-              const enhanced = await enhancedResult.json();
-              console.log('✅ Web search response for', version.version, ':', enhanced);
-              if (enhanced.raw_notes && enhanced.raw_notes.length > 0) {
-                enhancedNotes = enhanced.raw_notes.join('\n');
-                structuredNotes = enhanced.structured_notes;
-                searchSources = enhanced.sources;
-                // Use web search release date if found, otherwise keep original
-                if (enhanced.release_date) {
-                  enhancedReleaseDate = enhanced.release_date;
-                  console.log('📅 Found release date:', enhanced.release_date);
-                }
-                console.log('📝 Using enhanced notes for', version.version, '- sources:', searchSources?.length || 0);
-              } else {
-                console.log('⚠️ Web search returned empty notes for', version.version);
-              }
+            if (response.status === 202) {
+              const result = await response.json();
+              console.log(`📤 Web search queued for ${version.version} (request_id: ${result.request_id})`);
+            } else if (response.ok) {
+              // Fallback: synchronous response (shouldn't happen with async: true)
+              console.log(`✅ Web search completed synchronously for ${version.version}`);
             } else {
-              const errorText = await enhancedResult.text();
-              console.error('❌ Web search HTTP error for', version.version, ':', enhancedResult.status, errorText);
+              console.warn(`⚠️ Web search request failed for ${version.version}:`, response.status);
             }
           } catch (error) {
-            console.error('❌ Web search extraction failed for', version.version, ':', error);
-            // Fall back to basic notes - no error shown to user
+            console.error(`❌ Failed to queue web search for ${version.version}:`, error);
+            // Not a critical error - basic version is already saved
           }
-
-          return {
-            version: version.version,
-            releaseDate: enhancedReleaseDate, // Use enhanced date if found via web search
-            notes: enhancedNotes,
-            type: version.type,
-            structuredNotes,
-            searchSources
-          };
         });
 
-        // Wait for all web searches to complete in parallel
-        const enhancedVersions = await Promise.all(enhancementPromises);
-
-        // Save enhanced versions to database
-        for (const versionData of enhancedVersions) {
-          const success = await addVersionHistory(software.id, {
-            software_id: software.id,
-            version: versionData.version,
-            release_date: versionData.releaseDate,
-            notes: versionData.notes,
-            type: versionData.type,
-            notes_source: 'auto', // Mark as auto-generated
-            structured_notes: versionData.structuredNotes,
-            search_sources: versionData.searchSources
-          });
-
-          if (success) {
-            savedCount++;
-          }
-        }
+        // Don't wait for enhancements - they'll complete in background
+        // Just fire them off and continue
+        Promise.all(enhancementPromises).catch(err => {
+          console.error('Some enhancement requests failed:', err);
+          // Non-critical - basic versions are already saved
+        });
 
         // Process skipped versions WITHOUT web search (already have good notes or not priority)
         for (const version of versionsToSkip) {
@@ -286,7 +268,7 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
         let message = `✅ Version extraction complete!\n\n`;
         message += `Found and saved ${savedCount} version${savedCount > 1 ? 's' : ''}\n`;
         if (searchCount > 0) {
-          message += `🔍 Enhanced ${searchCount} with web search\n`;
+          message += `🔍 Enhancing ${searchCount} with web search (background)...\n`;
         }
         if (skipCount > 0) {
           message += `💰 Skipped ${skipCount} (already have good notes)`;
