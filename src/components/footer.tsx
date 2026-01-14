@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Terminal, Github, Twitter } from 'lucide-react';
+import { Terminal } from 'lucide-react';
 import { PageContainer } from './layout/page-container';
 
 export function Footer() {
@@ -9,7 +9,7 @@ export function Footer() {
     <footer className="border-t bg-muted/30 mt-auto">
       <PageContainer>
         <div className="py-8 md:py-12">
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
             {/* Brand Section */}
             <div className="space-y-4">
               <Link to="/" className="flex items-center gap-2">
@@ -43,9 +43,9 @@ export function Footer() {
               </ul>
             </div>
 
-            {/* Company Links */}
+            {/* Legal Links */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold">Company</h3>
+              <h3 className="text-sm font-semibold">Legal</h3>
               <ul className="space-y-3">
                 <li>
                   <Link to="/privacy" className="text-sm text-muted-foreground hover:text-primary transition-colors">
@@ -58,31 +58,6 @@ export function Footer() {
                   </Link>
                 </li>
               </ul>
-            </div>
-
-            {/* Connect Section */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold">Connect</h3>
-              <div className="flex gap-4">
-                <a
-                  href="https://github.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-primary transition-colors"
-                  aria-label="GitHub"
-                >
-                  <Github className="h-5 w-5" />
-                </a>
-                <a
-                  href="https://twitter.com"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-primary transition-colors"
-                  aria-label="Twitter"
-                >
-                  <Twitter className="h-5 w-5" />
-                </a>
-              </div>
             </div>
           </div>
 
