@@ -21,7 +21,7 @@ serve(async (req) => {
     // Fetch all active software
     const { data: software, error } = await supabase
       .from('software')
-      .select('id, name, slug, updated_at, last_checked')
+      .select('id, name, updated_at, last_checked')
       .order('name');
 
     if (error) {
