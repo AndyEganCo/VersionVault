@@ -91,3 +91,17 @@ export interface VersionHistory {
   readonly search_sources?: string[];
   readonly notes_updated_at?: string;
 }
+
+export interface UserTrackingInfo {
+  readonly user_id: string;
+  readonly email: string;
+  readonly display_name: string | null;
+  readonly tracked_at: string;
+  readonly is_admin: boolean;
+  readonly is_premium: boolean;
+}
+
+export interface SoftwareTrackingCount {
+  readonly software_id: string;
+  readonly tracking_count: number;
+}

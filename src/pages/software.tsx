@@ -17,11 +17,14 @@ import { supabase } from '@/lib/supabase';
 import { SoftwareDetailModal } from '@/components/software/software-detail-modal';
 import { AdBanner } from '@/components/dashboard/ad-banner';
 import type { Software as SoftwareType } from '@/lib/software/types';
+import { useSoftwareTrackingCounts } from '@/lib/software/hooks/tracking-hooks';
+import { TrackingUsersModal } from '@/components/software/tracking-users-modal';
 
 export function Software() {
   const { user, isPremium } = useAuth();
   const { software, loading: softwareLoading, refreshSoftware } = useSoftwareList();
   const { trackedIds, loading: trackingLoading, refreshTracking } = useTrackedSoftware();
+  const { counts: trackingCounts } = useSoftwareTrackingCounts();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<SortOption>('name');
@@ -30,6 +33,7 @@ export function Software() {
   const [urlSoftware, setUrlSoftware] = useState<SoftwareType | null>(null);
   const [isLoadingSoftware, setIsLoadingSoftware] = useState(false);
   const [hasProcessedAction, setHasProcessedAction] = useState(false);
+  const [trackingModalSoftware, setTrackingModalSoftware] = useState<SoftwareType | null>(null);
 
   const loading = softwareLoading || trackingLoading;
 
@@ -302,6 +306,8 @@ export function Software() {
               key={s.id}
               software={s}
               onTrackingChange={handleTrackingChange}
+              trackingCount={trackingCounts.get(s.id)}
+              onViewTracking={(software) => setTrackingModalSoftware(software)}
             />
           ))}
         </div>
@@ -319,6 +325,13 @@ export function Software() {
           }}
         />
       )}
+
+      {/* Admin tracking users modal */}
+      <TrackingUsersModal
+        softwareId={trackingModalSoftware?.id || null}
+        softwareName={trackingModalSoftware?.name || ''}
+        onClose={() => setTrackingModalSoftware(null)}
+      />
     </PageLayout>
   );
 }
