@@ -11,6 +11,7 @@ import {
   validateExtraction,
   calculateConfidenceScore,
   detectVersionAnomaly,
+  isOfficialRepoFile,
   type ValidationResult
 } from '../_shared/validation.ts'
 
@@ -1959,7 +1960,16 @@ serve(async (req) => {
     // Apply smart content extraction (Phase 4: Smart Windowing)
     // Search the FULL content for product mentions, extract windows around them
     // This ensures we find the product even if buried deep in the page
-    if (versionContent.length > 1000 && name) {
+    // EXCEPTION: Skip for official repository files - they're structured linearly
+    const isOfficialRepo = isOfficialRepoFile(versionUrl)
+
+    if (isOfficialRepo && versionContent.length > 60000) {
+      // For official repo changelog files, take from the beginning (newest versions first)
+      console.log('📝 Official repo file detected - using linear extraction from beginning')
+      console.log(`   Truncating from ${versionContent.length} to 60000 chars (preserves newest versions)`)
+      versionContent = versionContent.substring(0, 60000)
+    } else if (versionContent.length > 1000 && name && !isOfficialRepo) {
+      // Regular smart windowing for webpages
       console.log('\n🎯 Applying smart content extraction...')
       const smartResult = extractSmartContent(versionContent, name, 60000)
 
