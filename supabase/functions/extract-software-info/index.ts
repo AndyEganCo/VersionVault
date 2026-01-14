@@ -1107,7 +1107,7 @@ Response: { version: "1.2.3", productNameFound: true }  ← WRONG! Not on offici
 
 ${hasVersionContent ? `
 VERSION PAGE CONTENT (from ${versionUrl}):
-${versionContent}
+${isPlainTextFile(versionUrl) && (versionUrl.includes('/raw/') || versionUrl.includes('github.com') || versionUrl.includes('gitlab')) ? '⚠️ NOTE: This is an OFFICIAL REPOSITORY FILE (changelog/NEWS from Git repository). Product name may not appear in text - versions are implied to belong to this product.\n' : ''}${versionContent}
 ` : ''}
 
 ${hasMainContent ? `
@@ -1138,7 +1138,8 @@ Extract the following information:
 3. **Current Version**: The latest version number for "${name}" ONLY
    - Search ALL provided content thoroughly
    - ONLY extract if you find "${name}" mentioned near the version
-   - Return null if product name not found or version ambiguous
+   - **EXCEPTION - Official Repository Files**: For official changelog/NEWS files from the product's own repository (GitLab, GitHub /raw/ paths), the product name is implied by the repository context. Extract versions even if "${name}" doesn't appear in the text itself.
+   - Return null if product name not found or version ambiguous (except for official repo files)
    - Common patterns: "Version X.X.X", "vX.X.X", "Release X.X", "Build XXXX"
    - If multiple versions found, pick the LATEST one for THIS product
 
@@ -1150,6 +1151,7 @@ Extract the following information:
 5. **All Versions**: Extract EVERY version for "${name}" found in content
    - For EACH version: { version, releaseDate (or null), notes, type }
    - ONLY include versions clearly associated with "${name}"
+   - **EXCEPTION - Official Repository Files**: For changelog/NEWS files from official repos, extract ALL versions present - they all belong to this product
    - Exclude versions for other products
    - Include full release notes in markdown format
    - **APPLE APP STORE PAGES**: On App Store pages, release notes appear BEFORE the version number in the text flow
@@ -1166,13 +1168,13 @@ Extract the following information:
 
 6. **Validation Fields** (REQUIRED):
    - **confidence**: 0-100 score for how confident you are this is correct
-     - 90-100: Very confident, exact product name found with version nearby
+     - 90-100: Very confident, exact product name found with version nearby OR official repository file
      - 80-89: Confident, exact product name found with version present
      - 70-79: Good confidence, implied manufacturer match with clear context
      - 50-69: Moderate, implied match but some ambiguity possible
      - 30-49: Low, unclear which product or weak context
      - 0-29: Very low, likely wrong product
-   - **productNameFound**: true/false - was "${name}" (or its product-specific part on official domain) found?
+   - **productNameFound**: true/false - was "${name}" (or its product-specific part on official domain) found? For official repository changelog files, this should be true even if name doesn't literally appear.
    - **validationNotes**: Brief explanation of confidence level and matching strategy used
 
 **CRITICAL INSTRUCTIONS:**
@@ -1466,7 +1468,8 @@ ${versionPageResult.content.substring(0, 15000)}`
   const validation = validateExtraction(
     { name, manufacturer, product_identifier: productIdentifier },
     extracted,
-    versionContent + ' ' + mainWebsiteContent
+    versionContent + ' ' + mainWebsiteContent,
+    versionUrl  // Pass source URL for official repository file detection
   )
 
   console.log(`Validation result: ${validation.valid ? '✅ VALID' : '⚠️ INVALID'}`)

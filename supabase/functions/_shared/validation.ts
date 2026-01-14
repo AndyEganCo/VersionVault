@@ -76,12 +76,34 @@ export function calculateProximity(
 }
 
 /**
+ * Check if URL is an official repository changelog file
+ */
+export function isOfficialRepoFile(url: string): boolean {
+  if (!url) return false;
+
+  const lower = url.toLowerCase();
+
+  // GitLab and GitHub raw files
+  if (lower.includes('/raw/')) return true;
+  if (lower.includes('raw.githubusercontent.com')) return true;
+
+  // Common changelog filenames in repo contexts
+  if ((lower.includes('github.com') || lower.includes('gitlab')) &&
+      (lower.includes('/changelog') || lower.includes('/news') || lower.includes('/history'))) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Main validation function - validates an AI extraction result
  */
 export function validateExtraction(
   software: Software,
   extracted: ExtractedInfo,
-  pageContent: string
+  pageContent: string,
+  sourceUrl?: string
 ): ValidationResult {
   const warnings: string[] = [];
   let confidence = extracted.confidence || 50;
@@ -96,11 +118,19 @@ export function validateExtraction(
     };
   }
 
+  // Check if this is an official repository changelog file
+  const isRepoFile = sourceUrl && isOfficialRepoFile(sourceUrl);
+
+  if (isRepoFile) {
+    console.log('⚠️ Official repository file detected - relaxing validation rules');
+  }
+
   // Check 1: Product name appears on page
   const productNameFound = validateProductName(software.name, pageContent);
 
-  if (!productNameFound) {
+  if (!productNameFound && !isRepoFile) {
     // This is a critical failure - version found but product name not on page
+    // EXCEPT for official repository files where product context is implied
     return {
       valid: false,
       confidence: 0,
@@ -109,23 +139,27 @@ export function validateExtraction(
     };
   }
 
-  // Check 2: Version appears near product name
-  const proximity = calculateProximity(
-    software.name,
-    extracted.currentVersion,
-    pageContent
-  );
+  // Check 2: Version appears near product name (skip for repo files)
+  if (!isRepoFile) {
+    const proximity = calculateProximity(
+      software.name,
+      extracted.currentVersion,
+      pageContent
+    );
 
-  if (proximity > 500) {
-    warnings.push(
-      `Version "${extracted.currentVersion}" found ${proximity} characters away from product name. May be incorrect.`
-    );
-    confidence = Math.min(confidence, 60);
-  } else if (proximity > 200) {
-    warnings.push(
-      `Version found ${proximity} characters from product name (moderate distance)`
-    );
-    confidence = Math.min(confidence, 80);
+    if (proximity > 500) {
+      warnings.push(
+        `Version "${extracted.currentVersion}" found ${proximity} characters away from product name. May be incorrect.`
+      );
+      confidence = Math.min(confidence, 60);
+    } else if (proximity > 200) {
+      warnings.push(
+        `Version found ${proximity} characters from product name (moderate distance)`
+      );
+      confidence = Math.min(confidence, 80);
+    }
+  } else {
+    console.log('⏭️  Skipping proximity check for official repository file');
   }
 
   // Check 3: AI confidence threshold
