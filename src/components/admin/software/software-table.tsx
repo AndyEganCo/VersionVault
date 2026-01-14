@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Pencil, Trash2, Check, FileText, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, RefreshCw } from 'lucide-react';
+import { Pencil, Trash2, Check, FileText, ArrowUpDown, ArrowUp, ArrowDown, ExternalLink, RefreshCw, Users } from 'lucide-react';
 import { EditSoftwareDialog } from './edit-software-dialog';
 import { DeleteSoftwareDialog } from './delete-software-dialog';
 import type { Software } from '@/lib/software/types';
@@ -26,6 +26,8 @@ type SoftwareTableProps = {
   data: Software[];
   loading: boolean;
   onUpdate: () => Promise<void>;
+  trackingCounts: Map<string, number>;
+  onViewTracking: (software: Software) => void;
 };
 
 type SortField = 'name' | 'category' | 'manufacturer' | 'current_version' | 'release_date' | 'last_checked';
@@ -59,7 +61,7 @@ function SortButton({ field, label, currentSort, onSort }: {
   );
 }
 
-export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
+export function SoftwareTable({ data, loading, onUpdate, trackingCounts, onViewTracking }: SoftwareTableProps) {
   const [editingSoftware, setEditingSoftware] = useState<Software | null>(null);
   const [deletingSoftware, setDeletingSoftware] = useState<Software | null>(null);
   const [addingNotesTo, setAddingNotesTo] = useState<Software | null>(null);
@@ -362,13 +364,14 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                 />
               </TableHead>
               <TableHead>
-                <SortButton 
+                <SortButton
                   field="last_checked"
                   label="Last Checked"
                   currentSort={{ field: sortField, direction: sortDirection }}
                   onSort={handleSort}
                 />
               </TableHead>
+              <TableHead>Tracking</TableHead>
               <TableHead className="text-right w-[160px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -397,6 +400,20 @@ export function SoftwareTable({ data, loading, onUpdate }: SoftwareTableProps) {
                   >
                     <Check className="h-4 w-4" />
                   </Button>
+                </TableCell>
+                <TableCell>
+                  {trackingCounts.get(software.id) ? (
+                    <Badge
+                      variant="outline"
+                      className="cursor-pointer hover:bg-accent"
+                      onClick={() => onViewTracking(software)}
+                    >
+                      <Users className="h-3 w-3 mr-1" />
+                      {trackingCounts.get(software.id)}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-sm">—</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right flex justify-end items-center gap-1">
                   {software.version_website && (
