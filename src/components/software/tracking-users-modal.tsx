@@ -39,43 +39,42 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
     <Dialog open={!!softwareId} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle>{softwareName} - User Tracking</DialogTitle>
-            <div className="flex items-center gap-2">
-              {showSearch ? (
-                <div className="relative flex items-center">
-                  <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search users..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 pr-9 w-64"
-                    autoFocus
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 h-6 w-6"
-                    onClick={() => {
-                      setShowSearch(false);
-                      setSearchQuery('');
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowSearch(true)}
-                >
-                  <Search className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
+          <DialogTitle>{softwareName} - User Tracking</DialogTitle>
         </DialogHeader>
+
+        <div className="flex justify-end mb-4">
+          {showSearch ? (
+            <div className="relative flex items-center">
+              <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search users..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-9 w-64"
+                autoFocus
+              />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 h-6 w-6"
+                onClick={() => {
+                  setShowSearch(false);
+                  setSearchQuery('');
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowSearch(true)}
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
 
         <div className="flex-1 overflow-auto border rounded-md">
           {loading ? (
