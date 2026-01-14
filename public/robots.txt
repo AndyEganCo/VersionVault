@@ -7,6 +7,10 @@ Allow: /
 Allow: /login
 Allow: /signup
 Allow: /software
+Allow: /premium
+Allow: /donate
+Allow: /privacy
+Allow: /terms
 Allow: /forgot-password
 
 # Disallow private/protected pages
@@ -23,5 +27,9 @@ Disallow: /unsubscribe
 User-agent: Mediapartners-Google
 Allow: /
 
-# Sitemap location
+# Sitemap locations
+# Main sitemap (static pages)
 Sitemap: https://versionvault.dev/sitemap.xml
+
+# Dynamic sitemap (includes all software entries)
+Sitemap: https://auth.versionvault.dev/functions/v1/generate-sitemap

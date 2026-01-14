@@ -1,6 +1,7 @@
 import { UserNav } from '@/components/user/user-nav';
 import { MainNav } from '@/components/main-nav';
 import { ModeToggle } from '@/components/mode-toggle';
+import { Footer } from '@/components/footer';
 import { Terminal, Menu, User, Bell, LogOut, FileText, Moon, Sun } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from './ui/button';
@@ -22,7 +23,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="relative min-h-screen bg-background">
+    <div className="relative flex flex-col min-h-screen bg-background">
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <PageContainer>
           <div className="flex h-16 items-center gap-4">
@@ -219,11 +220,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </PageContainer>
       </header>
 
-      <main className="min-h-[calc(100vh-4rem)]">
+      <main className="flex-1">
         <PageContainer className="py-6">
           {children}
         </PageContainer>
       </main>
+
+      <Footer />
     </div>
   );
 }

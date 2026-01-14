@@ -26,6 +26,8 @@ import { AuthCallback } from '@/pages/auth-callback';
 import { ForgotPassword } from '@/pages/forgot-password';
 import { ResetPassword } from '@/pages/reset-password';
 import { NotFound } from '@/pages/not-found';
+import { Privacy } from '@/pages/privacy';
+import { Terms } from '@/pages/terms';
 
 export function Routes() {
   return (
@@ -42,6 +44,8 @@ export function Routes() {
       <Route path="/software" element={<Software />} />
       <Route path="/premium" element={<Premium />} />
       <Route path="/donate" element={<Donate />} />
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
 
       {/* Protected routes */}
       <Route element={<AuthCheck />}>
