@@ -5,18 +5,16 @@ import { useAuth } from '@/contexts/auth-context';
 import { breakPhonePattern } from '@/lib/utils/version-display';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatDate } from '@/lib/date';
-import { ExternalLink, Users } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 
 interface SoftwareCardProps {
   software: Software;
   onTrackingChange: (id: string, tracked: boolean) => Promise<void>;
-  trackingCount?: number;
-  onViewTracking?: (software: Software) => void;
 }
 
-export function SoftwareCard({ software, onTrackingChange, trackingCount, onViewTracking }: SoftwareCardProps) {
-  const { user, isAdmin } = useAuth();
+export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) {
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const handleTrackingChange = async (_e: unknown | null, checked: boolean) => {
@@ -53,24 +51,9 @@ export function SoftwareCard({ software, onTrackingChange, trackingCount, onView
             )}
           </div>
 
-          <div className="flex items-center gap-2 mb-3">
-            <Badge variant="secondary" className="text-xs w-fit">
-              {software.category}
-            </Badge>
-            {isAdmin && trackingCount !== undefined && trackingCount > 0 && (
-              <Badge
-                variant="outline"
-                className="text-xs w-fit cursor-pointer hover:bg-accent"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onViewTracking?.(software);
-                }}
-              >
-                <Users className="h-3 w-3 mr-1" />
-                {trackingCount} tracking
-              </Badge>
-            )}
-          </div>
+          <Badge variant="secondary" className="text-xs w-fit mb-3">
+            {software.category}
+          </Badge>
 
           <div className="space-y-1.5 mb-3 flex-1">
             <div className="flex items-center justify-between text-xs">
