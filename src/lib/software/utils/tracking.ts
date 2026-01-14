@@ -21,22 +21,6 @@ export async function toggleSoftwareTracking(
 ): Promise<boolean> {
   try {
     if (isTracking) {
-      // Get current user to check if tracking for self or someone else
-      const { data: { user } } = await supabase.auth.getUser();
-      const currentUserId = user?.id;
-
-      // If admin tracking for another user, use RPC function
-      if (currentUserId && currentUserId !== userId) {
-        const { data, error } = await supabase.rpc('admin_track_software_for_user', {
-          p_user_id: userId,
-          p_software_id: softwareId
-        });
-
-        if (error) throw error;
-        return data === true;
-      }
-
-      // Otherwise use direct upsert (user tracking for themselves)
       const { error } = await supabase
         .from('tracked_software')
         .upsert({

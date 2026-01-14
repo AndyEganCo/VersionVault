@@ -184,10 +184,17 @@ GRANT EXECUTE ON FUNCTION get_feature_requests_with_user() TO authenticated;
 -- ============================================
 -- 4. Add admin policies for tracked_software
 -- ============================================
--- CRITICAL: Admins need both INSERT and UPDATE for upsert to work
+-- CRITICAL: Admins need SELECT, INSERT, and UPDATE for upsert to work
+-- upsert = SELECT (check exists) + INSERT (if not) + UPDATE (if exists)
 
+DROP POLICY IF EXISTS "Admins can view all tracked software" ON tracked_software;
 DROP POLICY IF EXISTS "Admins can track software for any user" ON tracked_software;
 DROP POLICY IF EXISTS "Admins can update tracked software" ON tracked_software;
+
+CREATE POLICY "Admins can view all tracked software" ON tracked_software
+  FOR SELECT
+  TO authenticated
+  USING ((SELECT auth.uid()) IN (SELECT user_id FROM admin_users));
 
 CREATE POLICY "Admins can track software for any user" ON tracked_software
   FOR INSERT
