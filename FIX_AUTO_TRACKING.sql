@@ -26,9 +26,10 @@ CREATE INDEX IF NOT EXISTS idx_software_requests_approved_by ON software_request
 -- ============================================
 -- 2. Create check_duplicate_software RPC function
 -- ============================================
--- Checks if software already exists by name or website
--- Returns: software_exists (boolean), software_id, software_name
+-- Drop existing function first if it exists
+DROP FUNCTION IF EXISTS check_duplicate_software(text, text);
 
+-- Now create the function
 CREATE OR REPLACE FUNCTION check_duplicate_software(
   p_name TEXT,
   p_website TEXT
@@ -80,9 +81,10 @@ COMMENT ON FUNCTION check_duplicate_software IS
 -- ============================================
 -- 3. Create get_software_requests_with_user RPC function
 -- ============================================
--- Returns software requests with user information
--- Admins see all, users see only their own
+-- Drop existing function first if it exists
+DROP FUNCTION IF EXISTS get_software_requests_with_user();
 
+-- Now create the function
 CREATE OR REPLACE FUNCTION get_software_requests_with_user()
 RETURNS TABLE (
   id UUID,
@@ -169,9 +171,10 @@ COMMENT ON FUNCTION get_software_requests_with_user IS
 -- ============================================
 -- 4. Create get_feature_requests_with_user RPC function
 -- ============================================
--- Returns feature requests with user information
--- Admins see all, users see only their own
+-- Drop existing function first if it exists
+DROP FUNCTION IF EXISTS get_feature_requests_with_user();
 
+-- Now create the function
 CREATE OR REPLACE FUNCTION get_feature_requests_with_user()
 RETURNS TABLE (
   id UUID,
