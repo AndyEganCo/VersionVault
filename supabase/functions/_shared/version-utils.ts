@@ -100,20 +100,32 @@ function isValidSemver(version: string): boolean {
  * For software that uses name-based versions (e.g., "Config 2025", "February Update"),
  * we detect that they're not valid semver and fall back to sorting by date.
  *
+ * BETA/STABLE FILTERING:
+ * If softwareName is provided, versions will be filtered based on the name:
+ * - Software WITHOUT "beta" in name: only stable versions are considered
+ * - Software WITH "beta" in name: only beta/prerelease versions are considered
+ *
  * @param history Array of version history entries with 'version' field
  * @param onlyVerified If true, only consider newsletter_verified versions (default: true)
+ * @param softwareName Optional software name for beta/stable filtering (default: undefined)
  * @returns The version history entry that is considered "current", or null
  */
 export function getCurrentVersionFromHistory<T extends { version: string; newsletter_verified?: boolean; release_date?: string; detected_at?: string; is_current_override?: boolean }>(
   history: T[],
-  onlyVerified: boolean = true
+  onlyVerified: boolean = true,
+  softwareName?: string
 ): T | null {
   if (!history || history.length === 0) return null
 
   // Filter to verified versions if requested
-  const filteredHistory = onlyVerified
+  let filteredHistory = onlyVerified
     ? history.filter(h => h.newsletter_verified !== false)
     : history
+
+  // Apply beta/stable filtering if software name is provided (defense in depth)
+  if (softwareName) {
+    filteredHistory = filteredHistory.filter(h => !shouldIgnoreVersion(softwareName, h.version))
+  }
 
   if (filteredHistory.length === 0) return null
 

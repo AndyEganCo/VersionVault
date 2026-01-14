@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Software, SoftwareUpdate } from '../types';
 import { toast } from 'sonner';
-import { compareVersions, normalizeVersion } from '@/lib/utils/version-utils';
+import { compareVersions, normalizeVersion, shouldIgnoreVersion } from '@/lib/utils/version-utils';
 
 interface ApiResponse<T> {
   readonly data: T | null;
@@ -133,6 +133,15 @@ export async function addVersionHistory(softwareId: string, data: {
       .single();
 
     if (softwareError) throw softwareError;
+
+    // Validate version type matches software name (beta vs stable)
+    if (shouldIgnoreVersion(softwareData.name, data.version)) {
+      const isBetaSoftware = /beta/i.test(softwareData.name);
+      const versionType = isBetaSoftware ? 'stable' : 'beta';
+      const expectedType = isBetaSoftware ? 'beta/prerelease' : 'stable';
+      toast.error(`Cannot add ${versionType} version to this software. ${softwareData.name} only accepts ${expectedType} versions.`);
+      return false;
+    }
 
     // Normalize version to merge duplicates like "r32" and "32", "cobra_v125" and "v125"
     const normalizedVersion = normalizeVersion(data.version, softwareData.name);
