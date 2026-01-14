@@ -1151,7 +1151,15 @@ Extract the following information:
 5. **All Versions**: Extract EVERY version for "${name}" found in content
    - For EACH version: { version, releaseDate (or null), notes, type }
    - ONLY include versions clearly associated with "${name}"
-   - **EXCEPTION - Official Repository Files**: For changelog/NEWS files from official repos, extract ALL versions present - they all belong to this product
+   - **EXCEPTION - Official Repository Files**: For changelog/NEWS files from official repos, extract versions for this product branch
+   - **PRODUCT VARIANT EXCLUSION - CRITICAL**: Some repositories contain multiple product variants
+     * Target: "${name}"
+     * EXCLUDE versions for different product variants with platform/device qualifiers:
+       - If target is "VLC Media Player" → EXCLUDE "VLC for iOS", "VLC for Android", "VLC for tvOS"
+       - If target is "ProPresenter" → EXCLUDE "ProPresenter for iOS", "ProPresenter Remote"
+       - If target is "QLab" → EXCLUDE "QLab Remote", "QLab Video"
+     * Pattern: "${name} for [Platform]" or "${name} [Variant]" are DIFFERENT products
+     * Only extract versions explicitly for "${name}" without variant qualifiers
    - **DEDUPLICATION - CRITICAL**: Only extract ONE entry per unique version number
      * If you see "3.0.23 (Windows)", "3.0.23 (macOS)", "3.0.23 (Linux)" - these are the SAME version
      * Extract only ONE entry with version: "3.0.23" (no platform suffix)
@@ -1320,6 +1328,47 @@ Better to be honest about uncertainty than to provide incorrect data.`
 
     // Re-sort after deduplication
     extracted.versions.sort((a, b) => compareVersions(b.version, a.version))
+
+    // BRANCH PATTERN FILTERING: Remove versions that don't match the branch pattern
+    // Example: /raw/3.0.x/NEWS should only have 3.0.* versions, not 3.7.0 (iOS version)
+    if (versionUrl && (versionUrl.includes('/raw/') || versionUrl.includes('raw.githubusercontent.com'))) {
+      // Extract branch pattern from URL (e.g., "3.0.x" from "/raw/3.0.x/NEWS")
+      const branchMatch = versionUrl.match(/\/raw\/([^\/]+)\//)
+      if (branchMatch) {
+        const branch = branchMatch[1]
+        console.log(`🌿 Branch detected: ${branch}`)
+
+        // Check if branch is a version pattern (e.g., "3.0.x", "v2.1.x", "2.x")
+        const versionPatternMatch = branch.match(/^v?(\d+)\.(\d+|x)/)
+        if (versionPatternMatch) {
+          const majorVersion = versionPatternMatch[1]
+          const minorVersion = versionPatternMatch[2]
+
+          let pattern: string
+          if (minorVersion === 'x') {
+            pattern = `${majorVersion}.`  // Match "3." for "3.x"
+          } else {
+            pattern = `${majorVersion}.${minorVersion}.`  // Match "3.0." for "3.0.x"
+          }
+
+          console.log(`🔍 Filtering versions to match branch pattern: ${pattern}*`)
+
+          const beforeFilter = extracted.versions.length
+          extracted.versions = extracted.versions.filter(ver => {
+            const normalized = ver.version.replace(/^[vr]/i, '')
+            const matches = normalized.startsWith(pattern)
+            if (!matches) {
+              console.log(`   ❌ Excluding ${ver.version} - doesn't match branch pattern ${pattern}*`)
+            }
+            return matches
+          })
+
+          if (beforeFilter !== extracted.versions.length) {
+            console.log(`✅ Branch filtering: ${beforeFilter} versions → ${extracted.versions.length} versions matching ${pattern}*`)
+          }
+        }
+      }
+    }
 
     // APPLE APP STORE FIX: Check if this might be an App Store page with mismatched notes
     // App Store pages often show the current version at top but with previous version's notes
