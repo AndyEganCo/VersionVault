@@ -1660,7 +1660,32 @@ serve(async (req) => {
     let fetchMethod = 'static' // Track which method was used for version content
 
     // Determine source type (auto-detect if not provided)
-    const detectedSourceType = sourceType || detectSourceType(versionUrl)
+    // BUT: validate provided source type and override if clearly wrong
+    let detectedSourceType = sourceType || detectSourceType(versionUrl)
+
+    // Validation: Check if provided source type conflicts with URL pattern
+    if (sourceType && versionUrl) {
+      const autoDetected = detectSourceType(versionUrl)
+
+      // If URL is clearly a plain text file but source type says RSS/forum/etc, override it
+      if (autoDetected === 'plaintext' && sourceType !== 'plaintext') {
+        console.log(`⚠️ Source type override: Database says '${sourceType}' but URL pattern indicates 'plaintext'`)
+        console.log(`   Overriding to 'plaintext' for ${versionUrl}`)
+        detectedSourceType = 'plaintext'
+      }
+      // Similarly, if URL is clearly PDF but says something else
+      else if (autoDetected === 'pdf' && sourceType !== 'pdf') {
+        console.log(`⚠️ Source type override: Database says '${sourceType}' but URL ends with .pdf`)
+        console.log(`   Overriding to 'pdf' for ${versionUrl}`)
+        detectedSourceType = 'pdf'
+      }
+      // Warn if there's a mismatch but we're not overriding
+      else if (autoDetected !== sourceType) {
+        console.log(`⚠️ Source type mismatch: Database='${sourceType}', Auto-detected='${autoDetected}'`)
+        console.log(`   Using database value, but this may cause issues`)
+      }
+    }
+
     console.log(`📍 Detected source type: ${detectedSourceType}`)
 
     // If content is provided directly (e.g., from PDF parsing), use it
