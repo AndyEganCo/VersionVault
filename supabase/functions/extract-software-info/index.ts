@@ -458,6 +458,29 @@ async function fetchWebpageContent(
 
     console.log(`📄 Raw HTML fetched: ${html.length} characters`)
 
+    // PLAIN TEXT FILES: Skip HTML parsing for plain text files (GitLab/GitHub raw, .txt, etc.)
+    if (isPlainTextFile(url)) {
+      console.log('📝 Detected plain text file - skipping HTML parsing')
+
+      // Clean up excessive whitespace while preserving line structure
+      let content = html
+        .replace(/\r\n/g, '\n')  // Normalize line endings
+        .replace(/[ \t]+/g, ' ')  // Collapse horizontal whitespace but preserve single spaces
+        .replace(/\n{3,}/g, '\n\n')  // Collapse excessive blank lines
+        .trim()
+
+      console.log(`✅ Plain text processed: ${content.length} characters`)
+      console.log('--- PLAIN TEXT PREVIEW ---')
+      console.log(content.substring(0, 500))
+      console.log('--- END PREVIEW ---')
+
+      return {
+        content,
+        method: 'plain_text',
+        blockerDetected: result.blockerDetected?.isBlocked ? result.blockerDetected : undefined
+      }
+    }
+
     // APPLE APP STORE: Try to extract structured JSON first
     if (url.includes('apps.apple.com')) {
       const jsonContent = extractAppleAppStoreJSON(html)
@@ -1494,9 +1517,42 @@ function extractFromDomain(website: string): ExtractedInfo {
 }
 
 /**
+ * Check if URL points to a plain text file (not HTML)
+ */
+function isPlainTextFile(url: string, contentType?: string): boolean {
+  if (!url) return false;
+
+  // Check Content-Type header if available
+  if (contentType) {
+    const lowerType = contentType.toLowerCase();
+    if (lowerType.includes('text/plain')) return true;
+    if (lowerType.includes('text/markdown')) return true;
+    // Explicitly HTML should not be treated as plain text
+    if (lowerType.includes('text/html')) return false;
+  }
+
+  const lowerUrl = url.toLowerCase();
+
+  // GitLab and GitHub raw file endpoints
+  if (lowerUrl.includes('/raw/')) return true;
+  if (lowerUrl.includes('/raw.githubusercontent.com/')) return true;
+
+  // Plain text file extensions
+  if (lowerUrl.endsWith('.txt')) return true;
+  if (lowerUrl.endsWith('.text')) return true;
+  if (lowerUrl.endsWith('.md')) return true;
+  if (lowerUrl.endsWith('.markdown')) return true;
+
+  // Common changelog/release notes plain text files
+  if (lowerUrl.match(/\/(changelog|changes|news|history|releases?)(\.txt)?$/i)) return true;
+
+  return false;
+}
+
+/**
  * Auto-detect source type from URL
  */
-function detectSourceType(url: string): 'webpage' | 'rss' | 'forum' | 'pdf' {
+function detectSourceType(url: string): 'webpage' | 'rss' | 'forum' | 'pdf' | 'plaintext' {
   if (!url) return 'webpage';
 
   const lowerUrl = url.toLowerCase();
@@ -1504,6 +1560,11 @@ function detectSourceType(url: string): 'webpage' | 'rss' | 'forum' | 'pdf' {
   // PDF detection
   if (lowerUrl.endsWith('.pdf')) {
     return 'pdf';
+  }
+
+  // Plain text detection
+  if (isPlainTextFile(url)) {
+    return 'plaintext';
   }
 
   // RSS/Atom feed detection
