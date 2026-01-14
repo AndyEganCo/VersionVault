@@ -32,5 +32,4 @@ Allow: /
 Sitemap: https://versionvault.dev/sitemap.xml
 
 # Dynamic sitemap (includes all software entries)
-# Uncomment and update with your Supabase project ref after deploying the function:
-# Sitemap: https://[your-project-ref].supabase.co/functions/v1/generate-sitemap
+Sitemap: https://auth.versionvault.dev/functions/v1/generate-sitemap
