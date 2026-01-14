@@ -29,6 +29,14 @@ serve(async (req) => {
       throw error;
     }
 
+    // Debug logging
+    console.log(`Fetched ${software?.length || 0} software entries`);
+    if (software && software.length > 0) {
+      console.log('First software entry:', software[0]);
+    } else {
+      console.log('No software data returned');
+    }
+
     // Generate sitemap XML
     const baseUrl = 'https://versionvault.dev';
 
