@@ -1152,6 +1152,12 @@ Extract the following information:
    - For EACH version: { version, releaseDate (or null), notes, type }
    - ONLY include versions clearly associated with "${name}"
    - **EXCEPTION - Official Repository Files**: For changelog/NEWS files from official repos, extract ALL versions present - they all belong to this product
+   - **DEDUPLICATION - CRITICAL**: Only extract ONE entry per unique version number
+     * If you see "3.0.23 (Windows)", "3.0.23 (macOS)", "3.0.23 (Linux)" - these are the SAME version
+     * Extract only ONE entry with version: "3.0.23" (no platform suffix)
+     * Combine all platform-specific notes into a single entry
+     * DO NOT create separate entries for platform variants
+     * Example: "2.1.0", "v2.1.0", "Version 2.1.0" are all the same version - extract once as "2.1.0"
    - Exclude versions for other products
    - Include full release notes in markdown format
    - **APPLE APP STORE PAGES**: On App Store pages, release notes appear BEFORE the version number in the text flow
@@ -1269,6 +1275,50 @@ Better to be honest about uncertainty than to provide incorrect data.`
 
   // Sort versions array by version number (highest first)
   if (extracted.versions && extracted.versions.length > 0) {
+    const originalCount = extracted.versions.length
+
+    // DEDUPLICATION: Remove duplicate versions (e.g., "3.0.23 (Windows)" and "3.0.23 (macOS)" should be one entry)
+    console.log(`📋 Deduplicating versions (found ${originalCount} entries)...`)
+    const versionMap = new Map<string, any>()
+
+    for (const ver of extracted.versions) {
+      // Normalize version: remove common prefixes and suffixes
+      let normalized = ver.version
+        .replace(/^[vr]/i, '')  // Remove v or r prefix
+        .replace(/\s*\(.*?\)\s*$/g, '')  // Remove platform suffixes like "(Windows)", "(macOS)"
+        .trim()
+
+      // If this version number already exists, merge the notes
+      if (versionMap.has(normalized)) {
+        const existing = versionMap.get(normalized)!
+        console.log(`   ⚠️ Duplicate found: "${ver.version}" → normalized to "${normalized}"`)
+        // Merge notes (keep the longer/better one)
+        if (ver.notes && ver.notes.length > existing.notes.length) {
+          console.log(`      Keeping longer notes (${ver.notes.length} chars vs ${existing.notes.length} chars)`)
+          existing.notes = ver.notes
+        }
+        // Keep the earliest date if available
+        if (!existing.releaseDate && ver.releaseDate) {
+          existing.releaseDate = ver.releaseDate
+        }
+      } else {
+        // First time seeing this version - update version to normalized form
+        ver.version = normalized
+        versionMap.set(normalized, ver)
+      }
+    }
+
+    // Replace with deduplicated versions
+    extracted.versions = Array.from(versionMap.values())
+
+    if (originalCount !== extracted.versions.length) {
+      console.log(`✅ Deduplication: ${originalCount} versions → ${extracted.versions.length} unique versions`)
+      console.log(`   Removed ${originalCount - extracted.versions.length} duplicate(s)`)
+    } else {
+      console.log(`✅ No duplicates found`)
+    }
+
+    // Re-sort after deduplication
     extracted.versions.sort((a, b) => compareVersions(b.version, a.version))
 
     // APPLE APP STORE FIX: Check if this might be an App Store page with mismatched notes
