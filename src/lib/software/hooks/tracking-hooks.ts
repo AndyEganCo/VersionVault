@@ -53,36 +53,36 @@ export function useTrackingUsers(softwareId: string | null) {
 
     try {
       setLoading(true);
-      const { data, error } = await supabase.rpc('get_users_tracking_software', {
+      const { data, error } = await supabase.rpc('get_all_users_with_tracking_status', {
         p_software_id: softwareId
       });
 
       if (error) throw error;
       setUsers(data || []);
     } catch (error) {
-      console.error('Error fetching tracking users:', error);
-      toast.error('Failed to load tracking users');
+      console.error('Error fetching users:', error);
+      toast.error('Failed to load users');
     } finally {
       setLoading(false);
     }
   }, [softwareId, isAdmin]);
 
-  const trackForUser = async (userId: string): Promise<boolean> => {
+  const toggleTracking = async (userId: string, isTracking: boolean): Promise<boolean> => {
     if (!softwareId) return false;
 
     try {
-      const success = await toggleSoftwareTracking(userId, softwareId, true);
+      const success = await toggleSoftwareTracking(userId, softwareId, !isTracking);
       if (success) {
-        toast.success('User is now tracking this software');
+        toast.success(isTracking ? 'User untracked' : 'User is now tracking this software');
         await fetchUsers(); // Refresh list
       }
       return success;
     } catch (error) {
-      console.error('Error tracking for user:', error);
-      toast.error('Failed to track software for user');
+      console.error('Error toggling tracking:', error);
+      toast.error('Failed to update tracking');
       return false;
     }
   };
 
-  return { users, loading, fetchUsers, trackForUser };
+  return { users, loading, fetchUsers, toggleTracking };
 }
