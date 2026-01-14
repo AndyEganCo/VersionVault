@@ -2,7 +2,7 @@ import { UserNav } from '@/components/user/user-nav';
 import { MainNav } from '@/components/main-nav';
 import { ModeToggle } from '@/components/mode-toggle';
 import { Footer } from '@/components/footer';
-import { Terminal, Menu, User, Bell, LogOut, FileText, Moon, Sun } from 'lucide-react';
+import { Terminal, Menu, LogOut, Moon, Sun } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useTheme } from '@/components/theme-provider';
+import { navigationConfig, isSeparator } from '@/config/navigation';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, isAdmin, signOut } = useAuth();
@@ -75,30 +76,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
                           <p className="text-xs font-semibold text-muted-foreground mb-1 px-2">
                             NAVIGATION
                           </p>
-                          <NavLink
-                            to="/dashboard"
-                            onClick={() => setMobileMenuOpen(false)}
-                            className={({ isActive }) =>
-                              cn(
-                                'text-sm font-medium transition-colors hover:text-primary px-3 py-2 rounded',
-                                isActive ? 'text-primary bg-accent' : 'text-muted-foreground'
-                              )
-                            }
-                          >
-                            Dashboard
-                          </NavLink>
-                          <NavLink
-                            to="/software"
-                            onClick={() => setMobileMenuOpen(false)}
-                            className={({ isActive }) =>
-                              cn(
-                                'text-sm font-medium transition-colors hover:text-primary px-3 py-2 rounded',
-                                isActive ? 'text-primary bg-accent' : 'text-muted-foreground'
-                              )
-                            }
-                          >
-                            Software
-                          </NavLink>
+                          {navigationConfig.main.map((item) => (
+                            <NavLink
+                              key={item.path}
+                              to={item.path}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className={({ isActive }) =>
+                                cn(
+                                  'text-sm font-medium transition-colors hover:text-primary px-3 py-2 rounded',
+                                  isActive ? 'text-primary bg-accent' : 'text-muted-foreground'
+                                )
+                              }
+                            >
+                              {item.label}
+                            </NavLink>
+                          ))}
                         </nav>
 
                         {/* User Menu Items */}
@@ -106,30 +98,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
                           <p className="text-xs font-semibold text-muted-foreground mb-1 px-2">
                             ACCOUNT
                           </p>
-                          <Link
-                            to="/user/profile"
-                            onClick={() => setMobileMenuOpen(false)}
-                            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary px-3 py-2 rounded hover:bg-accent transition-colors"
-                          >
-                            <User className="h-4 w-4" />
-                            Profile
-                          </Link>
-                          <Link
-                            to="/user/notifications"
-                            onClick={() => setMobileMenuOpen(false)}
-                            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary px-3 py-2 rounded hover:bg-accent transition-colors"
-                          >
-                            <Bell className="h-4 w-4" />
-                            Notifications
-                          </Link>
-                          <Link
-                            to="/requests"
-                            onClick={() => setMobileMenuOpen(false)}
-                            className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary px-3 py-2 rounded hover:bg-accent transition-colors"
-                          >
-                            <FileText className="h-4 w-4" />
-                            Requests
-                          </Link>
+                          {navigationConfig.user.map((item) => {
+                            const Icon = item.icon;
+                            return (
+                              <Link
+                                key={item.path}
+                                to={item.path}
+                                onClick={() => setMobileMenuOpen(false)}
+                                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary px-3 py-2 rounded hover:bg-accent transition-colors"
+                              >
+                                {Icon && <Icon className="h-4 w-4" />}
+                                {item.label}
+                              </Link>
+                            );
+                          })}
                         </nav>
 
                         {/* Admin Links */}
@@ -138,42 +120,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
                             <p className="text-xs font-semibold text-muted-foreground mb-1 px-2">
                               ADMIN
                             </p>
-                            <NavLink
-                              to="/admin/software"
-                              onClick={() => setMobileMenuOpen(false)}
-                              className={({ isActive }) =>
-                                cn(
-                                  'text-sm font-medium transition-colors hover:text-primary px-3 py-2 rounded',
-                                  isActive ? 'text-primary bg-accent' : 'text-muted-foreground'
-                                )
-                              }
-                            >
-                              Manage Software
-                            </NavLink>
-                            <NavLink
-                              to="/admin/users"
-                              onClick={() => setMobileMenuOpen(false)}
-                              className={({ isActive }) =>
-                                cn(
-                                  'text-sm font-medium transition-colors hover:text-primary px-3 py-2 rounded',
-                                  isActive ? 'text-primary bg-accent' : 'text-muted-foreground'
-                                )
-                              }
-                            >
-                              Manage Users
-                            </NavLink>
-                            <NavLink
-                              to="/admin/newsletter"
-                              onClick={() => setMobileMenuOpen(false)}
-                              className={({ isActive }) =>
-                                cn(
-                                  'text-sm font-medium transition-colors hover:text-primary px-3 py-2 rounded',
-                                  isActive ? 'text-primary bg-accent' : 'text-muted-foreground'
-                                )
-                              }
-                            >
-                              Newsletter
-                            </NavLink>
+                            {navigationConfig.admin.map((item, index) =>
+                              isSeparator(item) ? null : (
+                                <NavLink
+                                  key={item.path}
+                                  to={item.path}
+                                  onClick={() => setMobileMenuOpen(false)}
+                                  className={({ isActive }) =>
+                                    cn(
+                                      'text-sm font-medium transition-colors hover:text-primary px-3 py-2 rounded',
+                                      isActive ? 'text-primary bg-accent' : 'text-muted-foreground'
+                                    )
+                                  }
+                                >
+                                  {item.label}
+                                </NavLink>
+                              )
+                            )}
                           </nav>
                         )}
 

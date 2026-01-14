@@ -10,8 +10,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/contexts/auth-context';
 import { Link } from 'react-router-dom';
-import { User, Bell, LogOut, FileText, Heart } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { navigationConfig } from '@/config/navigation';
 
 interface UserNavProps {
   className?: string;
@@ -42,36 +43,34 @@ export function UserNav({ className }: UserNavProps) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem asChild>
-            <Link to="/user/profile" className="flex items-center cursor-pointer">
-              <User className="mr-2 h-4 w-4" />
-              Profile
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link to="/user/notifications" className="flex items-center cursor-pointer">
-              <Bell className="mr-2 h-4 w-4" />
-              Notifications
-            </Link>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link to="/requests" className="flex items-center cursor-pointer">
-              <FileText className="mr-2 h-4 w-4" />
-              Requests
-            </Link>
-          </DropdownMenuItem>
+          {navigationConfig.user.slice(0, 3).map((item) => {
+            const Icon = item.icon;
+            return (
+              <DropdownMenuItem key={item.path} asChild>
+                <Link to={item.path} className="flex items-center cursor-pointer">
+                  {Icon && <Icon className="mr-2 h-4 w-4" />}
+                  {item.label}
+                </Link>
+              </DropdownMenuItem>
+            );
+          })}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem asChild>
-            <Link to="/user/contribute" className="flex items-center cursor-pointer">
-              <Heart className="mr-2 h-4 w-4" />
-              Contribute
-            </Link>
-          </DropdownMenuItem>
+          {navigationConfig.user.slice(3).map((item) => {
+            const Icon = item.icon;
+            return (
+              <DropdownMenuItem key={item.path} asChild>
+                <Link to={item.path} className="flex items-center cursor-pointer">
+                  {Icon && <Icon className="mr-2 h-4 w-4" />}
+                  {item.label}
+                </Link>
+              </DropdownMenuItem>
+            );
+          })}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem 
+        <DropdownMenuItem
           onClick={signOut}
           className="flex items-center cursor-pointer text-destructive focus:text-destructive"
         >

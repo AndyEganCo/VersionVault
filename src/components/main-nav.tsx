@@ -9,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { navigationConfig, isSeparator } from '@/config/navigation';
 
 export function MainNav({
   className,
@@ -23,28 +24,20 @@ export function MainNav({
       className={cn('flex items-center space-x-4 lg:space-x-6', className)}
       {...props}
     >
-      <NavLink
-        to="/dashboard"
-        className={({ isActive }) =>
-          cn(
-            'text-sm font-medium transition-colors hover:text-primary',
-            isActive ? 'text-primary' : 'text-muted-foreground'
-          )
-        }
-      >
-        Dashboard
-      </NavLink>
-      <NavLink
-        to="/software"
-        className={({ isActive }) =>
-          cn(
-            'text-sm font-medium transition-colors hover:text-primary',
-            isActive ? 'text-primary' : 'text-muted-foreground'
-          )
-        }
-      >
-        Software
-      </NavLink>
+      {navigationConfig.main.map((item) => (
+        <NavLink
+          key={item.path}
+          to={item.path}
+          className={({ isActive }) =>
+            cn(
+              'text-sm font-medium transition-colors hover:text-primary',
+              isActive ? 'text-primary' : 'text-muted-foreground'
+            )
+          }
+        >
+          {item.label}
+        </NavLink>
+      ))}
       {isAdmin && (
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -57,32 +50,17 @@ export function MainNav({
             <ChevronDown className="h-4 w-4" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem asChild>
-              <Link to="/admin/software" className="cursor-pointer">
-                Manage Software
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/admin/users" className="cursor-pointer">
-                Manage Users
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/admin/newsletter" className="cursor-pointer">
-                Newsletter
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link to="/admin/subscriptions" className="cursor-pointer">
-                Subscriptions
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/admin/donations" className="cursor-pointer">
-                Donations
-              </Link>
-            </DropdownMenuItem>
+            {navigationConfig.admin.map((item, index) =>
+              isSeparator(item) ? (
+                <DropdownMenuSeparator key={`separator-${index}`} />
+              ) : (
+                <DropdownMenuItem key={item.path} asChild>
+                  <Link to={item.path} className="cursor-pointer">
+                    {item.label}
+                  </Link>
+                </DropdownMenuItem>
+              )
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       )}
