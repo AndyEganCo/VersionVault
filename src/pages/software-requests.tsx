@@ -20,6 +20,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
 import { normalizeVersion } from '@/lib/utils/version-utils';
+import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
 import { RequestSoftwareModal } from '@/components/software/request-software-modal';
 import { RequestFeatureModal } from '@/components/software/request-feature-modal';
 import { RejectRequestDialog } from '@/components/software/reject-request-dialog';
@@ -135,6 +136,9 @@ export function SoftwareRequests() {
         toast.error('Software added but failed to update request status', { id: loadingToast });
         return;
       }
+
+      // Step 4: Auto-track the software for the requester
+      await toggleSoftwareTracking(request.user_id, softwareId, true);
 
       // Refresh the list
       await refreshRequests();

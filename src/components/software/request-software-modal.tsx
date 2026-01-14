@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner';
 import { SoftwareRequestFormData } from '@/types/software';
 import { supabase } from '@/lib/supabase';
+import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
 
 interface RequestSoftwareModalProps {
   onSuccess?: () => void;
@@ -93,6 +94,9 @@ export function RequestSoftwareModal({ onSuccess, open, onOpenChange, trigger }:
         ]);
 
         if (error) throw error;
+
+        // Auto-track the software for the requester
+        await toggleSoftwareTracking(user?.id || '', existingSoftware.software_id, true);
 
         toast.success(
           `This software is already being tracked! ${existingSoftware.software_name} is available in your dashboard.`,
