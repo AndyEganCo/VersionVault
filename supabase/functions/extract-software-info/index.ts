@@ -471,7 +471,11 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
         // For single-dl items, look in parent container; otherwise look in current element
         let productName = '';
 
-        if (element.classList.contains('single-dl') || element.className.includes('single-dl')) {
+        // Check className safely (Deno DOM may not support classList)
+        const elementClassName = String(element.className || '');
+        const isSingleDl = elementClassName.includes('single-dl');
+
+        if (isSingleDl) {
           // LUMINEX-SPECIFIC: This is an individual download item - look for product name in parent/ancestor
           // Note: Using manual parent traversal because Deno DOM doesn't support .closest()
           const parentContainer = findParentWithClass(element, ['product-dl', 'product-section', 'product-group']);
