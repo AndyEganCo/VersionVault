@@ -447,7 +447,7 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
         let productName = '';
 
         if (element.classList.contains('single-dl') || element.className.includes('single-dl')) {
-          // This is an individual download item - look for product name in parent/ancestor
+          // LUMINEX-SPECIFIC: This is an individual download item - look for product name in parent/ancestor
           const parentContainer = element.closest('[class*="product-dl"], .product-section, .product-group');
           if (parentContainer) {
             const parentNameElement = parentContainer.querySelector('h1.product-title, h2.product-title, .product-title');
@@ -463,6 +463,12 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
             }
           }
 
+          // SAFETY: If we still can't find product name, skip this element
+          if (!productName) {
+            console.log(`  ⚠️ Skipping single-dl element - no product name found in parent`);
+            continue;
+          }
+
           // Clean up product name - remove "Select all" and other UI text
           if (productName) {
             productName = productName.replace(/select\s+all/gi, '').trim();
@@ -475,7 +481,7 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
             productName = `${productName} - ${fileType}`;
           }
         } else {
-          // This is a parent container - product name is inside it
+          // STANDARD: This is a parent container - product name is inside it
           const nameElement = element.querySelector('h1, h2, h3, .product-name, .product-title, [class*="title"]');
           productName = nameElement?.textContent?.trim() || '';
         }
