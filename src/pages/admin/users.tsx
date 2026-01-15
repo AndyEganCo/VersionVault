@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { useUsers } from '@/lib/users/hooks';
+import { useUserTrackingCounts } from '@/lib/software/hooks/tracking-hooks';
 import { LoadingPage } from '@/components/loading';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,12 +22,20 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Shield, ShieldOff, Crown } from 'lucide-react';
+import { Shield, ShieldOff, Crown, Package } from 'lucide-react';
 import { toast } from 'sonner';
+import { UserSoftwareModal } from '@/components/admin/user-software-modal';
+
+interface TrackingUser {
+  id: string;
+  email: string;
+}
 
 export function AdminUsers() {
   const { user } = useAuth();
   const { users, loading, toggleAdmin, togglePremium } = useUsers();
+  const { counts: trackingCounts } = useUserTrackingCounts();
+  const [trackingModalUser, setTrackingModalUser] = useState<TrackingUser | null>(null);
 
   const handleToggleAdmin = async (userId: string, currentIsAdmin: boolean) => {
     // Prevent removing last admin
@@ -98,13 +108,14 @@ export function AdminUsers() {
                 <TableHead>Email</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Tracking</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center text-muted-foreground">
                     No users found
                   </TableCell>
                 </TableRow>
@@ -145,6 +156,22 @@ export function AdminUsers() {
                         </button>
                       </div>
                     </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className="cursor-pointer hover:bg-accent"
+                        onClick={() => setTrackingModalUser({ id: userItem.id, email: userItem.email })}
+                      >
+                        {trackingCounts.get(userItem.id) ? (
+                          <>
+                            <Package className="h-3 w-3 mr-1" />
+                            {trackingCounts.get(userItem.id)}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button
                         size="sm"
@@ -173,6 +200,12 @@ export function AdminUsers() {
           </Table>
         </CardContent>
       </Card>
+
+      <UserSoftwareModal
+        userId={trackingModalUser?.id || null}
+        userEmail={trackingModalUser?.email || ''}
+        onClose={() => setTrackingModalUser(null)}
+      />
     </PageLayout>
   );
 }

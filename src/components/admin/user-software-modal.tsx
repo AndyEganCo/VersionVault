@@ -3,31 +3,31 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useTrackingUsers } from '@/lib/software/hooks/tracking-hooks';
+import { useUserSoftwareTracking } from '@/lib/software/hooks/tracking-hooks';
 import { Search, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
-type SortField = 'email' | 'is_tracking';
+type SortField = 'software_name' | 'category' | 'is_tracking';
 type SortDirection = 'asc' | 'desc';
 
-interface TrackingUsersModalProps {
-  softwareId: string | null;
-  softwareName: string;
+interface UserSoftwareModalProps {
+  userId: string | null;
+  userEmail: string;
   onClose: () => void;
 }
 
-export function TrackingUsersModal({ softwareId, softwareName, onClose }: TrackingUsersModalProps) {
+export function UserSoftwareModal({ userId, userEmail, onClose }: UserSoftwareModalProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const { users, loading, fetchUsers, toggleTracking } = useTrackingUsers(softwareId);
-  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
-  const [sortField, setSortField] = useState<SortField>('email');
+  const { software, loading, fetchSoftware, toggleTracking } = useUserSoftwareTracking(userId);
+  const [togglingSoftwareId, setTogglingSoftwareId] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<SortField>('software_name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   useEffect(() => {
-    if (softwareId) {
-      fetchUsers();
+    if (userId) {
+      fetchSoftware();
     }
-  }, [softwareId, fetchUsers]);
+  }, [userId, fetchSoftware]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -38,34 +38,37 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
     }
   };
 
-  const filteredUsers = users
-    .filter(user =>
-      user.email.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredSoftware = software
+    .filter(item =>
+      item.software_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchQuery.toLowerCase())
     )
     .sort((a, b) => {
       let comparison = 0;
 
-      if (sortField === 'email') {
-        comparison = a.email.localeCompare(b.email);
+      if (sortField === 'software_name') {
+        comparison = a.software_name.localeCompare(b.software_name);
+      } else if (sortField === 'category') {
+        comparison = a.category.localeCompare(b.category);
       } else if (sortField === 'is_tracking') {
-        // Sort tracked users first (true > false)
+        // Sort tracked software first (true > false)
         comparison = a.is_tracking === b.is_tracking ? 0 : a.is_tracking ? -1 : 1;
       }
 
       return sortDirection === 'asc' ? comparison : -comparison;
     });
 
-  const handleToggleTracking = async (userId: string, isTracking: boolean) => {
-    setTogglingUserId(userId);
-    await toggleTracking(userId, isTracking);
-    setTogglingUserId(null);
+  const handleToggleTracking = async (softwareId: string, isTracking: boolean) => {
+    setTogglingSoftwareId(softwareId);
+    await toggleTracking(softwareId, isTracking);
+    setTogglingSoftwareId(null);
   };
 
   return (
-    <Dialog open={!!softwareId} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+    <Dialog open={!!userId} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>{softwareName} - User Tracking</DialogTitle>
+          <DialogTitle>{userEmail} - Software Tracking</DialogTitle>
         </DialogHeader>
 
         <div className="flex justify-end mb-4">
@@ -73,7 +76,7 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
             <div className="relative flex items-center">
               <Search className="absolute left-3 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search users..."
+                placeholder="Search software..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 pr-9 w-64"
@@ -105,11 +108,11 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
         <div className="flex-1 overflow-auto border rounded-md">
           {loading ? (
             <div className="p-8 text-center text-muted-foreground">
-              Loading users...
+              Loading software...
             </div>
-          ) : filteredUsers.length === 0 ? (
+          ) : filteredSoftware.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
-              {searchQuery ? 'No users found matching your search' : 'No users found'}
+              {searchQuery ? 'No software found matching your search' : 'No software found'}
             </div>
           ) : (
             <Table>
@@ -118,11 +121,29 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
                   <TableHead>
                     <Button
                       variant="ghost"
-                      onClick={() => handleSort('email')}
-                      className={sortField === 'email' ? 'text-primary font-medium' : ''}
+                      onClick={() => handleSort('software_name')}
+                      className={sortField === 'software_name' ? 'text-primary font-medium' : ''}
                     >
-                      Email
-                      {sortField === 'email' ? (
+                      Software
+                      {sortField === 'software_name' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUp className="ml-2 h-4 w-4" />
+                        ) : (
+                          <ArrowDown className="ml-2 h-4 w-4" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="ml-2 h-4 w-4" />
+                      )}
+                    </Button>
+                  </TableHead>
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort('category')}
+                      className={sortField === 'category' ? 'text-primary font-medium' : ''}
+                    >
+                      Category
+                      {sortField === 'category' ? (
                         sortDirection === 'asc' ? (
                           <ArrowUp className="ml-2 h-4 w-4" />
                         ) : (
@@ -154,17 +175,18 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((user) => (
-                  <TableRow key={user.user_id}>
-                    <TableCell className="font-medium">{user.email}</TableCell>
+                {filteredSoftware.map((item) => (
+                  <TableRow key={item.software_id}>
+                    <TableCell className="font-medium">{item.software_name}</TableCell>
+                    <TableCell>{item.category}</TableCell>
                     <TableCell className="text-right">
                       <Button
-                        variant={user.is_tracking ? 'outline' : 'default'}
+                        variant={item.is_tracking ? 'outline' : 'default'}
                         size="sm"
-                        onClick={() => handleToggleTracking(user.user_id, user.is_tracking)}
-                        disabled={togglingUserId === user.user_id}
+                        onClick={() => handleToggleTracking(item.software_id, item.is_tracking)}
+                        disabled={togglingSoftwareId === item.software_id}
                       >
-                        {user.is_tracking ? 'Untrack' : 'Track'}
+                        {item.is_tracking ? 'Untrack' : 'Track'}
                       </Button>
                     </TableCell>
                   </TableRow>
