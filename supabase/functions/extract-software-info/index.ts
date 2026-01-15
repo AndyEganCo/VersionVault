@@ -382,15 +382,132 @@ function getDomainSpecificStrategy(url: string): ScrapingStrategy | undefined {
 }
 
 /**
+ * Fuzzy match product name - handles families like "LumiNode" matching "LumiNode / LumiCore"
+ * or "GigaCore" matching "GigaCore 30i", "GigaCore 20t", etc.
+ */
+function fuzzyMatchProduct(targetProduct: string, foundProduct: string): number {
+  const target = targetProduct.toLowerCase().trim();
+  const found = foundProduct.toLowerCase().trim();
+
+  // Exact match
+  if (target === found) return 100;
+
+  // Contains check (handles "LumiNode" in "LumiNode / LumiCore")
+  if (found.includes(target)) return 90;
+  if (target.includes(found)) return 85;
+
+  // Word-based matching (handles "GigaCore" matching "GigaCore 30i")
+  const targetWords = target.split(/\s+/);
+  const foundWords = found.split(/\s+/);
+
+  // Check if all target words are in found product
+  const allTargetWordsFound = targetWords.every(word =>
+    foundWords.some(fw => fw.includes(word) || word.includes(fw))
+  );
+
+  if (allTargetWordsFound) {
+    // Higher score for fewer extra words (GigaCore -> GigaCore 30i is better than GigaCore -> GigaCore Ethernet Switch 30i)
+    const extraWords = foundWords.length - targetWords.length;
+    return Math.max(75 - (extraWords * 5), 50);
+  }
+
+  return 0;
+}
+
+/**
+ * Parse structured product blocks from HTML (for multi-product download pages)
+ * Returns array of product blocks with names, versions, and match scores
+ */
+function parseProductBlocks(doc: any, targetProduct: string): Array<{name: string, version: string, date: string, content: string, score: number}> {
+  const blocks: Array<{name: string, version: string, date: string, content: string, score: number}> = [];
+
+  // Selectors for product containers (common patterns on download pages)
+  const containerSelectors = [
+    '[class*="product-dl"]',      // Luminex: <div class="product-dl luminode 10604">
+    '.product-download',
+    '.product-item',
+    '.download-item',
+    '[class*="download-"]',
+    '.software-product',
+  ];
+
+  console.log(`\n🔍 Searching for structured product blocks...`);
+
+  for (const selector of containerSelectors) {
+    const elements = doc.querySelectorAll(selector);
+
+    if (elements.length > 0) {
+      console.log(`✅ Found ${elements.length} blocks with selector: ${selector}`);
+
+      for (const element of elements) {
+        // Extract product name (usually in h1, h2, h3, or .product-name)
+        const nameElement = element.querySelector('h1, h2, h3, .product-name, .product-title, [class*="title"]');
+        const productName = nameElement?.textContent?.trim() || '';
+
+        // Extract version (look for .version-number, .version, data-version, or version patterns)
+        let version = '';
+        const versionElement = element.querySelector('.version-number, .version, [class*="version"]');
+        if (versionElement) {
+          version = versionElement.textContent?.trim() || '';
+        } else {
+          // Fallback: search text for version patterns
+          const text = element.textContent || '';
+          const versionMatch = text.match(/v?(\d+\.\d+\.?\d*)/i);
+          if (versionMatch) {
+            version = versionMatch[1];
+          }
+        }
+
+        // Extract date (look for .date, .release-date, or date patterns)
+        let date = '';
+        const dateElement = element.querySelector('.date, .release-date, [class*="date"]');
+        if (dateElement) {
+          date = dateElement.textContent?.trim() || '';
+        }
+
+        // Get full text content of this block
+        const content = element.textContent?.trim() || '';
+
+        if (productName) {
+          const matchScore = fuzzyMatchProduct(targetProduct, productName);
+
+          blocks.push({
+            name: productName,
+            version: version,
+            date: date,
+            content: content,
+            score: matchScore
+          });
+
+          if (matchScore > 50) {
+            console.log(`  📦 Block: "${productName}" | Version: ${version || 'N/A'} | Match: ${matchScore}%`);
+          }
+        }
+      }
+
+      // If we found blocks with this selector, don't try others
+      if (blocks.length > 0) break;
+    }
+  }
+
+  // Sort by match score descending
+  blocks.sort((a, b) => b.score - a.score);
+
+  return blocks;
+}
+
+/**
  * Fetches webpage content and extracts text, with intelligent content limits
  * Phase 3: Now supports interactive scraping strategies
+ * Phase 4: Now supports structured product block parsing for multi-product pages
  * Returns: { content: string, method: string }
  */
 async function fetchWebpageContent(
   url: string,
   maxChars: number = 30000,
   useBrowserless: boolean = false,
-  strategy?: ScrapingStrategy
+  strategy?: ScrapingStrategy,
+  targetProduct?: string  // New parameter for filtering product blocks
 ): Promise<{ content: string; method: string; blockerDetected?: BlockerDetection }> {
   try {
     console.log(`Fetching webpage: ${url}`)
@@ -505,6 +622,45 @@ async function fetchWebpageContent(
 
     console.log(`✅ HTML parsed successfully, extracting content...`)
 
+    // PHASE 4: Try structured product block parsing first (for multi-product pages)
+    if (targetProduct) {
+      const productBlocks = parseProductBlocks(doc, targetProduct);
+
+      if (productBlocks.length > 0) {
+        // Filter to only well-matching blocks (score >= 70)
+        const goodMatches = productBlocks.filter(b => b.score >= 70);
+
+        if (goodMatches.length > 0) {
+          console.log(`\n✅ STRUCTURED EXTRACTION: Found ${goodMatches.length} matching product blocks`);
+
+          // Combine the content from matching blocks
+          let structuredContent = `STRUCTURED PRODUCT DATA:\n\n`;
+
+          for (const block of goodMatches) {
+            structuredContent += `=== PRODUCT: ${block.name} ===\n`;
+            if (block.version) structuredContent += `Version: ${block.version}\n`;
+            if (block.date) structuredContent += `Date: ${block.date}\n`;
+            structuredContent += `\n${block.content}\n\n`;
+            structuredContent += `${'='.repeat(50)}\n\n`;
+          }
+
+          console.log(`📦 Extracted ${structuredContent.length} chars from ${goodMatches.length} product blocks`);
+          console.log('--- STRUCTURED CONTENT PREVIEW ---');
+          console.log(structuredContent.substring(0, 800));
+          console.log('--- END PREVIEW ---');
+
+          return {
+            content: structuredContent,
+            method: 'structured_blocks',
+            blockerDetected: result.blockerDetected?.isBlocked ? result.blockerDetected : undefined
+          };
+        } else {
+          console.log(`⚠️ Found ${productBlocks.length} product blocks but none matched well (best score: ${productBlocks[0]?.score || 0})`);
+        }
+      }
+    }
+
+    // FALLBACK: Standard text extraction from semantic selectors
     // Try to find main content areas first (more intelligent extraction)
     // Added wiki-specific selectors and documentation page patterns
     const selectors = [
@@ -1883,11 +2039,12 @@ serve(async (req) => {
         console.log(`🌐 Source type: Webpage`)
         // Fetch content from both URLs in parallel (try regular fetch first)
         // Phase 3: Pass scraping strategy if provided
+        // Phase 4: Pass product name for structured block parsing
         const [versionResult, mainResult] = await Promise.all([
-          fetchWebpageContent(versionUrl, 60000, false, scrapingStrategy),
+          fetchWebpageContent(versionUrl, 60000, false, scrapingStrategy, name),
           // Only fetch main website if it's different from version URL
           versionUrl.toLowerCase() !== website.toLowerCase()
-            ? fetchWebpageContent(website, 20000, false)
+            ? fetchWebpageContent(website, 20000, false, undefined, name)
             : Promise.resolve({ content: '', method: 'skipped' })
         ])
 
@@ -1920,7 +2077,7 @@ serve(async (req) => {
         console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
 
         // Retry with Browserless for JavaScript pages
-        const retryResult = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy)
+        const retryResult = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy, name)
         versionContent = retryResult.content
         fetchMethod = retryResult.method
 
@@ -1956,7 +2113,7 @@ serve(async (req) => {
           console.log(`🔄 Retrying with EXTENDED timeout (60s) for slow-loading page...`)
 
           // Retry with extended Browserless timeout (60 seconds)
-          const extendedRetry = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy)
+          const extendedRetry = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy, name)
           versionContent = extendedRetry.content
           fetchMethod = extendedRetry.method
 

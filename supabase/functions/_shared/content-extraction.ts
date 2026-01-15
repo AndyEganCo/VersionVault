@@ -12,6 +12,17 @@ export interface ContentWindow {
 }
 
 /**
+ * Structured product block extracted from HTML
+ */
+export interface ProductBlock {
+  productName: string;
+  version?: string;
+  date?: string;
+  content: string;
+  matchScore: number; // 0-100, how well it matches the target product
+}
+
+/**
  * Find version number patterns in content
  * Looks for patterns like: "Version 27.1", "v27.1.0", "27.1", etc.
  */
