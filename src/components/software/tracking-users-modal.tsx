@@ -40,8 +40,7 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
 
   const filteredUsers = users
     .filter(user =>
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (user.display_name?.toLowerCase() || '').includes(searchQuery.toLowerCase())
+      user.email.toLowerCase().includes(searchQuery.toLowerCase())
     )
     .sort((a, b) => {
       let comparison = 0;
@@ -134,7 +133,6 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
                       )}
                     </Button>
                   </TableHead>
-                  <TableHead>Name</TableHead>
                   <TableHead className="text-right">
                     <Button
                       variant="ghost"
@@ -159,7 +157,6 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
                 {filteredUsers.map((user) => (
                   <TableRow key={user.user_id}>
                     <TableCell className="font-medium">{user.email}</TableCell>
-                    <TableCell>{user.display_name || '—'}</TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant={user.is_tracking ? 'outline' : 'default'}
