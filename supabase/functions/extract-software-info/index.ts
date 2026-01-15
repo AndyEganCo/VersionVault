@@ -487,8 +487,39 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
         // Get full text content of this block
         const content = element.textContent?.trim() || '';
 
+        // Check if this block contains firmware/software entries (prioritize these)
+        const blockText = content.toLowerCase();
+        const hasFirmware = blockText.includes('firmware');
+        const hasSoftware = blockText.includes('software');
+        const hasReleaseNotes = !!releaseNotesUrl;
+
         if (productName) {
-          const matchScore = fuzzyMatchProduct(targetProduct, productName);
+          let matchScore = fuzzyMatchProduct(targetProduct, productName);
+
+          // BOOST SCORE for firmware/software blocks (we want versions, not docs)
+          if (hasFirmware) {
+            matchScore = Math.min(100, matchScore + 15); // +15 for firmware
+            console.log(`  🔧 Firmware detected - boosting score by +15`);
+          } else if (hasSoftware) {
+            matchScore = Math.min(100, matchScore + 10); // +10 for software
+            console.log(`  💿 Software detected - boosting score by +10`);
+          } else if (hasReleaseNotes) {
+            matchScore = Math.min(100, matchScore + 5); // +5 for having release notes
+            console.log(`  📄 Release notes available - boosting score by +5`);
+          }
+
+          // PENALTY for documentation-only blocks (no firmware/software)
+          const hasOnlyDocs = (
+            blockText.includes('quick start') ||
+            blockText.includes('specification') ||
+            blockText.includes('user manual') ||
+            blockText.includes('mechanical drawing')
+          ) && !hasFirmware && !hasSoftware;
+
+          if (hasOnlyDocs) {
+            matchScore = Math.max(0, matchScore - 20); // -20 for docs-only blocks
+            console.log(`  📚 Documentation-only block - reducing score by -20`);
+          }
 
           blocks.push({
             name: productName,
@@ -650,8 +681,16 @@ async function fetchWebpageContent(
       const productBlocks = parseProductBlocks(doc, targetProduct);
 
       if (productBlocks.length > 0) {
-        // Filter to only well-matching blocks (score >= 70)
-        const goodMatches = productBlocks.filter(b => b.score >= 70);
+        // SMART FILTERING: Prioritize firmware/software blocks over documentation
+        // Strategy: Try firmware blocks first (score >= 85), fall back to all good matches (>= 70)
+        let goodMatches = productBlocks.filter(b => b.score >= 85);
+
+        if (goodMatches.length === 0) {
+          console.log(`  ℹ️ No high-score firmware blocks (>=85), trying all good matches (>=70)`);
+          goodMatches = productBlocks.filter(b => b.score >= 70);
+        } else {
+          console.log(`  ✅ Found ${goodMatches.length} high-priority blocks (score >= 85)`);
+        }
 
         if (goodMatches.length > 0) {
           console.log(`\n✅ STRUCTURED EXTRACTION: Found ${goodMatches.length} matching product blocks`);
