@@ -463,10 +463,13 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
   for (const selector of containerSelectors) {
     const elements = doc.querySelectorAll(selector);
 
-    if (elements.length > 0) {
+    if (elements && elements.length > 0) {
       console.log(`✅ Found ${elements.length} blocks with selector: ${selector}`);
 
-      for (const element of elements) {
+      // Convert NodeList to Array for safe iteration (Deno DOM compatibility)
+      const elementArray = Array.from(elements);
+
+      for (const element of elementArray) {
         // Extract product name
         // For single-dl items, look in parent container; otherwise look in current element
         let productName = '';
@@ -540,7 +543,8 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
         // Extract release notes link (look for links to .txt, .pdf, or "release notes" links)
         let releaseNotesUrl = '';
         const links = element.querySelectorAll('a[href]');
-        for (const link of links) {
+        const linkArray = links ? Array.from(links) : [];
+        for (const link of linkArray) {
           const href = link.getAttribute('href') || '';
           const linkText = link.textContent?.toLowerCase() || '';
 
