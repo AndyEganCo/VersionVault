@@ -29,7 +29,13 @@ BEGIN
     s.name AS software_name,
     s.manufacturer,
     s.category,
-    s.current_version,
+    (
+      SELECT vh.version
+      FROM software_version_history vh
+      WHERE vh.software_id = s.id
+      ORDER BY vh.detected_at DESC
+      LIMIT 1
+    ) AS current_version,
     EXISTS(SELECT 1 FROM tracked_software ts WHERE ts.software_id = s.id AND ts.user_id = p_user_id) AS is_tracking
   FROM software s
   ORDER BY s.name ASC;
