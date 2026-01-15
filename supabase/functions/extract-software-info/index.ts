@@ -416,10 +416,10 @@ function fuzzyMatchProduct(targetProduct: string, foundProduct: string): number 
 
 /**
  * Parse structured product blocks from HTML (for multi-product download pages)
- * Returns array of product blocks with names, versions, and match scores
+ * Returns array of product blocks with names, versions, dates, and release notes links
  */
-function parseProductBlocks(doc: any, targetProduct: string): Array<{name: string, version: string, date: string, content: string, score: number}> {
-  const blocks: Array<{name: string, version: string, date: string, content: string, score: number}> = [];
+function parseProductBlocks(doc: any, targetProduct: string): Array<{name: string, version: string, date: string, content: string, releaseNotesUrl?: string, score: number}> {
+  const blocks: Array<{name: string, version: string, date: string, content: string, releaseNotesUrl?: string, score: number}> = [];
 
   // Selectors for product containers (common patterns on download pages)
   const containerSelectors = [
@@ -465,6 +465,25 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
           date = dateElement.textContent?.trim() || '';
         }
 
+        // Extract release notes link (look for links to .txt, .pdf, or "release notes" links)
+        let releaseNotesUrl = '';
+        const links = element.querySelectorAll('a[href]');
+        for (const link of links) {
+          const href = link.getAttribute('href') || '';
+          const linkText = link.textContent?.toLowerCase() || '';
+
+          // Look for release notes links (.txt files, PDFs, or links with "release" in text)
+          if (
+            href.match(/release[-_]?notes.*\.txt$/i) ||
+            href.match(/release[-_]?notes.*\.pdf$/i) ||
+            linkText.includes('release') ||
+            linkText.includes('notes')
+          ) {
+            releaseNotesUrl = href;
+            break;
+          }
+        }
+
         // Get full text content of this block
         const content = element.textContent?.trim() || '';
 
@@ -476,11 +495,15 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
             version: version,
             date: date,
             content: content,
+            releaseNotesUrl: releaseNotesUrl || undefined,
             score: matchScore
           });
 
           if (matchScore > 50) {
             console.log(`  📦 Block: "${productName}" | Version: ${version || 'N/A'} | Match: ${matchScore}%`);
+            if (releaseNotesUrl) {
+              console.log(`     📄 Release notes: ${releaseNotesUrl}`);
+            }
           }
         }
       }
@@ -641,6 +664,37 @@ async function fetchWebpageContent(
             if (block.version) structuredContent += `Version: ${block.version}\n`;
             if (block.date) structuredContent += `Date: ${block.date}\n`;
             structuredContent += `\n${block.content}\n\n`;
+
+            // Fetch release notes if available
+            if (block.releaseNotesUrl) {
+              try {
+                console.log(`  📄 Fetching release notes from: ${block.releaseNotesUrl}`);
+
+                // Check if it's a relative URL
+                const notesUrl = block.releaseNotesUrl.startsWith('http')
+                  ? block.releaseNotesUrl
+                  : new URL(block.releaseNotesUrl, url).toString();
+
+                const notesResponse = await fetch(notesUrl, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (compatible; VersionVault/1.0; +https://versionvault.dev)',
+                  },
+                });
+
+                if (notesResponse.ok) {
+                  const notesText = await notesResponse.text();
+                  structuredContent += `\n--- RELEASE NOTES (from ${notesUrl}) ---\n`;
+                  structuredContent += notesText.substring(0, 20000); // Limit to 20K chars per notes file
+                  structuredContent += `\n--- END RELEASE NOTES ---\n\n`;
+                  console.log(`  ✅ Fetched ${notesText.length} chars of release notes`);
+                } else {
+                  console.log(`  ⚠️ Release notes fetch failed: ${notesResponse.status}`);
+                }
+              } catch (error) {
+                console.log(`  ⚠️ Error fetching release notes: ${error.message}`);
+              }
+            }
+
             structuredContent += `${'='.repeat(50)}\n\n`;
           }
 
