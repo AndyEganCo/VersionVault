@@ -56,7 +56,7 @@ export function SoftwareDetailModal({
       if (open && software.id) {
         setLoading(true);
         try {
-          const history = await getVersionHistory(software.id);
+          const history = await getVersionHistory(software.id, software.name);
           const validHistory = (history as VersionHistory[]).filter(v => v && v.version);
           setVersionHistory(validHistory);
           setSelectedVersion(validHistory[0]?.version || null);
@@ -68,7 +68,7 @@ export function SoftwareDetailModal({
       }
     }
     loadVersionHistory();
-  }, [open, software.id]);
+  }, [open, software.id, software.name]);
 
   const selectedNotes = versionHistory.find(v => v.version === selectedVersion);
 

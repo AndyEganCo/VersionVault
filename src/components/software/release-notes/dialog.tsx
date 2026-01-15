@@ -41,7 +41,7 @@ export function ReleaseNotesDialog({
       if (open && softwareId) {
         setLoading(true);
         try {
-          const history = await getVersionHistory(softwareId);
+          const history = await getVersionHistory(softwareId, softwareName);
           const validHistory = (history as VersionHistory[]).filter(v => v && v.version);
           setVersionHistory(validHistory);
           setSelectedVersion(validHistory[0]?.version || null);
@@ -53,7 +53,7 @@ export function ReleaseNotesDialog({
       }
     }
     loadVersionHistory();
-  }, [open, softwareId]);
+  }, [open, softwareId, softwareName]);
 
   const selectedNotes = versionHistory.find(v => v.version === selectedVersion);
 

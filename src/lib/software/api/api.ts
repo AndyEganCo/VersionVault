@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { Software, SoftwareUpdate } from '../types';
 import { toast } from 'sonner';
-import { compareVersions, normalizeVersion } from '@/lib/utils/version-utils';
+import { compareVersions, normalizeVersion, shouldIgnoreVersion } from '@/lib/utils/version-utils';
 
 interface ApiResponse<T> {
   readonly data: T | null;
@@ -308,7 +308,7 @@ function isValidSemver(version: string): boolean {
   return /^\d+(\.\d+)*/.test(version.trim());
 }
 
-export async function getVersionHistory(softwareId: string) {
+export async function getVersionHistory(softwareId: string, softwareName?: string) {
   return withRetry(async () => {
     const { data, error } = await supabase
       .from('software_version_history')
@@ -319,13 +319,26 @@ export async function getVersionHistory(softwareId: string) {
 
     if (!data || data.length === 0) return [];
 
+    // Apply beta filtering if software name is provided
+    let filteredData = data;
+    if (softwareName) {
+      filteredData = data.filter(entry => {
+        const shouldIgnore = shouldIgnoreVersion(softwareName, entry.version);
+        if (shouldIgnore) {
+          const versionType = /beta/i.test(softwareName) ? 'stable' : 'beta';
+          console.log(`[Frontend] Filtering out ${versionType} version ${entry.version} for ${softwareName}`);
+        }
+        return !shouldIgnore;
+      });
+    }
+
     // Check if versions are valid semver or name-based
     // If ANY version is not valid semver, treat all as name-based and sort by date
-    const allVersionsAreSemver = data.every(entry => isValidSemver(entry.version));
+    const allVersionsAreSemver = filteredData.every(entry => isValidSemver(entry.version));
 
     if (!allVersionsAreSemver) {
       // Name-based versions: sort by date (newest first)
-      return data.sort((a, b) => {
+      return filteredData.sort((a, b) => {
         const dateA = a.release_date || a.detected_at || '1970-01-01';
         const dateB = b.release_date || b.detected_at || '1970-01-01';
         return new Date(dateB).getTime() - new Date(dateA).getTime();
@@ -333,7 +346,7 @@ export async function getVersionHistory(softwareId: string) {
     }
 
     // Valid semver versions: sort by semantic version (highest first)
-    return data.sort((a, b) => compareVersions(b.version, a.version));
+    return filteredData.sort((a, b) => compareVersions(b.version, a.version));
   });
 }
 

@@ -1015,6 +1015,12 @@ TASK: Extract the following information:
      * If a version is labeled as beta, alpha, rc, preview, pre, or dev, APPEND it with a hyphen
      * Examples: "21.2 BETA" → "21.2-beta", "19.0 RC1" → "19.0-rc1", "3.0 Alpha" → "3.0-alpha"
      * Regular releases should NOT have any suffix: "21.2" stays "21.2"
+   - **DUPLICATE VERSION CONTEXT RULE**: If you find the SAME version number appearing MULTIPLE times on the page:
+     * Check if ANY mention includes beta/alpha/rc/preview/pre/dev markers
+     * If YES: Extract it WITH the prerelease marker (e.g., "21.2-beta"), do NOT create a separate "21.2" entry
+     * If NO: Extract the stable version normally
+     * Example: Page shows "Jump to 21.2" (top) and "BETA Release 21.2" (release notes) → Extract ONLY "21.2-beta"
+     * This prevents mixing beta versions into stable software release histories
    - For EACH version found, extract:
      * version: The version number (e.g., "1.5.0", "v2.3", "1.5.0-beta") OR feature title (see below)
      * releaseDate: Release date in YYYY-MM-DD format - **USE NULL IF NOT FOUND, DO NOT GUESS**
@@ -1640,21 +1646,56 @@ Better to be honest about uncertainty than to provide incorrect data.`
     const versionMap = new Map<string, any>()
 
     for (const ver of extracted.versions) {
-      // Normalize version: remove common prefixes and suffixes
+      // Normalize version: remove common prefixes and platform suffixes, but PRESERVE beta/alpha/rc markers
       let normalized = ver.version
         .replace(/^[vr]/i, '')  // Remove v or r prefix
         .replace(/\s*\(.*?\)\s*$/g, '')  // Remove platform suffixes like "(Windows)", "(macOS)"
         .trim()
 
-      // If this version number already exists, merge the notes
-      if (versionMap.has(normalized)) {
-        const existing = versionMap.get(normalized)!
-        console.log(`   ⚠️ Duplicate found: "${ver.version}" → normalized to "${normalized}"`)
-        // Merge notes (keep the longer/better one)
-        if (ver.notes && ver.notes.length > existing.notes.length) {
-          console.log(`      Keeping longer notes (${ver.notes.length} chars vs ${existing.notes.length} chars)`)
-          existing.notes = ver.notes
+      // Extract base version (without prerelease marker) for duplicate detection
+      const baseVersion = normalized.split(/[-_]/)[0]
+
+      // Check if this normalized version or its base version already exists
+      let existingKey: string | null = null
+      for (const [key, value] of versionMap.entries()) {
+        const existingBase = key.split(/[-_]/)[0]
+        if (existingBase === baseVersion) {
+          existingKey = key
+          break
         }
+      }
+
+      if (existingKey) {
+        const existing = versionMap.get(existingKey)!
+        console.log(`   ⚠️ Duplicate found: "${ver.version}" → base version "${baseVersion}"`)
+
+        // SMART MERGING: Prefer the version WITH prerelease marker (more specific)
+        const currentHasPrerelease = normalized.includes('-') || normalized.includes('_')
+        const existingHasPrerelease = existingKey.includes('-') || existingKey.includes('_')
+
+        if (currentHasPrerelease && !existingHasPrerelease) {
+          // Current version has prerelease marker, existing doesn't - replace with current
+          console.log(`      Replacing "${existingKey}" with "${normalized}" (prerelease marker is more specific)`)
+          versionMap.delete(existingKey)
+          ver.version = normalized
+          versionMap.set(normalized, ver)
+        } else if (!currentHasPrerelease && existingHasPrerelease) {
+          // Existing has prerelease marker, current doesn't - keep existing, discard current
+          console.log(`      Keeping "${existingKey}" over "${normalized}" (prerelease marker is more specific)`)
+          // Optionally merge notes if current has better notes
+          if (ver.notes && ver.notes.length > existing.notes.length) {
+            console.log(`      But merging longer notes from "${normalized}" (${ver.notes.length} chars vs ${existing.notes.length} chars)`)
+            existing.notes = ver.notes
+          }
+        } else {
+          // Both have or both don't have prerelease markers - merge notes
+          console.log(`      Merging duplicate versions`)
+          if (ver.notes && ver.notes.length > existing.notes.length) {
+            console.log(`      Keeping longer notes (${ver.notes.length} chars vs ${existing.notes.length} chars)`)
+            existing.notes = ver.notes
+          }
+        }
+
         // Keep the earliest date if available
         if (!existing.releaseDate && ver.releaseDate) {
           existing.releaseDate = ver.releaseDate
