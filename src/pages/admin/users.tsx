@@ -157,18 +157,20 @@ export function AdminUsers() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {trackingCounts.get(userItem.id) ? (
-                        <Badge
-                          variant="outline"
-                          className="cursor-pointer hover:bg-accent"
-                          onClick={() => setTrackingModalUser({ id: userItem.id, email: userItem.email })}
-                        >
-                          <Package className="h-3 w-3 mr-1" />
-                          {trackingCounts.get(userItem.id)}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
+                      <Badge
+                        variant="outline"
+                        className="cursor-pointer hover:bg-accent"
+                        onClick={() => setTrackingModalUser({ id: userItem.id, email: userItem.email })}
+                      >
+                        {trackingCounts.get(userItem.id) ? (
+                          <>
+                            <Package className="h-3 w-3 mr-1" />
+                            {trackingCounts.get(userItem.id)}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
