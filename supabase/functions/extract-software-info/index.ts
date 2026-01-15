@@ -382,6 +382,31 @@ function getDomainSpecificStrategy(url: string): ScrapingStrategy | undefined {
 }
 
 /**
+ * Manual parent traversal (Deno DOM doesn't support .closest())
+ * Walks up parent tree looking for an element matching the selector
+ */
+function findParentWithClass(element: any, classPatterns: string[]): any {
+  let current = element.parentNode;
+  let maxDepth = 10; // Prevent infinite loops
+
+  while (current && maxDepth > 0) {
+    if (current.className) {
+      const className = String(current.className);
+      // Check if any pattern matches
+      for (const pattern of classPatterns) {
+        if (className.includes(pattern)) {
+          return current;
+        }
+      }
+    }
+    current = current.parentNode;
+    maxDepth--;
+  }
+
+  return null;
+}
+
+/**
  * Fuzzy match product name - handles families like "LumiNode" matching "LumiNode / LumiCore"
  * or "GigaCore" matching "GigaCore 30i", "GigaCore 20t", etc.
  */
@@ -448,7 +473,8 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
 
         if (element.classList.contains('single-dl') || element.className.includes('single-dl')) {
           // LUMINEX-SPECIFIC: This is an individual download item - look for product name in parent/ancestor
-          const parentContainer = element.closest('[class*="product-dl"], .product-section, .product-group');
+          // Note: Using manual parent traversal because Deno DOM doesn't support .closest()
+          const parentContainer = findParentWithClass(element, ['product-dl', 'product-section', 'product-group']);
           if (parentContainer) {
             const parentNameElement = parentContainer.querySelector('h1.product-title, h2.product-title, .product-title');
             productName = parentNameElement?.textContent?.trim() || '';
@@ -456,7 +482,7 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
 
           // If still no product name found, look for header in parent
           if (!productName && parentContainer) {
-            const headerElement = parentContainer.querySelector('.header, [class*="header"]');
+            const headerElement = parentContainer.querySelector('.header') || findParentWithClass(parentContainer, ['header']);
             if (headerElement) {
               const headerName = headerElement.querySelector('h1, h2');
               productName = headerName?.textContent?.trim() || '';
