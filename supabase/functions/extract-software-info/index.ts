@@ -423,7 +423,9 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
 
   // Selectors for product containers (common patterns on download pages)
   const containerSelectors = [
-    '[class*="product-dl"]',      // Luminex: <div class="product-dl luminode 10604">
+    '.single-dl',                  // Luminex individual items: <div class="single-dl firmware">
+    '[class*="single-dl"]',        // Variations of single-dl
+    '[class*="product-dl"]',       // Luminex parent: <div class="product-dl luminode 10604">
     '.product-download',
     '.product-item',
     '.download-item',
@@ -440,9 +442,43 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
       console.log(`✅ Found ${elements.length} blocks with selector: ${selector}`);
 
       for (const element of elements) {
-        // Extract product name (usually in h1, h2, h3, or .product-name)
-        const nameElement = element.querySelector('h1, h2, h3, .product-name, .product-title, [class*="title"]');
-        const productName = nameElement?.textContent?.trim() || '';
+        // Extract product name
+        // For single-dl items, look in parent container; otherwise look in current element
+        let productName = '';
+
+        if (element.classList.contains('single-dl') || element.className.includes('single-dl')) {
+          // This is an individual download item - look for product name in parent/ancestor
+          const parentContainer = element.closest('[class*="product-dl"], .product-section, .product-group');
+          if (parentContainer) {
+            const parentNameElement = parentContainer.querySelector('h1.product-title, h2.product-title, .product-title');
+            productName = parentNameElement?.textContent?.trim() || '';
+          }
+
+          // If still no product name found, look for header in parent
+          if (!productName && parentContainer) {
+            const headerElement = parentContainer.querySelector('.header, [class*="header"]');
+            if (headerElement) {
+              const headerName = headerElement.querySelector('h1, h2');
+              productName = headerName?.textContent?.trim() || '';
+            }
+          }
+
+          // Clean up product name - remove "Select all" and other UI text
+          if (productName) {
+            productName = productName.replace(/select\s+all/gi, '').trim();
+          }
+
+          // For single-dl items, append the file type (from h3) to clarify what this entry is
+          const fileTypeElement = element.querySelector('h3, .file-name h3, [class*="file-name"] h3');
+          const fileType = fileTypeElement?.textContent?.trim() || '';
+          if (fileType && productName && fileType.toLowerCase() !== productName.toLowerCase()) {
+            productName = `${productName} - ${fileType}`;
+          }
+        } else {
+          // This is a parent container - product name is inside it
+          const nameElement = element.querySelector('h1, h2, h3, .product-name, .product-title, [class*="title"]');
+          productName = nameElement?.textContent?.trim() || '';
+        }
 
         // Extract version (look for .version-number, .version, data-version, or version patterns)
         let version = '';
@@ -489,8 +525,9 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
 
         // Check if this block contains firmware/software entries (prioritize these)
         const blockText = content.toLowerCase();
-        const hasFirmware = blockText.includes('firmware');
-        const hasSoftware = blockText.includes('software');
+        const className = element.className || '';
+        const hasFirmware = blockText.includes('firmware') || className.includes('firmware');
+        const hasSoftware = blockText.includes('software') || className.includes('software');
         const hasReleaseNotes = !!releaseNotesUrl;
 
         if (productName) {
