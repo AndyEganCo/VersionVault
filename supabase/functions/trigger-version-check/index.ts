@@ -3,7 +3,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.9'
 import { extractWithWebSearch, smartMergeNotes, getAIConfig, shouldEnrichWithWebSearch } from '../_shared/ai-utils.ts'
-import { normalizeVersion } from '../_shared/version-utils.ts'
+import { normalizeVersion, shouldIgnoreVersion } from '../_shared/version-utils.ts'
 
 // Declare EdgeRuntime for background task support
 // This keeps the function alive after returning a response
@@ -241,13 +241,27 @@ serve(async (req) => {
             const aiConfig = await getAIConfig()
 
             if (extracted.versions && extracted.versions.length > 0) {
+              // Filter versions based on software name (beta vs stable)
+              // Software WITHOUT "beta" in name: only keep stable versions
+              // Software WITH "beta" in name: only keep beta/prerelease versions
+              const filteredVersions = extracted.versions.filter(version => {
+                const shouldIgnore = shouldIgnoreVersion(software.name, version.version)
+                if (shouldIgnore) {
+                  const versionType = /beta/i.test(software.name) ? 'stable' : 'beta'
+                  console.log(`  🚫 Ignoring ${versionType} version ${version.version} (${software.name})`)
+                }
+                return !shouldIgnore
+              })
+
+              console.log(`  📊 Version filtering: ${extracted.versions.length} found → ${filteredVersions.length} kept`)
+
               // Progressive enhancement: Select up to 2 versions that need web search
               // Priority: Latest versions first, then fill in gaps in older versions
               // Mimics manual "Check for New Version" button behavior
               const versionsNeedingSearch: any[] = []
               const versionsToSkip: any[] = []
 
-              for (const version of extracted.versions) {
+              for (const version of filteredVersions) {
                 const normalizedVersion = normalizeVersion(version.version, software.name)
 
                 if (versionsNeedingSearch.length < 2) {

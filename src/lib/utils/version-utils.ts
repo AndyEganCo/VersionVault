@@ -185,3 +185,40 @@ export function normalizeVersion(version: string, softwareName: string): string 
 
   return normalized;
 }
+
+/**
+ * Check if a version string contains prerelease markers (beta, alpha, rc, etc.)
+ * @param version Version string to check
+ * @returns true if version contains prerelease markers
+ */
+export function isBetaVersion(version: string): boolean {
+  if (!version) return false;
+  const clean = version.replace(/^[vr]|version\s*/i, '').trim();
+  const [, prerelease] = clean.split(/[-_]/);
+  return !!prerelease && /^(alpha|beta|rc|preview|pre|dev|canary)/i.test(prerelease);
+}
+
+/**
+ * Determine if a version should be ignored based on software name and version type.
+ * This implements the filtering logic where:
+ * - Software WITHOUT "beta" in name: ignores beta versions, keeps stable
+ * - Software WITH "beta" in name: ignores stable versions, keeps beta
+ *
+ * @param softwareName Name of the software
+ * @param version Version string to check
+ * @returns true if the version should be ignored, false if it should be kept
+ */
+export function shouldIgnoreVersion(softwareName: string, version: string): boolean {
+  if (!softwareName || !version) return false;
+
+  const nameContainsBeta = /beta/i.test(softwareName);
+  const versionIsBeta = isBetaVersion(version);
+
+  if (nameContainsBeta) {
+    // "Beta" software: ignore stable versions, keep beta/prerelease
+    return !versionIsBeta;
+  } else {
+    // Regular software: ignore beta versions, keep stable
+    return versionIsBeta;
+  }
+}

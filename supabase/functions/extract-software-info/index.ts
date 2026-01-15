@@ -668,6 +668,10 @@ TASK: Extract the following information:
    - THOROUGHLY search ALL provided content
    - Look for version patterns ANYWHERE in the text (beginning, middle, end)
    - Common patterns: "Version X.X.X", "vX.X.X", "Release X.X", "Build XXXX", "X.X.X released"
+   - **IMPORTANT**: If the version is marked as beta/alpha/rc/preview/pre, INCLUDE that in the version string
+     * Example: "21.2 BETA" → "21.2-beta" (use hyphen separator)
+     * Example: "21.0.1 BETA (352321797)" → "21.0.1-beta"
+     * Example: "19.0 RC1" → "19.0-rc1"
    - May appear in headers, lists, tables, or plain text
    - If multiple versions found, pick the LATEST/NEWEST one
    - ONLY use null if you truly cannot find ANY version number after thorough search
@@ -681,8 +685,12 @@ TASK: Extract the following information:
 
 5. **All Versions** (versions array): Extract EVERY version found in the content
    - Look for ALL version numbers, not just the latest
+   - **CRITICAL**: Preserve beta/alpha/rc/preview/pre/dev designations in the version string
+     * If a version is labeled as beta, alpha, rc, preview, pre, or dev, APPEND it with a hyphen
+     * Examples: "21.2 BETA" → "21.2-beta", "19.0 RC1" → "19.0-rc1", "3.0 Alpha" → "3.0-alpha"
+     * Regular releases should NOT have any suffix: "21.2" stays "21.2"
    - For EACH version found, extract:
-     * version: The version number (e.g., "1.5.0", "v2.3") OR feature title (see below)
+     * version: The version number (e.g., "1.5.0", "v2.3", "1.5.0-beta") OR feature title (see below)
      * releaseDate: Release date in YYYY-MM-DD format - **USE NULL IF NOT FOUND, DO NOT GUESS**
      * notes: Full release notes/changelog for that version (use markdown formatting)
      * type: "major" for X.0.0, "minor" for X.X.0, "patch" for X.X.X, or "minor" for features
@@ -1142,6 +1150,11 @@ Extract the following information:
    - **EXCEPTION - Official Repository Files**: For official changelog/NEWS files from the product's own repository (GitLab, GitHub /raw/ paths), the product name is implied by the repository context. Extract versions even if "${name}" doesn't appear in the text itself.
    - Return null if product name not found or version ambiguous (except for official repo files)
    - Common patterns: "Version X.X.X", "vX.X.X", "Release X.X", "Build XXXX"
+   - **IMPORTANT**: If the version is marked as beta/alpha/rc/preview/pre, INCLUDE that in the version string
+     * Example: "21.2 BETA" → "21.2-beta" (use hyphen separator)
+     * Example: "21.0.1 BETA (352321797)" → "21.0.1-beta"
+     * Example: "19.0 RC1" → "19.0-rc1"
+     * Example: "Version 3.0 Alpha" → "3.0-alpha"
    - If multiple versions found, pick the LATEST one for THIS product
 
 4. **Release Date**: Format YYYY-MM-DD
@@ -1151,6 +1164,16 @@ Extract the following information:
 
 5. **All Versions**: Extract EVERY version for "${name}" found in content
    - For EACH version: { version, releaseDate (or null), notes, type }
+   - **CRITICAL**: Preserve beta/alpha/rc/preview/pre/dev designations in the version string
+     * If a version is labeled as beta, alpha, rc, preview, pre, or dev, APPEND it with a hyphen
+     * Examples:
+       - "21.2 BETA" → "21.2-beta"
+       - "21.0.1 BETA (352321797)" → "21.0.1-beta"
+       - "19.0 RC1" → "19.0-rc1"
+       - "Version 3.0 Alpha 2" → "3.0-alpha"
+       - "2.5 Preview" → "2.5-preview"
+       - "1.0 Dev" → "1.0-dev"
+     * Regular releases should NOT have any suffix: "21.2" stays "21.2"
    - ONLY include versions clearly associated with "${name}"
    - **EXCEPTION - Official Repository Files**: For changelog/NEWS files from official repos, extract versions for this product branch
    - **PRODUCT VARIANT EXCLUSION - CRITICAL**: Some repositories contain multiple product variants
