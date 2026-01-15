@@ -382,15 +382,263 @@ function getDomainSpecificStrategy(url: string): ScrapingStrategy | undefined {
 }
 
 /**
+ * Manual parent traversal (Deno DOM doesn't support .closest())
+ * Walks up parent tree looking for an element matching the selector
+ */
+function findParentWithClass(element: any, classPatterns: string[]): any {
+  let current = element.parentNode;
+  let maxDepth = 10; // Prevent infinite loops
+
+  while (current && maxDepth > 0) {
+    if (current.className) {
+      const className = String(current.className);
+      // Check if any pattern matches
+      for (const pattern of classPatterns) {
+        if (className.includes(pattern)) {
+          return current;
+        }
+      }
+    }
+    current = current.parentNode;
+    maxDepth--;
+  }
+
+  return null;
+}
+
+/**
+ * Fuzzy match product name - handles families like "LumiNode" matching "LumiNode / LumiCore"
+ * or "GigaCore" matching "GigaCore 30i", "GigaCore 20t", etc.
+ */
+function fuzzyMatchProduct(targetProduct: string, foundProduct: string): number {
+  const target = targetProduct.toLowerCase().trim();
+  const found = foundProduct.toLowerCase().trim();
+
+  // Exact match
+  if (target === found) return 100;
+
+  // Contains check (handles "LumiNode" in "LumiNode / LumiCore")
+  if (found.includes(target)) return 90;
+  if (target.includes(found)) return 85;
+
+  // Word-based matching (handles "GigaCore" matching "GigaCore 30i")
+  const targetWords = target.split(/\s+/);
+  const foundWords = found.split(/\s+/);
+
+  // Check if all target words are in found product
+  const allTargetWordsFound = targetWords.every(word =>
+    foundWords.some(fw => fw.includes(word) || word.includes(fw))
+  );
+
+  if (allTargetWordsFound) {
+    // Higher score for fewer extra words (GigaCore -> GigaCore 30i is better than GigaCore -> GigaCore Ethernet Switch 30i)
+    const extraWords = foundWords.length - targetWords.length;
+    return Math.max(75 - (extraWords * 5), 50);
+  }
+
+  return 0;
+}
+
+/**
+ * Parse structured product blocks from HTML (for multi-product download pages)
+ * Returns array of product blocks with names, versions, dates, and release notes links
+ */
+function parseProductBlocks(doc: any, targetProduct: string): Array<{name: string, version: string, date: string, content: string, releaseNotesUrl?: string, score: number}> {
+  const blocks: Array<{name: string, version: string, date: string, content: string, releaseNotesUrl?: string, score: number}> = [];
+
+  // Selectors for product containers (common patterns on download pages)
+  const containerSelectors = [
+    '.single-dl',                  // Luminex individual items: <div class="single-dl firmware">
+    '[class*="single-dl"]',        // Variations of single-dl
+    '[class*="product-dl"]',       // Luminex parent: <div class="product-dl luminode 10604">
+    '.product-download',
+    '.product-item',
+    '.download-item',
+    '[class*="download-"]',
+    '.software-product',
+  ];
+
+  console.log(`\n🔍 Searching for structured product blocks...`);
+
+  for (const selector of containerSelectors) {
+    const elements = doc.querySelectorAll(selector);
+
+    if (elements && elements.length > 0) {
+      console.log(`✅ Found ${elements.length} blocks with selector: ${selector}`);
+
+      // Convert NodeList to Array for safe iteration (Deno DOM compatibility)
+      const elementArray = Array.from(elements);
+
+      for (const element of elementArray) {
+        // Extract product name
+        // For single-dl items, look in parent container; otherwise look in current element
+        let productName = '';
+
+        // Check className safely (Deno DOM may not support classList)
+        const elementClassName = String(element.className || '');
+        const isSingleDl = elementClassName.includes('single-dl');
+
+        if (isSingleDl) {
+          // LUMINEX-SPECIFIC: This is an individual download item - look for product name in parent/ancestor
+          // Note: Using manual parent traversal because Deno DOM doesn't support .closest()
+          const parentContainer = findParentWithClass(element, ['product-dl', 'product-section', 'product-group']);
+          if (parentContainer) {
+            const parentNameElement = parentContainer.querySelector('h1.product-title, h2.product-title, .product-title');
+            productName = parentNameElement?.textContent?.trim() || '';
+          }
+
+          // If still no product name found, look for header in parent
+          if (!productName && parentContainer) {
+            const headerElement = parentContainer.querySelector('.header') || findParentWithClass(parentContainer, ['header']);
+            if (headerElement) {
+              const headerName = headerElement.querySelector('h1, h2');
+              productName = headerName?.textContent?.trim() || '';
+            }
+          }
+
+          // SAFETY: If we still can't find product name, skip this element
+          if (!productName) {
+            console.log(`  ⚠️ Skipping single-dl element - no product name found in parent`);
+            continue;
+          }
+
+          // Clean up product name - remove "Select all" and other UI text
+          if (productName) {
+            productName = productName.replace(/select\s+all/gi, '').trim();
+          }
+
+          // For single-dl items, append the file type (from h3) to clarify what this entry is
+          const fileTypeElement = element.querySelector('h3, .file-name h3, [class*="file-name"] h3');
+          const fileType = fileTypeElement?.textContent?.trim() || '';
+          if (fileType && productName && fileType.toLowerCase() !== productName.toLowerCase()) {
+            productName = `${productName} - ${fileType}`;
+          }
+        } else {
+          // STANDARD: This is a parent container - product name is inside it
+          const nameElement = element.querySelector('h1, h2, h3, .product-name, .product-title, [class*="title"]');
+          productName = nameElement?.textContent?.trim() || '';
+        }
+
+        // Extract version (look for .version-number, .version, data-version, or version patterns)
+        let version = '';
+        const versionElement = element.querySelector('.version-number, .version, [class*="version"]');
+        if (versionElement) {
+          version = versionElement.textContent?.trim() || '';
+        } else {
+          // Fallback: search text for version patterns
+          const text = element.textContent || '';
+          const versionMatch = text.match(/v?(\d+\.\d+\.?\d*)/i);
+          if (versionMatch) {
+            version = versionMatch[1];
+          }
+        }
+
+        // Extract date (look for .date, .release-date, or date patterns)
+        let date = '';
+        const dateElement = element.querySelector('.date, .release-date, [class*="date"]');
+        if (dateElement) {
+          date = dateElement.textContent?.trim() || '';
+        }
+
+        // Extract release notes link (look for links to .txt, .pdf, or "release notes" links)
+        let releaseNotesUrl = '';
+        const links = element.querySelectorAll('a[href]');
+        const linkArray = links ? Array.from(links) : [];
+        for (const link of linkArray) {
+          const href = link.getAttribute('href') || '';
+          const linkText = link.textContent?.toLowerCase() || '';
+
+          // Look for release notes links (.txt files, PDFs, or links with "release" in text)
+          if (
+            href.match(/release[-_]?notes.*\.txt$/i) ||
+            href.match(/release[-_]?notes.*\.pdf$/i) ||
+            linkText.includes('release') ||
+            linkText.includes('notes')
+          ) {
+            releaseNotesUrl = href;
+            break;
+          }
+        }
+
+        // Get full text content of this block
+        const content = element.textContent?.trim() || '';
+
+        // Check if this block contains firmware/software entries (prioritize these)
+        const blockText = content.toLowerCase();
+        const className = element.className || '';
+        const hasFirmware = blockText.includes('firmware') || className.includes('firmware');
+        const hasSoftware = blockText.includes('software') || className.includes('software');
+        const hasReleaseNotes = !!releaseNotesUrl;
+
+        if (productName) {
+          let matchScore = fuzzyMatchProduct(targetProduct, productName);
+
+          // BOOST SCORE for firmware/software blocks (we want versions, not docs)
+          if (hasFirmware) {
+            matchScore = Math.min(100, matchScore + 15); // +15 for firmware
+            console.log(`  🔧 Firmware detected - boosting score by +15`);
+          } else if (hasSoftware) {
+            matchScore = Math.min(100, matchScore + 10); // +10 for software
+            console.log(`  💿 Software detected - boosting score by +10`);
+          } else if (hasReleaseNotes) {
+            matchScore = Math.min(100, matchScore + 5); // +5 for having release notes
+            console.log(`  📄 Release notes available - boosting score by +5`);
+          }
+
+          // PENALTY for documentation-only blocks (no firmware/software)
+          const hasOnlyDocs = (
+            blockText.includes('quick start') ||
+            blockText.includes('specification') ||
+            blockText.includes('user manual') ||
+            blockText.includes('mechanical drawing')
+          ) && !hasFirmware && !hasSoftware;
+
+          if (hasOnlyDocs) {
+            matchScore = Math.max(0, matchScore - 20); // -20 for docs-only blocks
+            console.log(`  📚 Documentation-only block - reducing score by -20`);
+          }
+
+          blocks.push({
+            name: productName,
+            version: version,
+            date: date,
+            content: content,
+            releaseNotesUrl: releaseNotesUrl || undefined,
+            score: matchScore
+          });
+
+          if (matchScore > 50) {
+            console.log(`  📦 Block: "${productName}" | Version: ${version || 'N/A'} | Match: ${matchScore}%`);
+            if (releaseNotesUrl) {
+              console.log(`     📄 Release notes: ${releaseNotesUrl}`);
+            }
+          }
+        }
+      }
+
+      // If we found blocks with this selector, don't try others
+      if (blocks.length > 0) break;
+    }
+  }
+
+  // Sort by match score descending
+  blocks.sort((a, b) => b.score - a.score);
+
+  return blocks;
+}
+
+/**
  * Fetches webpage content and extracts text, with intelligent content limits
  * Phase 3: Now supports interactive scraping strategies
+ * Phase 4: Now supports structured product block parsing for multi-product pages
  * Returns: { content: string, method: string }
  */
 async function fetchWebpageContent(
   url: string,
   maxChars: number = 30000,
   useBrowserless: boolean = false,
-  strategy?: ScrapingStrategy
+  strategy?: ScrapingStrategy,
+  targetProduct?: string  // New parameter for filtering product blocks
 ): Promise<{ content: string; method: string; blockerDetected?: BlockerDetection }> {
   try {
     console.log(`Fetching webpage: ${url}`)
@@ -505,6 +753,84 @@ async function fetchWebpageContent(
 
     console.log(`✅ HTML parsed successfully, extracting content...`)
 
+    // PHASE 4: Try structured product block parsing first (for multi-product pages)
+    if (targetProduct) {
+      const productBlocks = parseProductBlocks(doc, targetProduct);
+
+      if (productBlocks.length > 0) {
+        // SMART FILTERING: Prioritize firmware/software blocks over documentation
+        // Strategy: Try firmware blocks first (score >= 85), fall back to all good matches (>= 70)
+        let goodMatches = productBlocks.filter(b => b.score >= 85);
+
+        if (goodMatches.length === 0) {
+          console.log(`  ℹ️ No high-score firmware blocks (>=85), trying all good matches (>=70)`);
+          goodMatches = productBlocks.filter(b => b.score >= 70);
+        } else {
+          console.log(`  ✅ Found ${goodMatches.length} high-priority blocks (score >= 85)`);
+        }
+
+        if (goodMatches.length > 0) {
+          console.log(`\n✅ STRUCTURED EXTRACTION: Found ${goodMatches.length} matching product blocks`);
+
+          // Combine the content from matching blocks
+          let structuredContent = `STRUCTURED PRODUCT DATA:\n\n`;
+
+          for (const block of goodMatches) {
+            structuredContent += `=== PRODUCT: ${block.name} ===\n`;
+            if (block.version) structuredContent += `Version: ${block.version}\n`;
+            if (block.date) structuredContent += `Date: ${block.date}\n`;
+            structuredContent += `\n${block.content}\n\n`;
+
+            // Fetch release notes if available
+            if (block.releaseNotesUrl) {
+              try {
+                console.log(`  📄 Fetching release notes from: ${block.releaseNotesUrl}`);
+
+                // Check if it's a relative URL
+                const notesUrl = block.releaseNotesUrl.startsWith('http')
+                  ? block.releaseNotesUrl
+                  : new URL(block.releaseNotesUrl, url).toString();
+
+                const notesResponse = await fetch(notesUrl, {
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (compatible; VersionVault/1.0; +https://versionvault.dev)',
+                  },
+                });
+
+                if (notesResponse.ok) {
+                  const notesText = await notesResponse.text();
+                  structuredContent += `\n--- RELEASE NOTES (from ${notesUrl}) ---\n`;
+                  structuredContent += notesText.substring(0, 20000); // Limit to 20K chars per notes file
+                  structuredContent += `\n--- END RELEASE NOTES ---\n\n`;
+                  console.log(`  ✅ Fetched ${notesText.length} chars of release notes`);
+                } else {
+                  console.log(`  ⚠️ Release notes fetch failed: ${notesResponse.status}`);
+                }
+              } catch (error) {
+                console.log(`  ⚠️ Error fetching release notes: ${error.message}`);
+              }
+            }
+
+            structuredContent += `${'='.repeat(50)}\n\n`;
+          }
+
+          console.log(`📦 Extracted ${structuredContent.length} chars from ${goodMatches.length} product blocks`);
+          console.log('--- STRUCTURED CONTENT PREVIEW ---');
+          console.log(structuredContent.substring(0, 800));
+          console.log('--- END PREVIEW ---');
+
+          return {
+            content: structuredContent,
+            method: 'structured_blocks',
+            blockerDetected: result.blockerDetected?.isBlocked ? result.blockerDetected : undefined
+          };
+        } else {
+          console.log(`⚠️ Found ${productBlocks.length} product blocks but none matched well (best score: ${productBlocks[0]?.score || 0})`);
+        }
+      }
+    }
+
+    // FALLBACK: Standard text extraction from semantic selectors
     // Try to find main content areas first (more intelligent extraction)
     // Added wiki-specific selectors and documentation page patterns
     const selectors = [
@@ -1883,11 +2209,12 @@ serve(async (req) => {
         console.log(`🌐 Source type: Webpage`)
         // Fetch content from both URLs in parallel (try regular fetch first)
         // Phase 3: Pass scraping strategy if provided
+        // Phase 4: Pass product name for structured block parsing
         const [versionResult, mainResult] = await Promise.all([
-          fetchWebpageContent(versionUrl, 60000, false, scrapingStrategy),
+          fetchWebpageContent(versionUrl, 60000, false, scrapingStrategy, name),
           // Only fetch main website if it's different from version URL
           versionUrl.toLowerCase() !== website.toLowerCase()
-            ? fetchWebpageContent(website, 20000, false)
+            ? fetchWebpageContent(website, 20000, false, undefined, name)
             : Promise.resolve({ content: '', method: 'skipped' })
         ])
 
@@ -1920,7 +2247,7 @@ serve(async (req) => {
         console.log(`🔄 Retrying with Browserless (headless Chrome)...`)
 
         // Retry with Browserless for JavaScript pages
-        const retryResult = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy)
+        const retryResult = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy, name)
         versionContent = retryResult.content
         fetchMethod = retryResult.method
 
@@ -1956,7 +2283,7 @@ serve(async (req) => {
           console.log(`🔄 Retrying with EXTENDED timeout (60s) for slow-loading page...`)
 
           // Retry with extended Browserless timeout (60 seconds)
-          const extendedRetry = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy)
+          const extendedRetry = await fetchWebpageContent(versionUrl, 60000, true, scrapingStrategy, name)
           versionContent = extendedRetry.content
           fetchMethod = extendedRetry.method
 

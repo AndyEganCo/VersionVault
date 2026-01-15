@@ -12,6 +12,17 @@ export interface ContentWindow {
 }
 
 /**
+ * Structured product block extracted from HTML
+ */
+export interface ProductBlock {
+  productName: string;
+  version?: string;
+  date?: string;
+  content: string;
+  matchScore: number; // 0-100, how well it matches the target product
+}
+
+/**
  * Find version number patterns in content
  * Looks for patterns like: "Version 27.1", "v27.1.0", "27.1", etc.
  */
@@ -241,10 +252,72 @@ export function extractVersionWindows(
 }
 
 /**
- * Smart content extraction - VERSION-FIRST STRATEGY
- * 1. First tries to find version patterns (e.g., "Version 27.1")
- * 2. Falls back to product name mentions if no versions found
- * 3. Returns optimized content for AI analysis
+ * Extract windows that contain BOTH product mentions AND version patterns
+ * This is ideal for multi-product download pages where we need to filter by product
+ */
+export function extractProductVersionWindows(
+  content: string,
+  productName: string,
+  windowSize: number = 5000,
+  maxWindows: number = 15
+): ContentWindow[] {
+  const versionMatches = findVersionPatterns(content);
+  const productMentions = findProductMentions(content, productName);
+
+  if (versionMatches.length === 0 || productMentions.length === 0) {
+    return [];
+  }
+
+  console.log(`✅ Found ${versionMatches.length} version patterns and ${productMentions.length} product mentions`);
+
+  // Find version patterns that are near product mentions
+  const productVersionWindows: ContentWindow[] = [];
+
+  for (const versionMatch of versionMatches) {
+    // Check if any product mention is within windowSize of this version
+    const nearbyProduct = productMentions.find(productMention => {
+      const distance = Math.abs(versionMatch.position - productMention.position);
+      return distance < windowSize;
+    });
+
+    if (nearbyProduct) {
+      // This version is near a product mention - create a window around the version
+      const halfWindow = Math.floor(windowSize / 2);
+      const startPosition = Math.max(0, versionMatch.position - halfWindow);
+      const endPosition = Math.min(content.length, versionMatch.position + halfWindow);
+
+      productVersionWindows.push({
+        content: content.substring(startPosition, endPosition),
+        startPosition,
+        endPosition,
+        matchedTerm: versionMatch.matchedTerm,
+        matchType: 'both',
+      });
+
+      // Stop if we have enough windows
+      if (productVersionWindows.length >= maxWindows) {
+        break;
+      }
+    }
+  }
+
+  if (productVersionWindows.length > 0) {
+    console.log(`✅ Found ${productVersionWindows.length} windows with both product and version`);
+    for (let i = 0; i < Math.min(5, productVersionWindows.length); i++) {
+      const window = productVersionWindows[i];
+      console.log(`  Window ${i + 1}: chars ${window.startPosition}-${window.endPosition} (version: "${window.matchedTerm}")`);
+    }
+  }
+
+  return productVersionWindows;
+}
+
+/**
+ * Smart content extraction - PRODUCT-VERSION STRATEGY
+ * 1. First tries to find windows with BOTH product name AND version patterns (best for multi-product pages)
+ * 2. Falls back to version patterns alone (best for single-product release notes pages)
+ * 3. Falls back to product name mentions if no versions found
+ * 4. Returns optimized content for AI analysis
  */
 export function extractSmartContent(
   fullContent: string,
@@ -253,7 +326,23 @@ export function extractSmartContent(
 ): { content: string; foundProduct: boolean; method: string } {
   console.log(`\n🔍 Smart extraction for "${productName}" (${fullContent.length} total chars)`);
 
-  // STRATEGY 1: Look for version patterns first (best for release notes pages)
+  // STRATEGY 0: Look for windows with BOTH product AND version (best for multi-product downloads pages)
+  console.log('📍 Strategy 0: Searching for product+version windows...');
+  const productVersionWindows = extractProductVersionWindows(fullContent, productName, 5000, 15);
+
+  if (productVersionWindows.length > 0) {
+    // Found windows with both product and version! This is the best case.
+    const optimized = createOptimizedContent(productVersionWindows, maxChars);
+    console.log(`✅ Product+version extraction: ${optimized.length} chars from ${productVersionWindows.length} windows`);
+
+    return {
+      content: optimized,
+      foundProduct: true,
+      method: 'product_version',
+    };
+  }
+
+  // STRATEGY 1: Look for version patterns first (best for single-product release notes pages)
   console.log('📍 Strategy 1: Searching for version patterns...');
   const versionWindows = extractVersionWindows(fullContent, 5000, 15);  // Increased from 5 to 15 windows to capture more versions
 
