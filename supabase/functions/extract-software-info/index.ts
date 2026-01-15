@@ -1963,11 +1963,11 @@ serve(async (req) => {
     // EXCEPTION: Skip for official repository files - they're structured linearly
     const isOfficialRepo = isOfficialRepoFile(versionUrl)
 
-    if (isOfficialRepo && versionContent.length > 60000) {
+    if (isOfficialRepo && versionContent.length > 30000) {
       // For official repo changelog files, take from the beginning (newest versions first)
       console.log('📝 Official repo file detected - using linear extraction from beginning')
-      console.log(`   Truncating from ${versionContent.length} to 60000 chars (preserves newest versions)`)
-      versionContent = versionContent.substring(0, 60000)
+      console.log(`   Truncating from ${versionContent.length} to 30000 chars (preserves newest versions)`)
+      versionContent = versionContent.substring(0, 30000)
     } else if (versionContent.length > 1000 && name && !isOfficialRepo) {
       // Regular smart windowing for webpages
       console.log('\n🎯 Applying smart content extraction...')
