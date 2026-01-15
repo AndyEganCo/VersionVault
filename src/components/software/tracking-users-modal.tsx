@@ -4,7 +4,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useTrackingUsers } from '@/lib/software/hooks/tracking-hooks';
-import { Search, X } from 'lucide-react';
+import { Search, X, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+
+type SortField = 'email' | 'is_tracking';
+type SortDirection = 'asc' | 'desc';
 
 interface TrackingUsersModalProps {
   softwareId: string | null;
@@ -17,6 +20,8 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
   const [showSearch, setShowSearch] = useState(false);
   const { users, loading, fetchUsers, toggleTracking } = useTrackingUsers(softwareId);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+  const [sortField, setSortField] = useState<SortField>('email');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   useEffect(() => {
     if (softwareId) {
@@ -24,10 +29,32 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
     }
   }, [softwareId, fetchUsers]);
 
-  const filteredUsers = users.filter(user =>
-    user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (user.display_name?.toLowerCase() || '').includes(searchQuery.toLowerCase())
-  );
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const filteredUsers = users
+    .filter(user =>
+      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (user.display_name?.toLowerCase() || '').includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      let comparison = 0;
+
+      if (sortField === 'email') {
+        comparison = a.email.localeCompare(b.email);
+      } else if (sortField === 'is_tracking') {
+        // Sort tracked users first (true > false)
+        comparison = a.is_tracking === b.is_tracking ? 0 : a.is_tracking ? -1 : 1;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
 
   const handleToggleTracking = async (userId: string, isTracking: boolean) => {
     setTogglingUserId(userId);
@@ -89,9 +116,43 @@ export function TrackingUsersModal({ softwareId, softwareName, onClose }: Tracki
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
+                  <TableHead>
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort('email')}
+                      className={sortField === 'email' ? 'text-primary font-medium' : ''}
+                    >
+                      Email
+                      {sortField === 'email' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUp className="ml-2 h-4 w-4" />
+                        ) : (
+                          <ArrowDown className="ml-2 h-4 w-4" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="ml-2 h-4 w-4" />
+                      )}
+                    </Button>
+                  </TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
+                  <TableHead className="text-right">
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleSort('is_tracking')}
+                      className={sortField === 'is_tracking' ? 'text-primary font-medium' : ''}
+                    >
+                      Tracking
+                      {sortField === 'is_tracking' ? (
+                        sortDirection === 'asc' ? (
+                          <ArrowUp className="ml-2 h-4 w-4" />
+                        ) : (
+                          <ArrowDown className="ml-2 h-4 w-4" />
+                        )
+                      ) : (
+                        <ArrowUpDown className="ml-2 h-4 w-4" />
+                      )}
+                    </Button>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

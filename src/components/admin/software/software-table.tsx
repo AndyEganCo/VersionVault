@@ -30,7 +30,7 @@ type SoftwareTableProps = {
   onViewTracking: (software: Software) => void;
 };
 
-type SortField = 'name' | 'category' | 'manufacturer' | 'current_version' | 'release_date' | 'last_checked';
+type SortField = 'name' | 'category' | 'manufacturer' | 'current_version' | 'release_date' | 'last_checked' | 'tracking_count';
 type SortDirection = 'asc' | 'desc';
 
 function SortButton({ field, label, currentSort, onSort }: {
@@ -79,8 +79,17 @@ export function SoftwareTable({ data, loading, onUpdate, trackingCounts, onViewT
   };
 
   const sortedData = [...data].sort((a, b) => {
-    const aValue = a[sortField];
-    const bValue = b[sortField];
+    let aValue: any;
+    let bValue: any;
+
+    // Handle tracking_count specially since it comes from the Map
+    if (sortField === 'tracking_count') {
+      aValue = trackingCounts.get(a.id) || 0;
+      bValue = trackingCounts.get(b.id) || 0;
+    } else {
+      aValue = a[sortField];
+      bValue = b[sortField];
+    }
 
     if (!aValue && !bValue) return 0;
     if (!aValue) return 1;
@@ -371,7 +380,14 @@ export function SoftwareTable({ data, loading, onUpdate, trackingCounts, onViewT
                   onSort={handleSort}
                 />
               </TableHead>
-              <TableHead>Tracking</TableHead>
+              <TableHead>
+                <SortButton
+                  field="tracking_count"
+                  label="Tracking"
+                  currentSort={{ field: sortField, direction: sortDirection }}
+                  onSort={handleSort}
+                />
+              </TableHead>
               <TableHead className="text-right w-[160px]">Actions</TableHead>
             </TableRow>
           </TableHeader>
