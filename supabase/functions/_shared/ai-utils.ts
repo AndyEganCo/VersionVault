@@ -118,6 +118,60 @@ export async function checkWebSearchLimit(): Promise<boolean> {
   }
 }
 
+/**
+ * Determine enrichment strategy based on existing notes quality and source
+ * Returns: 'skip' | 'search' | 'merge'
+ */
+export interface EnrichmentDecision {
+  action: 'skip' | 'search' | 'merge'
+  reason: string
+  notesLength: number
+}
+
+export function shouldEnrichWithWebSearch(
+  notes: string | string[],
+  sourceUrl?: string
+): EnrichmentDecision {
+  // Normalize notes to array and calculate total length
+  const notesArray = typeof notes === 'string'
+    ? notes.split('\n').filter(Boolean)
+    : (Array.isArray(notes) ? notes : [])
+
+  const notesText = notesArray.join(' ')
+  const notesLength = notesText.length
+
+  // Check if source is an official repository file
+  const isOfficialRepo = sourceUrl && (
+    sourceUrl.includes('/raw/') ||
+    sourceUrl.includes('raw.githubusercontent.com')
+  )
+
+  // TIER 1: Skip web search for substantial official sources
+  if (notesLength > 500 && isOfficialRepo) {
+    return {
+      action: 'skip',
+      reason: `Already have ${notesLength} chars from official repo - skipping web search`,
+      notesLength
+    }
+  }
+
+  // TIER 2: Always search for minimal/missing notes
+  if (notesLength < 100) {
+    return {
+      action: 'search',
+      reason: `Notes minimal (${notesLength} chars) - performing web search`,
+      notesLength
+    }
+  }
+
+  // TIER 3: Merge for middle ground (100-500 chars, or non-repo sources)
+  return {
+    action: 'merge',
+    reason: `Notes exist (${notesLength} chars) - web search will enhance/merge`,
+    notesLength
+  }
+}
+
 // ============================================
 // Web Search Enhanced Extraction
 // ============================================

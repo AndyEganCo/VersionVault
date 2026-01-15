@@ -2,7 +2,7 @@
 // Triggered by cron jobs to check all software versions overnight
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.9'
-import { extractWithWebSearch, smartMergeNotes, getAIConfig } from '../_shared/ai-utils.ts'
+import { extractWithWebSearch, smartMergeNotes, getAIConfig, shouldEnrichWithWebSearch } from '../_shared/ai-utils.ts'
 import { normalizeVersion } from '../_shared/version-utils.ts'
 
 // Declare EdgeRuntime for background task support
@@ -299,8 +299,15 @@ serve(async (req) => {
                 let notesSource: 'auto' | 'merged' = 'auto'
                 let mergeMetadata = null
 
-                // Perform web search for this version (already determined it needs it)
-                if (aiConfig.web_search_enabled) {
+                // Determine if web search is needed based on notes quality
+                const enrichmentDecision = shouldEnrichWithWebSearch(
+                  notesArray,
+                  software.version_website || software.website
+                )
+                console.log(`  📊 Enrichment decision: ${enrichmentDecision.action} - ${enrichmentDecision.reason}`)
+
+                // Perform web search based on decision
+                if (aiConfig.web_search_enabled && enrichmentDecision.action !== 'skip') {
                   console.log(`  🔍 Performing web search for ${normalizedVersion}...`)
 
                   const webSearchResult = await extractWithWebSearch(
@@ -313,9 +320,36 @@ serve(async (req) => {
 
                   if (webSearchResult) {
                     console.log(`  ✅ Web search found detailed notes (${webSearchResult.sources.length} sources)`)
-                    notesArray = webSearchResult.raw_notes
-                    structuredNotes = webSearchResult.structured_notes
-                    searchSources = webSearchResult.sources
+
+                    // Action: 'search' = replace, 'merge' = merge with existing
+                    if (enrichmentDecision.action === 'search') {
+                      // Notes were minimal/missing - use web search results
+                      notesArray = webSearchResult.raw_notes
+                      structuredNotes = webSearchResult.structured_notes
+                      searchSources = webSearchResult.sources
+                      console.log(`  📝 Using web search notes (${webSearchResult.raw_notes.join(' ').length} chars)`)
+                    } else if (enrichmentDecision.action === 'merge') {
+                      // Notes exist but can be enhanced - merge them
+                      console.log(`  🔀 Merging extracted notes with web search results...`)
+                      const mergeResult = await smartMergeNotes(
+                        {
+                          notes: notesArray,
+                          structured_notes: null,
+                          notes_source: 'auto'
+                        },
+                        {
+                          structured_notes: webSearchResult.structured_notes,
+                          raw_notes: webSearchResult.raw_notes
+                        }
+                      )
+
+                      notesArray = mergeResult.raw_notes
+                      structuredNotes = mergeResult.structured_notes
+                      searchSources = webSearchResult.sources
+                      notesSource = 'merged'
+                      mergeMetadata = mergeResult.merge_metadata
+                      console.log(`  ✅ Notes merged: ${mergeResult.raw_notes.join(' ').length} chars`)
+                    }
 
                     // Use web search release date if found (more accurate than extraction)
                     if (webSearchResult.release_date) {

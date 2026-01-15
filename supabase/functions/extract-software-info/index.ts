@@ -11,6 +11,7 @@ import {
   validateExtraction,
   calculateConfidenceScore,
   detectVersionAnomaly,
+  isOfficialRepoFile,
   type ValidationResult
 } from '../_shared/validation.ts'
 
@@ -457,6 +458,29 @@ async function fetchWebpageContent(
     }
 
     console.log(`📄 Raw HTML fetched: ${html.length} characters`)
+
+    // PLAIN TEXT FILES: Skip HTML parsing for plain text files (GitLab/GitHub raw, .txt, etc.)
+    if (isPlainTextFile(url)) {
+      console.log('📝 Detected plain text file - skipping HTML parsing')
+
+      // Clean up excessive whitespace while preserving line structure
+      let content = html
+        .replace(/\r\n/g, '\n')  // Normalize line endings
+        .replace(/[ \t]+/g, ' ')  // Collapse horizontal whitespace but preserve single spaces
+        .replace(/\n{3,}/g, '\n\n')  // Collapse excessive blank lines
+        .trim()
+
+      console.log(`✅ Plain text processed: ${content.length} characters`)
+      console.log('--- PLAIN TEXT PREVIEW ---')
+      console.log(content.substring(0, 500))
+      console.log('--- END PREVIEW ---')
+
+      return {
+        content,
+        method: 'plain_text',
+        blockerDetected: result.blockerDetected?.isBlocked ? result.blockerDetected : undefined
+      }
+    }
 
     // APPLE APP STORE: Try to extract structured JSON first
     if (url.includes('apps.apple.com')) {
@@ -1084,7 +1108,7 @@ Response: { version: "1.2.3", productNameFound: true }  ← WRONG! Not on offici
 
 ${hasVersionContent ? `
 VERSION PAGE CONTENT (from ${versionUrl}):
-${versionContent}
+${isPlainTextFile(versionUrl) && (versionUrl.includes('/raw/') || versionUrl.includes('github.com') || versionUrl.includes('gitlab')) ? '⚠️ NOTE: This is an OFFICIAL REPOSITORY FILE (changelog/NEWS from Git repository). Product name may not appear in text - versions are implied to belong to this product.\n' : ''}${versionContent}
 ` : ''}
 
 ${hasMainContent ? `
@@ -1115,7 +1139,8 @@ Extract the following information:
 3. **Current Version**: The latest version number for "${name}" ONLY
    - Search ALL provided content thoroughly
    - ONLY extract if you find "${name}" mentioned near the version
-   - Return null if product name not found or version ambiguous
+   - **EXCEPTION - Official Repository Files**: For official changelog/NEWS files from the product's own repository (GitLab, GitHub /raw/ paths), the product name is implied by the repository context. Extract versions even if "${name}" doesn't appear in the text itself.
+   - Return null if product name not found or version ambiguous (except for official repo files)
    - Common patterns: "Version X.X.X", "vX.X.X", "Release X.X", "Build XXXX"
    - If multiple versions found, pick the LATEST one for THIS product
 
@@ -1127,6 +1152,21 @@ Extract the following information:
 5. **All Versions**: Extract EVERY version for "${name}" found in content
    - For EACH version: { version, releaseDate (or null), notes, type }
    - ONLY include versions clearly associated with "${name}"
+   - **EXCEPTION - Official Repository Files**: For changelog/NEWS files from official repos, extract versions for this product branch
+   - **PRODUCT VARIANT EXCLUSION - CRITICAL**: Some repositories contain multiple product variants
+     * Target: "${name}"
+     * EXCLUDE versions for different product variants with platform/device qualifiers:
+       - If target is "VLC Media Player" → EXCLUDE "VLC for iOS", "VLC for Android", "VLC for tvOS"
+       - If target is "ProPresenter" → EXCLUDE "ProPresenter for iOS", "ProPresenter Remote"
+       - If target is "QLab" → EXCLUDE "QLab Remote", "QLab Video"
+     * Pattern: "${name} for [Platform]" or "${name} [Variant]" are DIFFERENT products
+     * Only extract versions explicitly for "${name}" without variant qualifiers
+   - **DEDUPLICATION - CRITICAL**: Only extract ONE entry per unique version number
+     * If you see "3.0.23 (Windows)", "3.0.23 (macOS)", "3.0.23 (Linux)" - these are the SAME version
+     * Extract only ONE entry with version: "3.0.23" (no platform suffix)
+     * Combine all platform-specific notes into a single entry
+     * DO NOT create separate entries for platform variants
+     * Example: "2.1.0", "v2.1.0", "Version 2.1.0" are all the same version - extract once as "2.1.0"
    - Exclude versions for other products
    - Include full release notes in markdown format
    - **APPLE APP STORE PAGES**: On App Store pages, release notes appear BEFORE the version number in the text flow
@@ -1143,13 +1183,13 @@ Extract the following information:
 
 6. **Validation Fields** (REQUIRED):
    - **confidence**: 0-100 score for how confident you are this is correct
-     - 90-100: Very confident, exact product name found with version nearby
+     - 90-100: Very confident, exact product name found with version nearby OR official repository file
      - 80-89: Confident, exact product name found with version present
      - 70-79: Good confidence, implied manufacturer match with clear context
      - 50-69: Moderate, implied match but some ambiguity possible
      - 30-49: Low, unclear which product or weak context
      - 0-29: Very low, likely wrong product
-   - **productNameFound**: true/false - was "${name}" (or its product-specific part on official domain) found?
+   - **productNameFound**: true/false - was "${name}" (or its product-specific part on official domain) found? For official repository changelog files, this should be true even if name doesn't literally appear.
    - **validationNotes**: Brief explanation of confidence level and matching strategy used
 
 **CRITICAL INSTRUCTIONS:**
@@ -1244,7 +1284,92 @@ Better to be honest about uncertainty than to provide incorrect data.`
 
   // Sort versions array by version number (highest first)
   if (extracted.versions && extracted.versions.length > 0) {
+    const originalCount = extracted.versions.length
+
+    // DEDUPLICATION: Remove duplicate versions (e.g., "3.0.23 (Windows)" and "3.0.23 (macOS)" should be one entry)
+    console.log(`📋 Deduplicating versions (found ${originalCount} entries)...`)
+    const versionMap = new Map<string, any>()
+
+    for (const ver of extracted.versions) {
+      // Normalize version: remove common prefixes and suffixes
+      let normalized = ver.version
+        .replace(/^[vr]/i, '')  // Remove v or r prefix
+        .replace(/\s*\(.*?\)\s*$/g, '')  // Remove platform suffixes like "(Windows)", "(macOS)"
+        .trim()
+
+      // If this version number already exists, merge the notes
+      if (versionMap.has(normalized)) {
+        const existing = versionMap.get(normalized)!
+        console.log(`   ⚠️ Duplicate found: "${ver.version}" → normalized to "${normalized}"`)
+        // Merge notes (keep the longer/better one)
+        if (ver.notes && ver.notes.length > existing.notes.length) {
+          console.log(`      Keeping longer notes (${ver.notes.length} chars vs ${existing.notes.length} chars)`)
+          existing.notes = ver.notes
+        }
+        // Keep the earliest date if available
+        if (!existing.releaseDate && ver.releaseDate) {
+          existing.releaseDate = ver.releaseDate
+        }
+      } else {
+        // First time seeing this version - update version to normalized form
+        ver.version = normalized
+        versionMap.set(normalized, ver)
+      }
+    }
+
+    // Replace with deduplicated versions
+    extracted.versions = Array.from(versionMap.values())
+
+    if (originalCount !== extracted.versions.length) {
+      console.log(`✅ Deduplication: ${originalCount} versions → ${extracted.versions.length} unique versions`)
+      console.log(`   Removed ${originalCount - extracted.versions.length} duplicate(s)`)
+    } else {
+      console.log(`✅ No duplicates found`)
+    }
+
+    // Re-sort after deduplication
     extracted.versions.sort((a, b) => compareVersions(b.version, a.version))
+
+    // BRANCH PATTERN FILTERING: Remove versions that don't match the branch pattern
+    // Example: /raw/3.0.x/NEWS should only have 3.0.* versions, not 3.7.0 (iOS version)
+    if (versionUrl && (versionUrl.includes('/raw/') || versionUrl.includes('raw.githubusercontent.com'))) {
+      // Extract branch pattern from URL (e.g., "3.0.x" from "/raw/3.0.x/NEWS")
+      const branchMatch = versionUrl.match(/\/raw\/([^\/]+)\//)
+      if (branchMatch) {
+        const branch = branchMatch[1]
+        console.log(`🌿 Branch detected: ${branch}`)
+
+        // Check if branch is a version pattern (e.g., "3.0.x", "v2.1.x", "2.x")
+        const versionPatternMatch = branch.match(/^v?(\d+)\.(\d+|x)/)
+        if (versionPatternMatch) {
+          const majorVersion = versionPatternMatch[1]
+          const minorVersion = versionPatternMatch[2]
+
+          let pattern: string
+          if (minorVersion === 'x') {
+            pattern = `${majorVersion}.`  // Match "3." for "3.x"
+          } else {
+            pattern = `${majorVersion}.${minorVersion}.`  // Match "3.0." for "3.0.x"
+          }
+
+          console.log(`🔍 Filtering versions to match branch pattern: ${pattern}*`)
+
+          const beforeFilter = extracted.versions.length
+          extracted.versions = extracted.versions.filter(ver => {
+            const normalized = ver.version.replace(/^[vr]/i, '')
+            const matches = normalized.startsWith(pattern)
+            if (!matches) {
+              console.log(`   ❌ Excluding ${ver.version} - doesn't match branch pattern ${pattern}*`)
+            }
+            return matches
+          })
+
+          if (beforeFilter !== extracted.versions.length) {
+            console.log(`✅ Branch filtering: ${beforeFilter} versions → ${extracted.versions.length} versions matching ${pattern}*`)
+          }
+        }
+      }
+    }
 
     // APPLE APP STORE FIX: Check if this might be an App Store page with mismatched notes
     // App Store pages often show the current version at top but with previous version's notes
@@ -1443,7 +1568,8 @@ ${versionPageResult.content.substring(0, 15000)}`
   const validation = validateExtraction(
     { name, manufacturer, product_identifier: productIdentifier },
     extracted,
-    versionContent + ' ' + mainWebsiteContent
+    versionContent + ' ' + mainWebsiteContent,
+    versionUrl  // Pass source URL for official repository file detection
   )
 
   console.log(`Validation result: ${validation.valid ? '✅ VALID' : '⚠️ INVALID'}`)
@@ -1494,9 +1620,42 @@ function extractFromDomain(website: string): ExtractedInfo {
 }
 
 /**
+ * Check if URL points to a plain text file (not HTML)
+ */
+function isPlainTextFile(url: string, contentType?: string): boolean {
+  if (!url) return false;
+
+  // Check Content-Type header if available
+  if (contentType) {
+    const lowerType = contentType.toLowerCase();
+    if (lowerType.includes('text/plain')) return true;
+    if (lowerType.includes('text/markdown')) return true;
+    // Explicitly HTML should not be treated as plain text
+    if (lowerType.includes('text/html')) return false;
+  }
+
+  const lowerUrl = url.toLowerCase();
+
+  // GitLab and GitHub raw file endpoints
+  if (lowerUrl.includes('/raw/')) return true;
+  if (lowerUrl.includes('/raw.githubusercontent.com/')) return true;
+
+  // Plain text file extensions
+  if (lowerUrl.endsWith('.txt')) return true;
+  if (lowerUrl.endsWith('.text')) return true;
+  if (lowerUrl.endsWith('.md')) return true;
+  if (lowerUrl.endsWith('.markdown')) return true;
+
+  // Common changelog/release notes plain text files
+  if (lowerUrl.match(/\/(changelog|changes|news|history|releases?)(\.txt)?$/i)) return true;
+
+  return false;
+}
+
+/**
  * Auto-detect source type from URL
  */
-function detectSourceType(url: string): 'webpage' | 'rss' | 'forum' | 'pdf' {
+function detectSourceType(url: string): 'webpage' | 'rss' | 'forum' | 'pdf' | 'plaintext' {
   if (!url) return 'webpage';
 
   const lowerUrl = url.toLowerCase();
@@ -1504,6 +1663,11 @@ function detectSourceType(url: string): 'webpage' | 'rss' | 'forum' | 'pdf' {
   // PDF detection
   if (lowerUrl.endsWith('.pdf')) {
     return 'pdf';
+  }
+
+  // Plain text detection
+  if (isPlainTextFile(url)) {
+    return 'plaintext';
   }
 
   // RSS/Atom feed detection
@@ -1596,7 +1760,32 @@ serve(async (req) => {
     let fetchMethod = 'static' // Track which method was used for version content
 
     // Determine source type (auto-detect if not provided)
-    const detectedSourceType = sourceType || detectSourceType(versionUrl)
+    // BUT: validate provided source type and override if clearly wrong
+    let detectedSourceType = sourceType || detectSourceType(versionUrl)
+
+    // Validation: Check if provided source type conflicts with URL pattern
+    if (sourceType && versionUrl) {
+      const autoDetected = detectSourceType(versionUrl)
+
+      // If URL is clearly a plain text file but source type says RSS/forum/etc, override it
+      if (autoDetected === 'plaintext' && sourceType !== 'plaintext') {
+        console.log(`⚠️ Source type override: Database says '${sourceType}' but URL pattern indicates 'plaintext'`)
+        console.log(`   Overriding to 'plaintext' for ${versionUrl}`)
+        detectedSourceType = 'plaintext'
+      }
+      // Similarly, if URL is clearly PDF but says something else
+      else if (autoDetected === 'pdf' && sourceType !== 'pdf') {
+        console.log(`⚠️ Source type override: Database says '${sourceType}' but URL ends with .pdf`)
+        console.log(`   Overriding to 'pdf' for ${versionUrl}`)
+        detectedSourceType = 'pdf'
+      }
+      // Warn if there's a mismatch but we're not overriding
+      else if (autoDetected !== sourceType) {
+        console.log(`⚠️ Source type mismatch: Database='${sourceType}', Auto-detected='${autoDetected}'`)
+        console.log(`   Using database value, but this may cause issues`)
+      }
+    }
+
     console.log(`📍 Detected source type: ${detectedSourceType}`)
 
     // If content is provided directly (e.g., from PDF parsing), use it
@@ -1771,7 +1960,16 @@ serve(async (req) => {
     // Apply smart content extraction (Phase 4: Smart Windowing)
     // Search the FULL content for product mentions, extract windows around them
     // This ensures we find the product even if buried deep in the page
-    if (versionContent.length > 1000 && name) {
+    // EXCEPTION: Skip for official repository files - they're structured linearly
+    const isOfficialRepo = isOfficialRepoFile(versionUrl)
+
+    if (isOfficialRepo && versionContent.length > 30000) {
+      // For official repo changelog files, take from the beginning (newest versions first)
+      console.log('📝 Official repo file detected - using linear extraction from beginning')
+      console.log(`   Truncating from ${versionContent.length} to 30000 chars (preserves newest versions)`)
+      versionContent = versionContent.substring(0, 30000)
+    } else if (versionContent.length > 1000 && name && !isOfficialRepo) {
+      // Regular smart windowing for webpages
       console.log('\n🎯 Applying smart content extraction...')
       const smartResult = extractSmartContent(versionContent, name, 60000)
 
