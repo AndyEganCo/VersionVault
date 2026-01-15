@@ -328,12 +328,12 @@ export function SoftwareTable({ data, loading, onUpdate, trackingCounts, onViewT
 
   return (
     <>
-      <div className="rounded-md border">
+      <div className="rounded-md border overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>
-                <SortButton 
+              <TableHead className="sticky left-0 z-10 bg-background shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                <SortButton
                   field="name"
                   label="Name"
                   currentSort={{ field: sortField, direction: sortDirection }}
@@ -341,7 +341,7 @@ export function SoftwareTable({ data, loading, onUpdate, trackingCounts, onViewT
                 />
               </TableHead>
               <TableHead>
-                <SortButton 
+                <SortButton
                   field="category"
                   label="Category"
                   currentSort={{ field: sortField, direction: sortDirection }}
@@ -349,15 +349,15 @@ export function SoftwareTable({ data, loading, onUpdate, trackingCounts, onViewT
                 />
               </TableHead>
               <TableHead>
-                <SortButton 
+                <SortButton
                   field="manufacturer"
-                  label="Manufacturer"
+                  label="Mfr"
                   currentSort={{ field: sortField, direction: sortDirection }}
                   onSort={handleSort}
                 />
               </TableHead>
               <TableHead>
-                <SortButton 
+                <SortButton
                   field="current_version"
                   label="Version"
                   currentSort={{ field: sortField, direction: sortDirection }}
@@ -365,7 +365,7 @@ export function SoftwareTable({ data, loading, onUpdate, trackingCounts, onViewT
                 />
               </TableHead>
               <TableHead>
-                <SortButton 
+                <SortButton
                   field="release_date"
                   label="Release Date"
                   currentSort={{ field: sortField, direction: sortDirection }}
@@ -394,7 +394,7 @@ export function SoftwareTable({ data, loading, onUpdate, trackingCounts, onViewT
           <TableBody>
             {sortedData.map((software) => (
               <TableRow key={software.id}>
-                <TableCell className="font-medium">{software.name}</TableCell>
+                <TableCell className="font-medium sticky left-0 z-10 bg-background shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">{software.name}</TableCell>
                 <TableCell>
                   <Badge variant="secondary">{software.category}</Badge>
                 </TableCell>
