@@ -103,3 +103,17 @@ export interface SoftwareTrackingCount {
   readonly software_id: string;
   readonly tracking_count: number;
 }
+
+export interface UserSoftwareInfo {
+  readonly software_id: string;
+  readonly software_name: string;
+  readonly manufacturer: string;
+  readonly category: string;
+  readonly current_version: string | null;
+  readonly is_tracking: boolean;
+}
+
+export interface UserTrackingCount {
+  readonly user_id: string;
+  readonly tracking_count: number;
+}
