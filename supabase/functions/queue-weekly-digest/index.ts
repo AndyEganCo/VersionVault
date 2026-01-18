@@ -2,12 +2,29 @@
 // Triggered by cron job on Sunday evening to prepare Monday's emails
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { compareVersions, getCurrentVersionFromHistory } from '../_shared/version-utils.ts'
+import { compareVersions } from '../_shared/version-utils.ts'
+import { authorizeRequest, getCorsHeaders } from '../_shared/newsletter-auth.ts'
+import {
+  getTrackedSoftware,
+  getCurrentVersionsBatch,
+  getSoftwareDetails,
+  checkBounces,
+  getActiveSponsor,
+  getNewSoftware
+} from '../_shared/newsletter-db.ts'
+import {
+  calculateScheduledTime,
+  getSinceDays,
+  generateIdempotencyKey
+} from '../_shared/newsletter-scheduler.ts'
+import type {
+  QueueSummary,
+  QueueResult,
+  SoftwareUpdateSummary,
+  NewSoftwareSummary
+} from '../_shared/newsletter-types.ts'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+const corsHeaders = getCorsHeaders()
 
 // Constants
 const MAX_UPDATES_PER_EMAIL = 20
@@ -31,15 +48,6 @@ interface QueueResult {
   error?: string
 }
 
-interface QueueSummary {
-  totalUsers: number
-  queued: number
-  withUpdates: number
-  allQuiet: number
-  skipped: number
-  errors: QueueResult[]
-}
-
 serve(async (req) => {
   console.log(`📥 Received ${req.method} request to queue-weekly-digest`)
 
@@ -49,54 +57,13 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authorization
-    const authHeader = req.headers.get('Authorization')
-    const customSecretHeader = req.headers.get('X-Cron-Secret')
-    const cronSecret = Deno.env.get('CRON_SECRET')
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-
-    let isAuthorized = false
-
-    // Check cron secret
-    if (cronSecret) {
-      if (customSecretHeader === cronSecret) isAuthorized = true
-      if (authHeader?.replace('Bearer ', '') === cronSecret) isAuthorized = true
-    }
-
-    // Check if user is an admin via JWT
-    if (!isAuthorized && authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '')
-      const supabaseAuth = createClient(supabaseUrl, supabaseServiceKey)
-
-      // Verify the JWT and get user
-      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token)
-
-      if (!authError && user) {
-        // Check if user is admin
-        const { data: adminData } = await supabaseAuth
-          .from('admin_users')
-          .select('user_id')
-          .eq('user_id', user.id)
-          .single()
-
-        if (adminData) {
-          isAuthorized = true
-          console.log(`✅ Admin user ${user.id} authorized`)
-        }
-      }
-    }
-
-    if (!isAuthorized) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid credentials' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
+    // ✅ Authorization using shared utility
+    await authorizeRequest(req)
     console.log('✅ Authorization successful')
 
     // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Get frequency from query parameter or request body, default to weekly
@@ -124,8 +91,8 @@ serve(async (req) => {
 
     console.log(`📬 Starting ${frequency} digest queue generation...`)
 
-    // Calculate days to look back based on frequency
-    const sinceDays = frequency === 'daily' ? 1 : frequency === 'monthly' ? 30 : 7
+    // ✅ Calculate days to look back using shared utility
+    const sinceDays = getSinceDays(frequency as any)
 
     // Get users who want this frequency of emails
     const { data: userSettings, error: subError } = await supabase
@@ -186,14 +153,10 @@ serve(async (req) => {
     let allQuiet = 0
     let skipped = 0
 
-    // Get active sponsor
-    const { data: sponsor } = await supabase
-      .from('newsletter_sponsors')
-      .select('*')
-      .eq('is_active', true)
-      .single()
-
+    // ✅ Get active sponsor using shared utility
+    const sponsor = await getActiveSponsor(supabase)
     const sponsorData = sponsor ? {
+      id: sponsor.id,
       name: sponsor.name,
       tagline: sponsor.tagline,
       description: sponsor.description,
@@ -211,42 +174,29 @@ serve(async (req) => {
       }
 
       try {
-        // Check bounce count
-        const { count: bounceCount } = await supabase
-          .from('email_bounces')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', sub.user_id)
-          .eq('bounce_type', 'hard')
-          .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-
-        if ((bounceCount || 0) >= 3) {
-          console.log(`⏭️  Skipping ${userEmail} - too many bounces`)
+        // ✅ Check bounce count using shared utility
+        const bounceCount = await checkBounces(supabase, sub.user_id)
+        if (bounceCount >= 3) {
+          console.log(`⏭️  Skipping ${userEmail} - too many bounces (${bounceCount})`)
           skipped++
           continue
         }
 
-        // Get user's tracked software
-        const { data: trackedSoftwareRaw } = await supabase
-          .from('tracked_software')
-          .select('software_id, last_notified_version')
-          .eq('user_id', sub.user_id)
-
-        if (!trackedSoftwareRaw || trackedSoftwareRaw.length === 0) {
+        // ✅ Get user's tracked software using shared utility
+        const trackedSoftwareRaw = await getTrackedSoftware(supabase, sub.user_id)
+        if (trackedSoftwareRaw.length === 0) {
           console.log(`⏭️  Skipping ${userEmail} - no tracked software`)
           skipped++
           continue
         }
 
-        // Get software details separately
+        // ✅ Get software details using shared utility
         const softwareIds = trackedSoftwareRaw.map(t => t.software_id)
-        const { data: softwareDetails } = await supabase
-          .from('software')
-          .select('id, name, manufacturer, category')
-          .in('id', softwareIds)
+        const softwareDetails = await getSoftwareDetails(supabase, softwareIds)
 
         // Map software details
         const softwareMap = new Map(
-          (softwareDetails || []).map(s => [s.id, s])
+          softwareDetails.map(s => [s.id, s])
         )
 
         // Combine tracked software with details
@@ -256,56 +206,28 @@ serve(async (req) => {
           software: softwareMap.get(tracked.software_id)
         }))
 
-        // Get ALL verified version history for tracked software
-        // We need the full history to find the current and previous versions
+        // ✅ OPTIMIZED: Use batch function to get ONLY current versions
+        // This is much faster than fetching all version history (1000+ rows → 100 rows)
         const sinceDate = new Date()
         sinceDate.setDate(sinceDate.getDate() - sinceDays)
 
-        // Fetch version history - order by detected_at DESC to get newest first
-        // Supabase has a hard limit of 1000 rows, so ordering ensures we get recent versions
-        const { data: allVersionHistory, error: versionHistoryError } = await supabase
-          .from('software_version_history')
-          .select('software_id, version, release_date, detected_at, notes, type, newsletter_verified')
-          .in('software_id', softwareIds)
-          .eq('newsletter_verified', true)
-          .order('detected_at', { ascending: false })
-          .limit(10000)
+        console.log(`📊 Fetching current versions for ${softwareIds.length} tracked software...`)
+        const currentVersions = await getCurrentVersionsBatch(supabase, softwareIds)
+        console.log(`✅ Got ${currentVersions.length} current versions`)
 
-        if (versionHistoryError) {
-          console.error(`❌ Error fetching version history for ${userEmail}:`, versionHistoryError)
-          throw new Error(`Failed to fetch version history: ${versionHistoryError.message}`)
-        }
-
-        console.log(`📊 Fetched ${allVersionHistory?.length || 0} total version history records for ${userEmail} (Supabase max is 1000)`)
-
-        // Group version history by software_id and sort by SEMANTIC VERSION (not date!)
-        const versionHistoryBySoftware = new Map<string, any[]>()
-        for (const history of (allVersionHistory || [])) {
-          if (!versionHistoryBySoftware.has(history.software_id)) {
-            versionHistoryBySoftware.set(history.software_id, [])
-          }
-          versionHistoryBySoftware.get(history.software_id)!.push(history)
-        }
-
-        // Sort each software's version history by semantic version (highest first)
-        for (const [softwareId, histories] of versionHistoryBySoftware.entries()) {
-          histories.sort((a, b) => compareVersions(b.version, a.version))
-          versionHistoryBySoftware.set(softwareId, histories)
-        }
+        // Create a map of software_id -> current version
+        const currentVersionMap = new Map(
+          currentVersions.map(v => [v.software_id, v])
+        )
 
         // Process each tracked software to find updates
-        const updates: any[] = []
+        const updates: SoftwareUpdateSummary[] = []
 
         for (const tracked of trackedSoftware) {
           const software = tracked.software as any
           if (!software) continue
 
-          const histories = versionHistoryBySoftware.get(tracked.software_id) || []
-          if (histories.length === 0) continue
-
-          // Get current version from history using semantic versioning (highest version = current)
-          // This is the single source of truth, NOT software.current_version field
-          const currentVersion = getCurrentVersionFromHistory(histories, true)
+          const currentVersion = currentVersionMap.get(tracked.software_id)
           if (!currentVersion) continue
 
           // Check if the current version was released in the time period
@@ -316,12 +238,8 @@ serve(async (req) => {
             continue
           }
 
-          // Find the previous version (the next one in the semantically sorted array)
-          const currentIndex = histories.indexOf(currentVersion)
-          const previousVersionEntry = currentIndex < histories.length - 1 ? histories[currentIndex + 1] : null
-
-          // Determine old version
-          const oldVersion = previousVersionEntry?.version || tracked.last_notified_version || 'N/A'
+          // ✅ Previous version is tracked in last_notified_version
+          const oldVersion = tracked.last_notified_version || 'N/A'
 
           updates.push({
             software_id: tracked.software_id,
@@ -329,7 +247,7 @@ serve(async (req) => {
             manufacturer: software.manufacturer,
             category: software.category,
             old_version: oldVersion,
-            new_version: currentVersion.version,
+            new_version: currentVersion.current_version,
             release_date: releaseDate,
             release_notes: currentVersion.notes || [],
             update_type: currentVersion.type || 'patch',
@@ -339,50 +257,8 @@ serve(async (req) => {
         // Show all updates (no limit)
         const hasUpdates = updates.length > 0
 
-        // Get new software added in the time period
-        const { data: newSoftwareData } = await supabase
-          .from('software')
-          .select('id, name, manufacturer, category, created_at')
-          .gte('created_at', sinceDate.toISOString())
-          .order('created_at', { ascending: false })
-
-        // Get version history for all new software to compute current version
-        const newSoftwareIds = (newSoftwareData || []).map(s => s.id)
-        let newSoftwareVersions: any[] = []
-
-        if (newSoftwareIds.length > 0) {
-          const { data } = await supabase
-            .from('software_version_history')
-            .select('software_id, version, release_date, detected_at, newsletter_verified, is_current_override')
-            .in('software_id', newSoftwareIds)
-            .eq('newsletter_verified', true)
-
-          newSoftwareVersions = data || []
-        }
-
-        // Group versions by software_id
-        const newSoftwareVersionsBySoftware = new Map<string, any[]>()
-        for (const version of newSoftwareVersions) {
-          if (!newSoftwareVersionsBySoftware.has(version.software_id)) {
-            newSoftwareVersionsBySoftware.set(version.software_id, [])
-          }
-          newSoftwareVersionsBySoftware.get(version.software_id)!.push(version)
-        }
-
-        // Map to newSoftware with computed current version
-        const newSoftware = (newSoftwareData || []).map(s => {
-          const versions = newSoftwareVersionsBySoftware.get(s.id) || []
-          const currentVer = getCurrentVersionFromHistory(versions, true)
-
-          return {
-            software_id: s.id,
-            name: s.name,
-            manufacturer: s.manufacturer,
-            category: s.category,
-            initial_version: currentVer?.version || 'N/A',
-            added_date: s.created_at,
-          }
-        })
+        // ✅ OPTIMIZED: Use utility function to get new software with current versions
+        const newSoftware = await getNewSoftware(supabase, sub.user_id, sinceDate)
 
         // Check if we should send an all_quiet email based on user preference
         if (!hasUpdates) {
@@ -401,12 +277,11 @@ serve(async (req) => {
           }
         }
 
-        // Generate idempotency key
-        const today = new Date().toISOString().split('T')[0]
-        const idempotencyKey = `${sub.user_id}-${frequency}_digest-${today}`
+        // ✅ Generate idempotency key using shared utility
+        const idempotencyKey = generateIdempotencyKey(sub.user_id, frequency)
 
-        // Calculate scheduled time (8am in user's timezone - next occurrence)
-        const scheduledFor = calculateScheduledTime(sub.timezone || 'America/New_York', 8, frequency)
+        // ✅ Calculate scheduled time (8am in user's timezone - next occurrence)
+        const scheduledFor = calculateScheduledTime(frequency as any, sub.timezone || 'America/New_York')
 
         // Determine email type and payload
         const emailType = hasUpdates ? `${frequency}_digest` : 'all_quiet'

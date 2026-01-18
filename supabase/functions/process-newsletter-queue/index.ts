@@ -3,20 +3,24 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Resend } from 'https://esm.sh/resend@2.0.0'
+import PQueue from 'https://esm.sh/p-queue@7.3.4'
+import { authorizeRequest, getCorsHeaders } from '../_shared/newsletter-auth.ts'
+import { isTargetHourInTimezone } from '../_shared/newsletter-scheduler.ts'
+import { updateLastNotified } from '../_shared/newsletter-db.ts'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+const corsHeaders = getCorsHeaders()
 
 const BATCH_SIZE = 100
 const MAX_RETRY_ATTEMPTS = 3
-const RATE_LIMIT_DELAY_MS = 500 // Resend allows 2 req/sec, use 500ms delay
 const VERSIONVAULT_FROM = 'VersionVault <digest@updates.versionvault.dev>'
 const VERSIONVAULT_URL = 'https://versionvault.dev'
 
-// Helper function to delay between requests (rate limiting)
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+// ✅ Parallel queue with rate limiting (2 req/sec = Resend limit)
+const emailQueue = new PQueue({
+  concurrency: 2,      // 2 requests at a time
+  interval: 1000,      // per second
+  intervalCap: 2       // = 2 req/sec
+})
 
 interface ProcessResult {
   processed: number
@@ -34,10 +38,11 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authorization
-    const authHeader = req.headers.get('Authorization')
-    const customSecretHeader = req.headers.get('X-Cron-Secret')
-    const cronSecret = Deno.env.get('CRON_SECRET')
+    // ✅ Authorization using shared utility
+    await authorizeRequest(req)
+    console.log('✅ Authorization successful')
+
+    // Check environment variables
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -50,56 +55,16 @@ serve(async (req) => {
       )
     }
 
-    let isAuthorized = false
-    let isAdminRequest = false
-
     // Parse request body for force flag
     let forceProcess = false
     try {
-      const body = await req.json()
+      const clonedReq = req.clone()
+      const body = await clonedReq.json()
       forceProcess = body?.force === true
     } catch {
       // No body or invalid JSON, that's fine
     }
 
-    // Check cron secret
-    if (cronSecret) {
-      if (customSecretHeader === cronSecret) isAuthorized = true
-      if (authHeader?.replace('Bearer ', '') === cronSecret) isAuthorized = true
-    }
-
-    // Check if user is an admin via JWT
-    if (!isAuthorized && authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '')
-      const supabaseAuth = createClient(supabaseUrl, supabaseServiceKey)
-
-      // Verify the JWT and get user
-      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token)
-
-      if (!authError && user) {
-        // Check if user is admin
-        const { data: adminData } = await supabaseAuth
-          .from('admin_users')
-          .select('user_id')
-          .eq('user_id', user.id)
-          .single()
-
-        if (adminData) {
-          isAuthorized = true
-          isAdminRequest = true
-          console.log(`✅ Admin user ${user.id} authorized`)
-        }
-      }
-    }
-
-    if (!isAuthorized) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid credentials' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    console.log('✅ Authorization successful')
     console.log('📤 Starting newsletter queue processing...')
 
     // Initialize clients
