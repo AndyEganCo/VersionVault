@@ -74,13 +74,14 @@ serve(async (req) => {
     const now = new Date()
     const targetHour = 8 // 8am
 
-    // Get pending queue items
+    // ✅ Get pending queue items (ordered by priority for test sends)
     // If force=true, get all pending items regardless of scheduled time
     let query = supabase
       .from('newsletter_queue')
       .select('*')
       .eq('status', 'pending')
       .lt('attempts', MAX_RETRY_ATTEMPTS)
+      .order('priority', { ascending: false })  // High priority first (test sends)
       .order('scheduled_for', { ascending: true })
       .limit(BATCH_SIZE)
 
@@ -95,26 +96,13 @@ serve(async (req) => {
       throw new Error(`Failed to fetch queue: ${fetchError.message}`)
     }
 
-    // Filter to only users where it's currently target hour in their timezone
+    // ✅ Filter to only users where it's currently target hour in their timezone
     // Skip timezone filter if manually triggered with force=true
     const shouldBypassTimezone = forceProcess
 
     const itemsToProcess = shouldBypassTimezone
       ? (queueItems || [])
-      : (queueItems || []).filter(item => {
-          try {
-            const formatter = new Intl.DateTimeFormat('en-US', {
-              timeZone: item.timezone,
-              hour: 'numeric',
-              hour12: false,
-            })
-            const currentHour = parseInt(formatter.format(now), 10)
-            return currentHour === targetHour
-          } catch {
-            // Invalid timezone, process anyway
-            return true
-          }
-        })
+      : (queueItems || []).filter(item => isTargetHourInTimezone(item.timezone, targetHour))
 
     if (shouldBypassTimezone) {
       console.log('⚡ Force-processing: bypassing timezone filter')
@@ -129,9 +117,13 @@ serve(async (req) => {
       errors: [],
     }
 
-    // Process each queue item
-    for (let i = 0; i < itemsToProcess.length; i++) {
-      const item = itemsToProcess[i]
+    // ✅ Process items in PARALLEL with rate limiting using p-queue
+    console.log(`⚡ Processing ${itemsToProcess.length} emails in parallel (2 concurrent, rate limited to 2 req/sec)`)
+
+    const startTime = Date.now()
+
+    // Helper function to process a single queue item
+    const processQueueItem = async (item: any) => {
       result.processed++
 
       try {
@@ -186,34 +178,26 @@ serve(async (req) => {
             status: 'sent',
           })
 
-        // Update last_notified_version for tracked software
+        // ✅ Update last_notified_version using shared utility
         if (item.payload.updates && item.payload.updates.length > 0) {
-          for (const update of item.payload.updates) {
-            await supabase
-              .from('tracked_software')
-              .update({
-                last_notified_version: update.new_version,
-                last_notified_at: new Date().toISOString(),
-              })
-              .eq('user_id', item.user_id)
-              .eq('software_id', update.software_id)
-          }
+          await updateLastNotified(
+            supabase,
+            item.user_id,
+            item.payload.updates.map((u: any) => ({
+              software_id: u.software_id,
+              version: u.new_version
+            }))
+          )
         }
 
         // Increment sponsor impressions if present
-        if (item.payload.sponsor) {
-          const { data: sponsorData } = await supabase
+        if (item.payload.sponsor?.id) {
+          await supabase
             .from('newsletter_sponsors')
-            .select('impression_count')
-            .eq('is_active', true)
-            .single()
-
-          if (sponsorData) {
-            await supabase
-              .from('newsletter_sponsors')
-              .update({ impression_count: (sponsorData.impression_count || 0) + 1 })
-              .eq('is_active', true)
-          }
+            .update({
+              impression_count: supabase.raw('impression_count + 1')
+            })
+            .eq('id', item.payload.sponsor.id)
         }
 
         result.sent++
@@ -235,18 +219,22 @@ serve(async (req) => {
 
         console.error(`❌ Failed for ${item.email}: ${error.message}`)
       }
-
-      // Rate limit: Wait between requests to respect Resend's 2 req/sec limit
-      // Skip delay after the last item
-      if (i < itemsToProcess.length - 1) {
-        await delay(RATE_LIMIT_DELAY_MS)
-      }
     }
 
-    console.log('\n✅ Queue processing complete!')
+    // Add all items to the queue for parallel processing
+    for (const item of itemsToProcess) {
+      emailQueue.add(() => processQueueItem(item))
+    }
+
+    // Wait for all emails to be processed
+    await emailQueue.onIdle()
+
+    const executionTime = Date.now() - startTime
+    console.log(`\n✅ Queue processing complete in ${executionTime}ms!`)
     console.log(`   Processed: ${result.processed}`)
     console.log(`   Sent: ${result.sent}`)
     console.log(`   Failed: ${result.failed}`)
+    console.log(`   Avg time per email: ${Math.round(executionTime / result.processed)}ms`)
 
     return new Response(
       JSON.stringify(result),
