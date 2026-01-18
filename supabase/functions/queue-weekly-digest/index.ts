@@ -273,19 +273,22 @@ serve(async (req) => {
         const sinceDate = new Date()
         sinceDate.setDate(sinceDate.getDate() - sinceDays)
 
+        // Fetch version history - order by detected_at DESC to get newest first
+        // Supabase has a hard limit of 1000 rows, so ordering ensures we get recent versions
         const { data: allVersionHistory, error: versionHistoryError } = await supabase
           .from('software_version_history')
           .select('software_id, version, release_date, detected_at, notes, type, newsletter_verified')
           .in('software_id', softwareIds)
           .eq('newsletter_verified', true)
-          .limit(10000) // Increase limit to handle users tracking many software items
+          .order('detected_at', { ascending: false })
+          .limit(10000)
 
         if (versionHistoryError) {
           console.error(`❌ Error fetching version history for ${userEmail}:`, versionHistoryError)
           throw new Error(`Failed to fetch version history: ${versionHistoryError.message}`)
         }
 
-        console.log(`📊 Fetched ${allVersionHistory?.length || 0} total version history records for ${userEmail}`)
+        console.log(`📊 Fetched ${allVersionHistory?.length || 0} total version history records for ${userEmail} (Supabase max is 1000)`)
 
         // Group version history by software_id and sort by SEMANTIC VERSION (not date!)
         const versionHistoryBySoftware = new Map<string, any[]>()
