@@ -15,8 +15,6 @@ interface TrackedSoftwareWithHistory {
     name: string;
     manufacturer: string;
     category: string;
-    current_version: string | null;
-    release_date: string | null;
   };
 }
 
@@ -50,9 +48,7 @@ export async function generateUserDigest(
         id,
         name,
         manufacturer,
-        category,
-        current_version,
-        release_date
+        category
       )
     `)
     .eq('user_id', userId);
@@ -223,7 +219,7 @@ export async function getNewSoftware(
   // Get software added in the time period
   const { data: newSoftware, error } = await supabase
     .from('software')
-    .select('id, name, manufacturer, category, current_version, created_at')
+    .select('id, name, manufacturer, category, created_at')
     .gte('created_at', sinceDate.toISOString())
     .order('created_at', { ascending: false });
 
@@ -232,14 +228,42 @@ export async function getNewSoftware(
     return [];
   }
 
-  return newSoftware.map(software => ({
-    software_id: software.id,
-    name: software.name,
-    manufacturer: software.manufacturer,
-    category: software.category,
-    initial_version: software.current_version || 'N/A',
-    added_date: software.created_at,
-  }));
+  // Fetch version history for new software to compute current version
+  const newSoftwareIds = newSoftware.map(s => s.id);
+  let newSoftwareVersions: any[] = [];
+
+  if (newSoftwareIds.length > 0) {
+    const { data } = await supabase
+      .from('software_version_history')
+      .select('software_id, version, release_date, detected_at, newsletter_verified, is_current_override')
+      .in('software_id', newSoftwareIds)
+      .eq('newsletter_verified', true);
+
+    newSoftwareVersions = data || [];
+  }
+
+  // Group versions by software_id
+  const versionsBySoftware = new Map<string, any[]>();
+  for (const version of newSoftwareVersions) {
+    if (!versionsBySoftware.has(version.software_id)) {
+      versionsBySoftware.set(version.software_id, []);
+    }
+    versionsBySoftware.get(version.software_id)!.push(version);
+  }
+
+  return newSoftware.map(software => {
+    const versions = versionsBySoftware.get(software.id) || [];
+    const currentVer = getCurrentVersionFromHistory(versions, true);
+
+    return {
+      software_id: software.id,
+      name: software.name,
+      manufacturer: software.manufacturer,
+      category: software.category,
+      initial_version: currentVer?.version || 'N/A',
+      added_date: software.created_at,
+    };
+  });
 }
 
 /**

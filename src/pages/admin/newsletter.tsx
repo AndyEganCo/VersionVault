@@ -55,6 +55,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { formatDate } from '@/lib/date';
+import { getCurrentVersionFromHistory, compareVersions } from '@/lib/utils/version-utils';
 
 interface QueueSummary {
   pending: number;
@@ -543,7 +544,7 @@ export function AdminNewsletter() {
         // Get user's tracked software for realistic preview
         const { data: tracked } = await supabase
           .from('software')
-          .select('id, name, manufacturer, category, current_version, release_date, updated_at')
+          .select('id, name, manufacturer, category, updated_at')
           .in('id', trackedData.map(t => t.software_id))
           .order('updated_at', { ascending: false })
           .limit(10);
@@ -554,7 +555,7 @@ export function AdminNewsletter() {
         // Fallback: get most recently updated software from database
         const { data: recent } = await supabase
           .from('software')
-          .select('id, name, manufacturer, category, current_version, release_date, updated_at')
+          .select('id, name, manufacturer, category, updated_at')
           .order('updated_at', { ascending: false })
           .limit(10);
 
@@ -565,22 +566,22 @@ export function AdminNewsletter() {
       let sampleUpdates: any[] = [];
 
       if (recentSoftware && recentSoftware.length > 0) {
-        // For each software, get version history for previous_version and notes
+        // For each software, get ALL version history to compute current version
         for (const software of recentSoftware) {
-          const { data: versionHistory } = await supabase
+          const { data: allVersionHistory } = await supabase
             .from('software_version_history')
-            .select('previous_version, type, notes, release_date, detected_at')
+            .select('version, previous_version, type, notes, release_date, detected_at, newsletter_verified, is_current_override')
             .eq('software_id', software.id)
-            .eq('version', software.current_version)
-            .order('detected_at', { ascending: false })
-            .limit(1);
+            .eq('newsletter_verified', true);
 
-          // Handle the array response (first item or undefined)
-          const historyEntry = versionHistory?.[0];
-          if (!historyEntry) continue;
+          if (!allVersionHistory || allVersionHistory.length === 0) continue;
+
+          // Compute current version from history using semantic versioning
+          const currentVersionEntry = getCurrentVersionFromHistory(allVersionHistory, true);
+          if (!currentVersionEntry) continue;
 
           // Match production logic: use release_date || detected_at
-          const releaseDate = historyEntry.release_date || historyEntry.detected_at || software.updated_at;
+          const releaseDate = currentVersionEntry.release_date || currentVersionEntry.detected_at || software.updated_at;
           const releaseDateObj = new Date(releaseDate);
 
           // Only include versions released in the last 30 days (matching production logic)
@@ -588,16 +589,21 @@ export function AdminNewsletter() {
             continue;
           }
 
+          // Find previous version (next in semantically sorted array)
+          const sortedHistory = [...allVersionHistory].sort((a, b) => compareVersions(b.version, a.version));
+          const currentIndex = sortedHistory.findIndex(h => h.version === currentVersionEntry.version);
+          const previousVersionEntry = currentIndex < sortedHistory.length - 1 ? sortedHistory[currentIndex + 1] : null;
+
           sampleUpdates.push({
             software_id: software.id,
             name: software.name,
             manufacturer: software.manufacturer,
             category: software.category,
-            old_version: historyEntry.previous_version || 'N/A',
-            new_version: software.current_version,
+            old_version: previousVersionEntry?.version || 'N/A',
+            new_version: currentVersionEntry.version,
             release_date: releaseDate,
-            release_notes: historyEntry.notes || [],
-            update_type: historyEntry.type || 'minor',
+            release_notes: currentVersionEntry.notes || [],
+            update_type: currentVersionEntry.type || 'minor',
           });
         }
 
@@ -627,18 +633,46 @@ export function AdminNewsletter() {
       // Get new software added in the last 30 days
       const { data: newSoftwareData } = await supabase
         .from('software')
-        .select('id, name, manufacturer, category, current_version, created_at')
+        .select('id, name, manufacturer, category, created_at')
         .gte('created_at', thirtyDaysAgo.toISOString())
         .order('created_at', { ascending: false });
 
-      const newSoftware = (newSoftwareData || []).map(s => ({
-        software_id: s.id,
-        name: s.name,
-        manufacturer: s.manufacturer,
-        category: s.category,
-        initial_version: s.current_version || 'N/A',
-        added_date: s.created_at,
-      }));
+      // Fetch version history for new software to compute current version
+      const newSoftwareIds = (newSoftwareData || []).map(s => s.id);
+      let newSoftwareVersions: any[] = [];
+
+      if (newSoftwareIds.length > 0) {
+        const { data } = await supabase
+          .from('software_version_history')
+          .select('software_id, version, release_date, detected_at, newsletter_verified, is_current_override')
+          .in('software_id', newSoftwareIds)
+          .eq('newsletter_verified', true);
+
+        newSoftwareVersions = data || [];
+      }
+
+      // Group versions by software_id
+      const newSoftwareVersionsBySoftware = new Map<string, any[]>();
+      for (const version of newSoftwareVersions) {
+        if (!newSoftwareVersionsBySoftware.has(version.software_id)) {
+          newSoftwareVersionsBySoftware.set(version.software_id, []);
+        }
+        newSoftwareVersionsBySoftware.get(version.software_id)!.push(version);
+      }
+
+      const newSoftware = (newSoftwareData || []).map(s => {
+        const versions = newSoftwareVersionsBySoftware.get(s.id) || [];
+        const currentVer = getCurrentVersionFromHistory(versions, true);
+
+        return {
+          software_id: s.id,
+          name: s.name,
+          manufacturer: s.manufacturer,
+          category: s.category,
+          initial_version: currentVer?.version || 'N/A',
+          added_date: s.created_at,
+        };
+      });
 
       // Add to queue
       const { error: queueError } = await supabase
@@ -695,20 +729,41 @@ export function AdminNewsletter() {
         const softwareIds = trackedSoftware.map(t => t.software_id);
         const { data: softwareData } = await supabase
           .from('software')
-          .select('id, name, manufacturer, category, current_version')
+          .select('id, name, manufacturer, category')
           .in('id', softwareIds)
           .limit(3);
 
-        sampleUpdates = (softwareData || []).map((s: any) => ({
-          name: s.name || 'Test Software',
-          manufacturer: s.manufacturer || 'Test Co',
-          category: s.category || 'Test',
-          old_version: '1.0.0',
-          new_version: s.current_version || '2.0.0',
-          release_date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          release_notes: ['New feature added', 'Bug fixes'],
-          update_type: 'minor',
-        }));
+        // Fetch version history to compute current_version
+        const { data: versionHistoryData } = await supabase
+          .from('software_version_history')
+          .select('software_id, version, newsletter_verified, is_current_override')
+          .in('software_id', softwareIds)
+          .eq('newsletter_verified', true);
+
+        // Group versions by software_id
+        const versionsBySoftware = new Map<string, any[]>();
+        for (const version of (versionHistoryData || [])) {
+          if (!versionsBySoftware.has(version.software_id)) {
+            versionsBySoftware.set(version.software_id, []);
+          }
+          versionsBySoftware.get(version.software_id)!.push(version);
+        }
+
+        sampleUpdates = (softwareData || []).map((s: any) => {
+          const versions = versionsBySoftware.get(s.id) || [];
+          const currentVer = getCurrentVersionFromHistory(versions, true);
+
+          return {
+            name: s.name || 'Test Software',
+            manufacturer: s.manufacturer || 'Test Co',
+            category: s.category || 'Test',
+            old_version: '1.0.0',
+            new_version: currentVer?.version || '2.0.0',
+            release_date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            release_notes: ['New feature added', 'Bug fixes'],
+            update_type: 'minor',
+          };
+        });
       }
 
       // Default sample if no tracked software
@@ -736,17 +791,44 @@ export function AdminNewsletter() {
 
       const { data: newSoftwareData } = await supabase
         .from('software')
-        .select('id, name, manufacturer, category, current_version, created_at')
+        .select('id, name, manufacturer, category, created_at')
         .gte('created_at', thirtyDaysAgo.toISOString())
         .order('created_at', { ascending: false })
         .limit(5);
 
-      const newSoftware = (newSoftwareData || []).map(s => ({
-        software_id: s.id,
-        name: s.name,
-        manufacturer: s.manufacturer,
-        category: s.category,
-        initial_version: s.current_version || 'N/A',
+      // Fetch version history for new software to compute current version
+      const previewNewSoftwareIds = (newSoftwareData || []).map(s => s.id);
+      let previewNewSoftwareVersions: any[] = [];
+
+      if (previewNewSoftwareIds.length > 0) {
+        const { data } = await supabase
+          .from('software_version_history')
+          .select('software_id, version, newsletter_verified, is_current_override')
+          .in('software_id', previewNewSoftwareIds)
+          .eq('newsletter_verified', true);
+
+        previewNewSoftwareVersions = data || [];
+      }
+
+      // Group versions by software_id
+      const previewVersionsBySoftware = new Map<string, any[]>();
+      for (const version of previewNewSoftwareVersions) {
+        if (!previewVersionsBySoftware.has(version.software_id)) {
+          previewVersionsBySoftware.set(version.software_id, []);
+        }
+        previewVersionsBySoftware.get(version.software_id)!.push(version);
+      }
+
+      const newSoftware = (newSoftwareData || []).map(s => {
+        const versions = previewVersionsBySoftware.get(s.id) || [];
+        const currentVer = getCurrentVersionFromHistory(versions, true);
+
+        return {
+          software_id: s.id,
+          name: s.name,
+          manufacturer: s.manufacturer,
+          category: s.category,
+          initial_version: currentVer?.version || 'N/A',
         added_date: s.created_at,
       }));
 

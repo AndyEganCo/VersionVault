@@ -241,7 +241,7 @@ serve(async (req) => {
         const softwareIds = trackedSoftwareRaw.map(t => t.software_id)
         const { data: softwareDetails } = await supabase
           .from('software')
-          .select('id, name, manufacturer, category, current_version, release_date')
+          .select('id, name, manufacturer, category')
           .in('id', softwareIds)
 
         // Map software details
