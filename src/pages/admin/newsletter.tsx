@@ -159,6 +159,7 @@ export function AdminNewsletter() {
 
   // Test email state
   const [testEmailLoading, setTestEmailLoading] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState('');
 
   // Unverified versions state
   const [unverifiedVersions, setUnverifiedVersions] = useState<UnverifiedVersion[]>([]);
@@ -519,10 +520,19 @@ export function AdminNewsletter() {
     }
   };
 
-  // Send test email to current user
+  // Send test email to specified address or current user
   const handleSendTestEmail = async () => {
-    if (!user?.email) {
-      toast.error('No email address found');
+    const recipientEmail = testEmailAddress.trim() || user?.email;
+
+    if (!recipientEmail) {
+      toast.error('No email address specified');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipientEmail)) {
+      toast.error('Invalid email address');
       return;
     }
 
@@ -674,12 +684,12 @@ export function AdminNewsletter() {
         };
       });
 
-      // Add to queue
+      // Add to queue with high priority for immediate processing
       const { error: queueError } = await supabase
         .from('newsletter_queue')
         .insert({
           user_id: user.id,
-          email: user.email,
+          email: recipientEmail,
           email_type: 'weekly_digest',
           payload: {
             updates: sampleUpdates,
@@ -696,12 +706,14 @@ export function AdminNewsletter() {
           status: 'pending',
           scheduled_for: new Date().toISOString(),
           timezone: 'UTC',
+          priority: 100, // High priority for test sends
           idempotency_key: `test-${user.id}-${Date.now()}`,
         });
 
       if (queueError) throw queueError;
 
-      toast.success(`Test email queued for ${user.email}. Click "Process Now" to send.`);
+      toast.success(`Test email queued for ${recipientEmail}. Click "Process Now" to send.`);
+      setTestEmailAddress(''); // Clear input after successful queue
       loadData();
     } catch (error) {
       console.error('Error queuing test email:', error);
@@ -1055,25 +1067,46 @@ export function AdminNewsletter() {
               </Button>
             </div>
 
-            <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handlePreviewEmail}
-                disabled={previewLoading}
-              >
-                <FileText className="h-4 w-4 mr-1" />
-                Preview Email
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleSendTestEmail}
-                disabled={testEmailLoading}
-              >
-                <TestTube className="h-4 w-4 mr-1" />
-                {testEmailLoading ? 'Sending...' : 'Send Test to Me'}
-              </Button>
+            <div className="mt-4 pt-4 border-t space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handlePreviewEmail}
+                  disabled={previewLoading}
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  Preview Email
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="test-email" className="text-xs text-muted-foreground">
+                  Send test email to (leave blank to send to yourself)
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="test-email"
+                    type="email"
+                    placeholder={user?.email || 'email@example.com'}
+                    value={testEmailAddress}
+                    onChange={(e) => setTestEmailAddress(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={handleSendTestEmail}
+                    disabled={testEmailLoading}
+                  >
+                    <TestTube className="h-4 w-4 mr-1" />
+                    {testEmailLoading ? 'Queueing...' : 'Queue Test'}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Test emails have high priority and will be processed first when you click "Process Now"
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1337,7 +1370,7 @@ export function AdminNewsletter() {
             </Button>
             <Button onClick={handleSendTestEmail} disabled={testEmailLoading}>
               <TestTube className="h-4 w-4 mr-1" />
-              {testEmailLoading ? 'Sending...' : 'Send Test to Me'}
+              {testEmailLoading ? 'Queueing...' : 'Queue Test Email'}
             </Button>
           </DialogFooter>
         </DialogContent>
