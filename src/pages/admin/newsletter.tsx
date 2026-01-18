@@ -829,8 +829,9 @@ export function AdminNewsletter() {
           manufacturer: s.manufacturer,
           category: s.category,
           initial_version: currentVer?.version || 'N/A',
-        added_date: s.created_at,
-      }));
+          added_date: s.created_at,
+        };
+      });
 
       // Generate preview HTML (simplified version of the actual template)
       const html = generatePreviewHtml(userName, sampleUpdates, newSoftware, activeSponsor);
