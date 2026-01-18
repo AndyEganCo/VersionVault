@@ -273,11 +273,19 @@ serve(async (req) => {
         const sinceDate = new Date()
         sinceDate.setDate(sinceDate.getDate() - sinceDays)
 
-        const { data: allVersionHistory } = await supabase
+        const { data: allVersionHistory, error: versionHistoryError } = await supabase
           .from('software_version_history')
           .select('software_id, version, release_date, detected_at, notes, type, newsletter_verified')
           .in('software_id', softwareIds)
           .eq('newsletter_verified', true)
+          .limit(10000) // Increase limit to handle users tracking many software items
+
+        if (versionHistoryError) {
+          console.error(`❌ Error fetching version history for ${userEmail}:`, versionHistoryError)
+          throw new Error(`Failed to fetch version history: ${versionHistoryError.message}`)
+        }
+
+        console.log(`📊 Fetched ${allVersionHistory?.length || 0} total version history records for ${userEmail}`)
 
         // Group version history by software_id and sort by SEMANTIC VERSION (not date!)
         const versionHistoryBySoftware = new Map<string, any[]>()
