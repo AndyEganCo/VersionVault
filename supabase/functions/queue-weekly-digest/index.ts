@@ -239,22 +239,10 @@ serve(async (req) => {
 
         // Get software details separately
         const softwareIds = trackedSoftwareRaw.map(t => t.software_id)
-
-        // DEBUG VLC: Check if VLC is in tracked software
-        if (userEmail === 'andy@andyegan.co') {
-          console.log(`🔍 VLC DEBUG for ${userEmail}: Tracked software IDs:`, softwareIds)
-        }
-
         const { data: softwareDetails } = await supabase
           .from('software')
           .select('id, name, manufacturer, category')
           .in('id', softwareIds)
-
-        // DEBUG VLC: Check if VLC details were fetched
-        if (userEmail === 'andy@andyegan.co') {
-          const vlcInDetails = softwareDetails?.find(s => s.name.toLowerCase().includes('vlc'))
-          console.log(`🔍 VLC DEBUG for ${userEmail}: VLC in software details:`, vlcInDetails ? `YES - ${vlcInDetails.name} (${vlcInDetails.id})` : 'NO')
-        }
 
         // Map software details
         const softwareMap = new Map(
@@ -303,22 +291,6 @@ serve(async (req) => {
         for (const [softwareId, histories] of versionHistoryBySoftware.entries()) {
           histories.sort((a, b) => compareVersions(b.version, a.version))
           versionHistoryBySoftware.set(softwareId, histories)
-        }
-
-        // DEBUG VLC: Check version history for andy@andyegan.co
-        if (userEmail === 'andy@andyegan.co') {
-          const vlcSoftware = softwareDetails?.find(s => s.name.toLowerCase().includes('vlc'))
-          if (vlcSoftware) {
-            const vlcHistory = versionHistoryBySoftware.get(vlcSoftware.id)
-            console.log(`🔍 VLC DEBUG: VLC ID=${vlcSoftware.id}, History count=${vlcHistory?.length || 0}`)
-            if (vlcHistory && vlcHistory.length > 0) {
-              const latest = vlcHistory[0]
-              console.log(`🔍 VLC DEBUG: Latest version=${latest.version}, detected_at=${latest.detected_at}, release_date=${latest.release_date}`)
-              console.log(`🔍 VLC DEBUG: sinceDate=${sinceDate.toISOString()}, will include=${new Date(latest.release_date || latest.detected_at) >= sinceDate}`)
-            }
-          } else {
-            console.log(`🔍 VLC DEBUG: VLC not found in software details for ${userEmail}`)
-          }
         }
 
         // Process each tracked software to find updates
