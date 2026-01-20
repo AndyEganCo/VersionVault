@@ -37,12 +37,12 @@ export async function getCurrentVersionsBatch(
   const { getCurrentVersionFromHistory } = await import('./version-utils.ts')
 
   // Fetch ALL version history for the software IDs
-  // Filter to newsletter_verified != false (includes true and null)
+  // Filter to newsletter_verified = true (only explicitly verified versions, same as webapp)
   const { data: allVersions, error } = await supabase
     .from('software_version_history')
     .select('software_id, version, release_date, detected_at, notes, type, is_current_override, newsletter_verified')
     .in('software_id', softwareIds)
-    .neq('newsletter_verified', false)
+    .eq('newsletter_verified', true)
 
   if (error) {
     throw new Error(`Failed to fetch version history: ${error.message}`)
