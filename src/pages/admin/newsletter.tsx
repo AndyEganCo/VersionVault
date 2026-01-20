@@ -538,17 +538,33 @@ export function AdminNewsletter() {
 
     setTestEmailLoading(true);
     try {
-      // Find the user by email
-      const { data: userData, error: userError } = await supabase
-        .from('user_profiles')
-        .select('user_id, email, timezone')
-        .eq('email', recipientEmail)
-        .single();
+      // Find the user by email in auth.users
+      const { data: authUsers, error: listError } = await supabase.auth.admin.listUsers();
 
-      if (userError || !userData) {
-        toast.error('User not found with that email address');
+      if (listError) {
+        throw new Error('Failed to fetch users');
+      }
+
+      const targetUser = authUsers.users.find(u => u.email === recipientEmail);
+
+      if (!targetUser) {
+        toast.error(`User not found with email ${recipientEmail}`);
         return;
       }
+
+      // Check if user has newsletter settings enabled
+      const { data: settings } = await supabase
+        .from('user_settings')
+        .select('email_notifications, notification_frequency')
+        .eq('user_id', targetUser.id)
+        .single();
+
+      if (!settings?.email_notifications) {
+        toast.error(`User ${recipientEmail} has email notifications disabled. Enable them first in user settings.`);
+        return;
+      }
+
+      console.log(`🧪 Queuing test newsletter for ${recipientEmail} (${targetUser.id})`);
 
       // Call queue-weekly-digest for this specific user with high priority
       const response = await fetch(
@@ -560,26 +576,32 @@ export function AdminNewsletter() {
             Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
           },
           body: JSON.stringify({
-            test_user_id: userData.user_id, // Special param to queue only this user
+            test_user_id: targetUser.id, // Special param to queue only this user
             priority: 100, // High priority for immediate processing
           }),
         }
       );
 
       if (!response.ok) {
-        throw new Error('Failed to queue test email');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to queue test email');
       }
 
       const result = await response.json();
 
-      toast.success(
-        `Test email queued for ${recipientEmail}. ${result.queued || 1} item(s) added. Click "Process Now" to send.`
-      );
+      if (result.queued === 0) {
+        toast.warning(`No newsletter queued for ${recipientEmail}. User may not be tracking any software.`);
+      } else {
+        toast.success(
+          `Test email queued for ${recipientEmail}. ${result.queued || 1} item(s) added. Click "Process Now" to send.`
+        );
+      }
+
       setTestEmailAddress(''); // Clear input after successful queue
       loadData();
     } catch (error) {
       console.error('Error queuing test email:', error);
-      toast.error('Failed to queue test email');
+      toast.error(error instanceof Error ? error.message : 'Failed to queue test email');
     } finally {
       setTestEmailLoading(false);
     }
