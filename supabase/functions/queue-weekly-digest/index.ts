@@ -145,18 +145,22 @@ serve(async (req) => {
     console.log(`📬 Starting ${frequency} digest queue generation...`)
 
     // ✅ Calculate days to look back using shared utility
-    const sinceDays = getSinceDays(frequency as any)
+    let sinceDays = getSinceDays(frequency as any)
 
     // Get users who want this frequency of emails
     let userSettingsQuery = supabase
       .from('user_settings')
-      .select('user_id, timezone, all_quiet_preference')
-      .eq('email_notifications', true)
-      .eq('notification_frequency', frequency)
+      .select('user_id, timezone, all_quiet_preference, notification_frequency')
 
-    // If test mode, filter to specific user
+    // If test mode, just filter to the specific user (ignore frequency and notification settings)
     if (testUserId) {
       userSettingsQuery = userSettingsQuery.eq('user_id', testUserId)
+      console.log(`🧪 Test mode: bypassing notification_frequency and email_notifications filters`)
+    } else {
+      // Normal mode: filter by email_notifications and notification_frequency
+      userSettingsQuery = userSettingsQuery
+        .eq('email_notifications', true)
+        .eq('notification_frequency', frequency)
     }
 
     const { data: userSettings, error: subError } = await userSettingsQuery
@@ -166,7 +170,7 @@ serve(async (req) => {
     }
 
     if (!userSettings || userSettings.length === 0) {
-      console.log(`📋 No subscribers found for ${frequency} digest`)
+      console.log(`📋 No subscribers found${testUserId ? ' for test user' : ` for ${frequency} digest`}`)
       return new Response(
         JSON.stringify({
           totalUsers: 0,
@@ -178,6 +182,15 @@ serve(async (req) => {
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    // In test mode, use the user's actual notification frequency
+    if (testUserId && userSettings.length > 0 && userSettings[0].notification_frequency) {
+      frequency = userSettings[0].notification_frequency
+      console.log(`🧪 Test mode: using user's actual frequency: ${frequency}`)
+      // Recalculate sinceDays based on user's actual frequency
+      sinceDays = getSinceDays(frequency as any)
+      console.log(`📅 Looking back ${sinceDays} days for updates`)
     }
 
     // Get user emails from auth.users
