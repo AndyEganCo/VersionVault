@@ -191,56 +191,66 @@ export async function incrementSponsorImpressions(
 }
 
 /**
- * Get newly added software for a user in the time period
+ * Get newly added software to the platform (not tracked by user yet)
+ * This shows software recently added to VersionVault that the user might want to track
  */
 export async function getNewSoftware(
   supabase: SupabaseClient,
   userId: string,
   sinceDate: Date
 ) {
-  // Get tracked software added in the time period
-  const { data: trackedData, error: trackedError } = await supabase
-    .from('tracked_software')
-    .select('software_id, created_at')
-    .eq('user_id', userId)
+  // Get software added to the platform in the time period
+  const { data: newSoftwareData, error: softwareError } = await supabase
+    .from('software')
+    .select('id, name, manufacturer, category, created_at')
     .gte('created_at', sinceDate.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(50) // Get up to 50 most recent
 
-  if (trackedError) {
-    throw new Error(`Failed to fetch new software: ${trackedError.message}`)
+  if (softwareError) {
+    throw new Error(`Failed to fetch new software: ${softwareError.message}`)
   }
 
-  if (!trackedData || trackedData.length === 0) return []
+  if (!newSoftwareData || newSoftwareData.length === 0) return []
 
-  const softwareIds = trackedData.map(d => d.software_id)
+  // Get software the user is already tracking
+  const { data: trackedData, error: trackedError } = await supabase
+    .from('tracked_software')
+    .select('software_id')
+    .eq('user_id', userId)
 
-  // Get software details using the existing utility
-  const softwareDetails = await getSoftwareDetails(supabase, softwareIds)
+  if (trackedError) {
+    throw new Error(`Failed to fetch tracked software: ${trackedError.message}`)
+  }
 
-  // Get current versions
+  // Create a set of tracked software IDs for fast lookup
+  const trackedIds = new Set(trackedData?.map(t => t.software_id) || [])
+
+  // Filter out software the user is already tracking
+  const untrackedSoftware = newSoftwareData.filter(s => !trackedIds.has(s.id))
+
+  // Limit to 10 items for the newsletter
+  const limitedSoftware = untrackedSoftware.slice(0, 10)
+
+  if (limitedSoftware.length === 0) return []
+
+  const softwareIds = limitedSoftware.map(s => s.id)
+
+  // Get current versions for the new software
   const currentVersions = await getCurrentVersionsBatch(supabase, softwareIds)
 
-  // Create maps for easy lookup
-  const softwareMap = new Map(
-    softwareDetails.map(s => [s.id, s])
-  )
+  // Create version map
   const versionMap = new Map(
     currentVersions.map(v => [v.software_id, v.current_version])
   )
 
   // Combine the data
-  return trackedData
-    .map(tracked => {
-      const software = softwareMap.get(tracked.software_id)
-      if (!software) return null // Skip if software not found
-
-      return {
-        software_id: tracked.software_id,
-        name: software.name,
-        manufacturer: software.manufacturer,
-        category: software.category,
-        initial_version: versionMap.get(tracked.software_id) || 'N/A',
-        added_date: tracked.created_at
-      }
-    })
-    .filter(Boolean) // Remove nulls
+  return limitedSoftware.map(software => ({
+    software_id: software.id,
+    name: software.name,
+    manufacturer: software.manufacturer,
+    category: software.category,
+    initial_version: versionMap.get(software.id) || 'N/A',
+    added_date: software.created_at
+  }))
 }

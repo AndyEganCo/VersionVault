@@ -356,20 +356,22 @@ function generateHtmlEmail(data: any): string {
   `).join('')
 
   const newSoftwareCards = newSoftware.map((s: any) => `
-    <a href="${VERSIONVAULT_URL}/dashboard?software_id=${s.software_id}" style="text-decoration: none; display: block; color: inherit;">
-      <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 16px; font-weight: 600; color: #ffffff;">${s.name}</span>
-          <span style="font-size: 10px; font-weight: 600; color: #ffffff; background-color: #8b5cf6; padding: 3px 8px; border-radius: 4px;">TRACKING</span>
-        </div>
-        <div style="font-size: 13px; color: #a3a3a3; margin: 4px 0 12px 0;">${s.manufacturer} • ${s.category}</div>
-        <div style="font-size: 14px; font-family: monospace;">
-          <span style="color: #737373;">Current Version: </span>
-          <span style="color: #8b5cf6; font-weight: 600;">${s.initial_version}</span>
-        </div>
-        <div style="font-size: 12px; color: #525252; margin-top: 4px;">Started tracking ${formatDate(s.added_date)}</div>
+    <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 16px; font-weight: 600; color: #ffffff;">${s.name}</span>
+        <span style="font-size: 10px; font-weight: 600; color: #ffffff; background-color: #8b5cf6; padding: 3px 8px; border-radius: 4px;">NEW</span>
       </div>
-    </a>
+      <div style="font-size: 13px; color: #a3a3a3; margin: 4px 0 12px 0;">${s.manufacturer} • ${s.category}</div>
+      <div style="font-size: 14px; font-family: monospace;">
+        <span style="color: #737373;">Version: </span>
+        <span style="color: #8b5cf6; font-weight: 600;">${s.initial_version}</span>
+      </div>
+      <div style="font-size: 12px; color: #525252; margin-top: 4px;">Added to VersionVault ${formatDate(s.added_date)}</div>
+      <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #262626; text-align: center;">
+        <a href="${VERSIONVAULT_URL}/software?software_id=${s.software_id}" style="display: inline-block; font-size: 13px; font-weight: 500; color: #3b82f6; text-decoration: none; padding: 8px 16px; margin-right: 8px; border: 1px solid #3b82f6; border-radius: 6px;">View Details</a>
+        <a href="${VERSIONVAULT_URL}/software?software_id=${s.software_id}&action=track" style="display: inline-block; font-size: 13px; font-weight: 600; color: #ffffff; background-color: #8b5cf6; text-decoration: none; padding: 8px 16px; border-radius: 6px;">Start Tracking</a>
+      </div>
+    </div>
   `).join('')
 
   const sponsorHtml = sponsor ? `
@@ -444,8 +446,8 @@ function generateHtmlEmail(data: any): string {
     ${newSoftwareCount > 0 ? `
       <!-- New Software -->
       <div style="padding: 24px 24px 0 24px;">
-        <div style="font-size: 18px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">🆕 Now Tracking</div>
-        <div style="font-size: 13px; color: #a3a3a3; margin-bottom: 16px;">You started tracking ${newSoftwareCount} new ${newSoftwareCount === 1 ? 'app' : 'apps'} ${timePeriod}</div>
+        <div style="font-size: 18px; font-weight: 600; color: #ffffff; margin-bottom: 4px;">🆕 New Software Added</div>
+        <div style="font-size: 13px; color: #a3a3a3; margin-bottom: 16px;">${newSoftwareCount} new ${newSoftwareCount === 1 ? 'app' : 'apps'} added to VersionVault ${timePeriod}</div>
         ${newSoftwareCards}
       </div>
     ` : ''}
@@ -502,14 +504,15 @@ function generateTextEmail(data: any): string {
   }
 
   if (newSoftwareCount > 0) {
-    text += `🆕 NOW TRACKING\n\n`
-    text += `You started tracking ${newSoftwareCount} new ${newSoftwareCount === 1 ? 'app' : 'apps'} ${timePeriod}:\n\n`
+    text += `🆕 NEW SOFTWARE ADDED\n\n`
+    text += `${newSoftwareCount} new ${newSoftwareCount === 1 ? 'app' : 'apps'} added to VersionVault ${timePeriod}:\n\n`
 
     for (const s of newSoftware) {
-      text += `${s.name} (TRACKING)\n`
+      text += `${s.name} (NEW)\n`
       text += `${s.manufacturer} • ${s.category}\n`
-      text += `Current Version: ${s.initial_version}\n`
-      text += `Started tracking ${formatDate(s.added_date)}\n\n`
+      text += `Version: ${s.initial_version}\n`
+      text += `Added to VersionVault ${formatDate(s.added_date)}\n`
+      text += `View Details: ${VERSIONVAULT_URL}/software?software_id=${s.software_id}\n\n`
     }
   }
 
