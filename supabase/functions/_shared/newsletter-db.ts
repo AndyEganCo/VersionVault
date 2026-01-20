@@ -66,7 +66,18 @@ export async function getCurrentVersionsBatch(
     const versions = versionsBySoftware.get(softwareId)
     if (!versions || versions.length === 0) continue
 
+    // DEBUG: Log versions for ELM 2025
+    if (versions.some(v => v.software_id === '32784ed8-c38f-4d51-bb87-e8ec9b06524c')) {
+      console.log(`🔍 DEBUG ELM 2025: Found ${versions.length} versions:`, versions.map(v => v.version).join(', '))
+    }
+
     const currentVersion = getCurrentVersionFromHistory(versions, true)
+
+    // DEBUG: Log result for ELM 2025
+    if (versions.some(v => v.software_id === '32784ed8-c38f-4d51-bb87-e8ec9b06524c')) {
+      console.log(`🔍 DEBUG ELM 2025: getCurrentVersionFromHistory returned:`, currentVersion?.version)
+    }
+
     if (currentVersion) {
       results.push({
         software_id: softwareId,
