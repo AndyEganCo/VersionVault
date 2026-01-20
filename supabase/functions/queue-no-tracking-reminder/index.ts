@@ -2,6 +2,7 @@
 // Triggered by cron job on the 14th of each month at 6-8 PM to prepare for 15th 8 AM sends
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { getCurrentVersionFromHistory } from '../_shared/version-utils.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -170,7 +171,7 @@ serve(async (req) => {
     if (!popularSoftware) {
       const { data: fallbackData } = await supabase
         .from('tracked_software')
-        .select('software_id, software:software_id (id, name, manufacturer, category, current_version)')
+        .select('software_id, software:software_id (id, name, manufacturer, category)')
         .limit(1000)
 
       if (fallbackData) {
@@ -185,16 +186,46 @@ serve(async (req) => {
               name: software.name,
               manufacturer: software.manufacturer,
               category: software.category,
-              current_version: software.current_version,
               tracker_count: count + 1,
             })
           }
         }
 
         // Convert to array and sort by tracker_count
-        popularSoftware = Array.from(softwareCounts.values())
+        const popularSoftwareList = Array.from(softwareCounts.values())
           .sort((a, b) => b.tracker_count - a.tracker_count)
           .slice(0, POPULAR_SOFTWARE_LIMIT)
+
+        // Fetch version history for popular software to compute current_version
+        const popularSoftwareIds = popularSoftwareList.map(s => s.software_id)
+        if (popularSoftwareIds.length > 0) {
+          const { data: versionHistoryData } = await supabase
+            .from('software_version_history')
+            .select('software_id, version, release_date, detected_at, newsletter_verified, is_current_override')
+            .in('software_id', popularSoftwareIds)
+            .eq('newsletter_verified', true)
+
+          // Group versions by software_id
+          const versionsBySoftware = new Map<string, any[]>()
+          for (const version of (versionHistoryData || [])) {
+            if (!versionsBySoftware.has(version.software_id)) {
+              versionsBySoftware.set(version.software_id, [])
+            }
+            versionsBySoftware.get(version.software_id)!.push(version)
+          }
+
+          // Add computed current_version to each software
+          popularSoftware = popularSoftwareList.map(s => {
+            const versions = versionsBySoftware.get(s.software_id) || []
+            const currentVer = getCurrentVersionFromHistory(versions, true)
+            return {
+              ...s,
+              current_version: currentVer?.version || 'N/A',
+            }
+          })
+        } else {
+          popularSoftware = popularSoftwareList
+        }
       }
     }
 

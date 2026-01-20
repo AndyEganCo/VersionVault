@@ -3,20 +3,24 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Resend } from 'https://esm.sh/resend@2.0.0'
+import PQueue from 'https://esm.sh/p-queue@7.3.4'
+import { authorizeRequest, getCorsHeaders } from '../_shared/newsletter-auth.ts'
+import { isTargetHourInTimezone } from '../_shared/newsletter-scheduler.ts'
+import { updateLastNotified, incrementSponsorImpressions } from '../_shared/newsletter-db.ts'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+const corsHeaders = getCorsHeaders()
 
 const BATCH_SIZE = 100
 const MAX_RETRY_ATTEMPTS = 3
-const RATE_LIMIT_DELAY_MS = 500 // Resend allows 2 req/sec, use 500ms delay
 const VERSIONVAULT_FROM = 'VersionVault <digest@updates.versionvault.dev>'
 const VERSIONVAULT_URL = 'https://versionvault.dev'
 
-// Helper function to delay between requests (rate limiting)
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+// ✅ Parallel queue with rate limiting (2 req/sec = Resend limit)
+const emailQueue = new PQueue({
+  concurrency: 2,      // 2 requests at a time
+  interval: 1000,      // per second
+  intervalCap: 2       // = 2 req/sec
+})
 
 interface ProcessResult {
   processed: number
@@ -34,10 +38,11 @@ serve(async (req) => {
   }
 
   try {
-    // Verify authorization
-    const authHeader = req.headers.get('Authorization')
-    const customSecretHeader = req.headers.get('X-Cron-Secret')
-    const cronSecret = Deno.env.get('CRON_SECRET')
+    // ✅ Authorization using shared utility
+    await authorizeRequest(req)
+    console.log('✅ Authorization successful')
+
+    // Check environment variables
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -50,56 +55,16 @@ serve(async (req) => {
       )
     }
 
-    let isAuthorized = false
-    let isAdminRequest = false
-
     // Parse request body for force flag
     let forceProcess = false
     try {
-      const body = await req.json()
+      const clonedReq = req.clone()
+      const body = await clonedReq.json()
       forceProcess = body?.force === true
     } catch {
       // No body or invalid JSON, that's fine
     }
 
-    // Check cron secret
-    if (cronSecret) {
-      if (customSecretHeader === cronSecret) isAuthorized = true
-      if (authHeader?.replace('Bearer ', '') === cronSecret) isAuthorized = true
-    }
-
-    // Check if user is an admin via JWT
-    if (!isAuthorized && authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.replace('Bearer ', '')
-      const supabaseAuth = createClient(supabaseUrl, supabaseServiceKey)
-
-      // Verify the JWT and get user
-      const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(token)
-
-      if (!authError && user) {
-        // Check if user is admin
-        const { data: adminData } = await supabaseAuth
-          .from('admin_users')
-          .select('user_id')
-          .eq('user_id', user.id)
-          .single()
-
-        if (adminData) {
-          isAuthorized = true
-          isAdminRequest = true
-          console.log(`✅ Admin user ${user.id} authorized`)
-        }
-      }
-    }
-
-    if (!isAuthorized) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid credentials' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    console.log('✅ Authorization successful')
     console.log('📤 Starting newsletter queue processing...')
 
     // Initialize clients
@@ -109,13 +74,14 @@ serve(async (req) => {
     const now = new Date()
     const targetHour = 8 // 8am
 
-    // Get pending queue items
+    // ✅ Get pending queue items (ordered by priority for test sends)
     // If force=true, get all pending items regardless of scheduled time
     let query = supabase
       .from('newsletter_queue')
       .select('*')
       .eq('status', 'pending')
       .lt('attempts', MAX_RETRY_ATTEMPTS)
+      .order('priority', { ascending: false })  // High priority first (test sends)
       .order('scheduled_for', { ascending: true })
       .limit(BATCH_SIZE)
 
@@ -130,26 +96,13 @@ serve(async (req) => {
       throw new Error(`Failed to fetch queue: ${fetchError.message}`)
     }
 
-    // Filter to only users where it's currently target hour in their timezone
+    // ✅ Filter to only users where it's currently target hour in their timezone
     // Skip timezone filter if manually triggered with force=true
     const shouldBypassTimezone = forceProcess
 
     const itemsToProcess = shouldBypassTimezone
       ? (queueItems || [])
-      : (queueItems || []).filter(item => {
-          try {
-            const formatter = new Intl.DateTimeFormat('en-US', {
-              timeZone: item.timezone,
-              hour: 'numeric',
-              hour12: false,
-            })
-            const currentHour = parseInt(formatter.format(now), 10)
-            return currentHour === targetHour
-          } catch {
-            // Invalid timezone, process anyway
-            return true
-          }
-        })
+      : (queueItems || []).filter(item => isTargetHourInTimezone(item.timezone, targetHour))
 
     if (shouldBypassTimezone) {
       console.log('⚡ Force-processing: bypassing timezone filter')
@@ -164,9 +117,13 @@ serve(async (req) => {
       errors: [],
     }
 
-    // Process each queue item
-    for (let i = 0; i < itemsToProcess.length; i++) {
-      const item = itemsToProcess[i]
+    // ✅ Process items in PARALLEL with rate limiting using p-queue
+    console.log(`⚡ Processing ${itemsToProcess.length} emails in parallel (2 concurrent, rate limited to 2 req/sec)`)
+
+    const startTime = Date.now()
+
+    // Helper function to process a single queue item
+    const processQueueItem = async (item: any) => {
       result.processed++
 
       try {
@@ -221,34 +178,21 @@ serve(async (req) => {
             status: 'sent',
           })
 
-        // Update last_notified_version for tracked software
+        // ✅ Update last_notified_version using shared utility
         if (item.payload.updates && item.payload.updates.length > 0) {
-          for (const update of item.payload.updates) {
-            await supabase
-              .from('tracked_software')
-              .update({
-                last_notified_version: update.new_version,
-                last_notified_at: new Date().toISOString(),
-              })
-              .eq('user_id', item.user_id)
-              .eq('software_id', update.software_id)
-          }
+          await updateLastNotified(
+            supabase,
+            item.user_id,
+            item.payload.updates.map((u: any) => ({
+              software_id: u.software_id,
+              version: u.new_version
+            }))
+          )
         }
 
         // Increment sponsor impressions if present
-        if (item.payload.sponsor) {
-          const { data: sponsorData } = await supabase
-            .from('newsletter_sponsors')
-            .select('impression_count')
-            .eq('is_active', true)
-            .single()
-
-          if (sponsorData) {
-            await supabase
-              .from('newsletter_sponsors')
-              .update({ impression_count: (sponsorData.impression_count || 0) + 1 })
-              .eq('is_active', true)
-          }
+        if (item.payload.sponsor?.id) {
+          await incrementSponsorImpressions(supabase, item.payload.sponsor.id)
         }
 
         result.sent++
@@ -270,18 +214,22 @@ serve(async (req) => {
 
         console.error(`❌ Failed for ${item.email}: ${error.message}`)
       }
-
-      // Rate limit: Wait between requests to respect Resend's 2 req/sec limit
-      // Skip delay after the last item
-      if (i < itemsToProcess.length - 1) {
-        await delay(RATE_LIMIT_DELAY_MS)
-      }
     }
 
-    console.log('\n✅ Queue processing complete!')
+    // Add all items to the queue for parallel processing
+    for (const item of itemsToProcess) {
+      emailQueue.add(() => processQueueItem(item))
+    }
+
+    // Wait for all emails to be processed
+    await emailQueue.onIdle()
+
+    const executionTime = Date.now() - startTime
+    console.log(`\n✅ Queue processing complete in ${executionTime}ms!`)
     console.log(`   Processed: ${result.processed}`)
     console.log(`   Sent: ${result.sent}`)
     console.log(`   Failed: ${result.failed}`)
+    console.log(`   Avg time per email: ${Math.round(executionTime / result.processed)}ms`)
 
     return new Response(
       JSON.stringify(result),
@@ -413,7 +361,7 @@ function generateHtmlEmail(data: any): string {
         <span style="color: #737373;">Version: </span>
         <span style="color: #8b5cf6; font-weight: 600;">${s.initial_version}</span>
       </div>
-      <div style="font-size: 12px; color: #525252; margin-top: 4px;">Added ${formatDate(s.added_date)}</div>
+      <div style="font-size: 12px; color: #525252; margin-top: 4px;">Added to VersionVault ${formatDate(s.added_date)}</div>
       <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #262626; text-align: center;">
         <a href="${VERSIONVAULT_URL}/software?software_id=${s.software_id}" style="display: inline-block; font-size: 13px; font-weight: 500; color: #3b82f6; text-decoration: none; padding: 8px 16px; margin-right: 8px; border: 1px solid #3b82f6; border-radius: 6px;">View Details</a>
         <a href="${VERSIONVAULT_URL}/software?software_id=${s.software_id}&action=track" style="display: inline-block; font-size: 13px; font-weight: 600; color: #ffffff; background-color: #8b5cf6; text-decoration: none; padding: 8px 16px; border-radius: 6px;">Start Tracking</a>
@@ -558,7 +506,8 @@ function generateTextEmail(data: any): string {
       text += `${s.name} (NEW)\n`
       text += `${s.manufacturer} • ${s.category}\n`
       text += `Version: ${s.initial_version}\n`
-      text += `Added ${formatDate(s.added_date)}\n\n`
+      text += `Added to VersionVault ${formatDate(s.added_date)}\n`
+      text += `View Details: ${VERSIONVAULT_URL}/software?software_id=${s.software_id}\n\n`
     }
   }
 

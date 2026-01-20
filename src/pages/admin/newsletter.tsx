@@ -55,6 +55,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { formatDate } from '@/lib/date';
+import { getCurrentVersionFromHistory, compareVersions } from '@/lib/utils/version-utils';
 
 interface QueueSummary {
   pending: number;
@@ -158,6 +159,7 @@ export function AdminNewsletter() {
 
   // Test email state
   const [testEmailLoading, setTestEmailLoading] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState('');
 
   // Unverified versions state
   const [unverifiedVersions, setUnverifiedVersions] = useState<UnverifiedVersion[]>([]);
@@ -518,160 +520,63 @@ export function AdminNewsletter() {
     }
   };
 
-  // Send test email to current user
+  // Send test email by calling the actual queue-weekly-digest function
   const handleSendTestEmail = async () => {
-    if (!user?.email) {
-      toast.error('No email address found');
+    const recipientEmail = testEmailAddress.trim() || user?.email;
+
+    if (!recipientEmail) {
+      toast.error('No email address specified');
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(recipientEmail)) {
+      toast.error('Invalid email address');
       return;
     }
 
     setTestEmailLoading(true);
     try {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      console.log(`🧪 Queuing test newsletter for ${recipientEmail}`);
 
-      // For test emails, get user's tracked software OR most recent software
-      // This gives a realistic preview with actual database data
-      const { data: trackedData } = await supabase
-        .from('tracked_software')
-        .select('software_id')
-        .eq('user_id', user.id);
-
-      let recentSoftware;
-
-      if (trackedData && trackedData.length > 0) {
-        // Get user's tracked software for realistic preview
-        const { data: tracked } = await supabase
-          .from('software')
-          .select('id, name, manufacturer, category, current_version, release_date, updated_at')
-          .in('id', trackedData.map(t => t.software_id))
-          .order('updated_at', { ascending: false })
-          .limit(10);
-
-        recentSoftware = tracked;
-        console.log('📊 Using tracked software for test email:', tracked?.length || 0);
-      } else {
-        // Fallback: get most recently updated software from database
-        const { data: recent } = await supabase
-          .from('software')
-          .select('id, name, manufacturer, category, current_version, release_date, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(10);
-
-        recentSoftware = recent;
-        console.log('📊 Using recent software for test email:', recent?.length || 0);
-      }
-
-      let sampleUpdates: any[] = [];
-
-      if (recentSoftware && recentSoftware.length > 0) {
-        // For each software, get version history for previous_version and notes
-        for (const software of recentSoftware) {
-          const { data: versionHistory } = await supabase
-            .from('software_version_history')
-            .select('previous_version, type, notes, release_date, detected_at')
-            .eq('software_id', software.id)
-            .eq('version', software.current_version)
-            .order('detected_at', { ascending: false })
-            .limit(1);
-
-          // Handle the array response (first item or undefined)
-          const historyEntry = versionHistory?.[0];
-          if (!historyEntry) continue;
-
-          // Match production logic: use release_date || detected_at
-          const releaseDate = historyEntry.release_date || historyEntry.detected_at || software.updated_at;
-          const releaseDateObj = new Date(releaseDate);
-
-          // Only include versions released in the last 30 days (matching production logic)
-          if (releaseDateObj < thirtyDaysAgo) {
-            continue;
-          }
-
-          sampleUpdates.push({
-            software_id: software.id,
-            name: software.name,
-            manufacturer: software.manufacturer,
-            category: software.category,
-            old_version: historyEntry.previous_version || 'N/A',
-            new_version: software.current_version,
-            release_date: releaseDate,
-            release_notes: historyEntry.notes || [],
-            update_type: historyEntry.type || 'minor',
-          });
+      // Call queue-weekly-digest and let it look up the user by email
+      // Edge function has service role access to look up users
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/queue-weekly-digest`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+          body: JSON.stringify({
+            test_email: recipientEmail, // Edge function will look up user by email
+            priority: 100, // High priority for immediate processing
+          }),
         }
+      );
 
-        console.log(`📧 Updates: ${recentSoftware.length} software checked -> ${sampleUpdates.length} recent updates found`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to queue test email');
       }
 
-      // Only use fallback if truly no data in database
-      if (sampleUpdates.length === 0) {
-        sampleUpdates = [
-          {
-            software_id: 'sample-1',
-            name: 'Sample App',
-            manufacturer: 'Sample Company',
-            category: 'Productivity',
-            old_version: '2.4.0',
-            new_version: '2.5.0',
-            release_date: new Date().toISOString(),
-            release_notes: ['No version updates found in database', 'This is sample data for testing'],
-            update_type: 'minor',
-          },
-        ];
+      const result = await response.json();
+
+      if (result.queued === 0) {
+        toast.warning(`No newsletter queued for ${recipientEmail}. User may not exist, have notifications disabled, or not be tracking software.`);
+      } else {
+        toast.success(
+          `Test email queued for ${recipientEmail}. ${result.queued || 1} item(s) added. Click "Process Now" to send.`
+        );
       }
 
-      // Get active sponsor
-      const activeSponsor = sponsors.find(s => s.is_active);
-
-      // Get new software added in the last 30 days
-      const { data: newSoftwareData } = await supabase
-        .from('software')
-        .select('id, name, manufacturer, category, current_version, created_at')
-        .gte('created_at', thirtyDaysAgo.toISOString())
-        .order('created_at', { ascending: false });
-
-      const newSoftware = (newSoftwareData || []).map(s => ({
-        software_id: s.id,
-        name: s.name,
-        manufacturer: s.manufacturer,
-        category: s.category,
-        initial_version: s.current_version || 'N/A',
-        added_date: s.created_at,
-      }));
-
-      // Add to queue
-      const { error: queueError } = await supabase
-        .from('newsletter_queue')
-        .insert({
-          user_id: user.id,
-          email: user.email,
-          email_type: 'weekly_digest',
-          payload: {
-            updates: sampleUpdates,
-            newSoftware: newSoftware.length > 0 ? newSoftware : undefined,
-            sponsor: activeSponsor ? {
-              name: activeSponsor.name,
-              tagline: activeSponsor.tagline,
-              description: activeSponsor.description,
-              image_url: activeSponsor.image_url,
-              cta_url: activeSponsor.cta_url,
-              cta_text: activeSponsor.cta_text,
-            } : null,
-          },
-          status: 'pending',
-          scheduled_for: new Date().toISOString(),
-          timezone: 'UTC',
-          idempotency_key: `test-${user.id}-${Date.now()}`,
-        });
-
-      if (queueError) throw queueError;
-
-      toast.success(`Test email queued for ${user.email}. Click "Process Now" to send.`);
+      setTestEmailAddress(''); // Clear input after successful queue
       loadData();
     } catch (error) {
       console.error('Error queuing test email:', error);
-      toast.error('Failed to queue test email');
+      toast.error(error instanceof Error ? error.message : 'Failed to queue test email');
     } finally {
       setTestEmailLoading(false);
     }
@@ -695,20 +600,41 @@ export function AdminNewsletter() {
         const softwareIds = trackedSoftware.map(t => t.software_id);
         const { data: softwareData } = await supabase
           .from('software')
-          .select('id, name, manufacturer, category, current_version')
+          .select('id, name, manufacturer, category')
           .in('id', softwareIds)
           .limit(3);
 
-        sampleUpdates = (softwareData || []).map((s: any) => ({
-          name: s.name || 'Test Software',
-          manufacturer: s.manufacturer || 'Test Co',
-          category: s.category || 'Test',
-          old_version: '1.0.0',
-          new_version: s.current_version || '2.0.0',
-          release_date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-          release_notes: ['New feature added', 'Bug fixes'],
-          update_type: 'minor',
-        }));
+        // Fetch version history to compute current_version
+        const { data: versionHistoryData } = await supabase
+          .from('software_version_history')
+          .select('software_id, version, newsletter_verified, is_current_override')
+          .in('software_id', softwareIds)
+          .eq('newsletter_verified', true);
+
+        // Group versions by software_id
+        const versionsBySoftware = new Map<string, any[]>();
+        for (const version of (versionHistoryData || [])) {
+          if (!versionsBySoftware.has(version.software_id)) {
+            versionsBySoftware.set(version.software_id, []);
+          }
+          versionsBySoftware.get(version.software_id)!.push(version);
+        }
+
+        sampleUpdates = (softwareData || []).map((s: any) => {
+          const versions = versionsBySoftware.get(s.id) || [];
+          const currentVer = getCurrentVersionFromHistory(versions, true);
+
+          return {
+            name: s.name || 'Test Software',
+            manufacturer: s.manufacturer || 'Test Co',
+            category: s.category || 'Test',
+            old_version: '1.0.0',
+            new_version: currentVer?.version || '2.0.0',
+            release_date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            release_notes: ['New feature added', 'Bug fixes'],
+            update_type: 'minor',
+          };
+        });
       }
 
       // Default sample if no tracked software
@@ -736,19 +662,47 @@ export function AdminNewsletter() {
 
       const { data: newSoftwareData } = await supabase
         .from('software')
-        .select('id, name, manufacturer, category, current_version, created_at')
+        .select('id, name, manufacturer, category, created_at')
         .gte('created_at', thirtyDaysAgo.toISOString())
         .order('created_at', { ascending: false })
         .limit(5);
 
-      const newSoftware = (newSoftwareData || []).map(s => ({
-        software_id: s.id,
-        name: s.name,
-        manufacturer: s.manufacturer,
-        category: s.category,
-        initial_version: s.current_version || 'N/A',
-        added_date: s.created_at,
-      }));
+      // Fetch version history for new software to compute current version
+      const previewNewSoftwareIds = (newSoftwareData || []).map(s => s.id);
+      let previewNewSoftwareVersions: any[] = [];
+
+      if (previewNewSoftwareIds.length > 0) {
+        const { data } = await supabase
+          .from('software_version_history')
+          .select('software_id, version, newsletter_verified, is_current_override')
+          .in('software_id', previewNewSoftwareIds)
+          .eq('newsletter_verified', true);
+
+        previewNewSoftwareVersions = data || [];
+      }
+
+      // Group versions by software_id
+      const previewVersionsBySoftware = new Map<string, any[]>();
+      for (const version of previewNewSoftwareVersions) {
+        if (!previewVersionsBySoftware.has(version.software_id)) {
+          previewVersionsBySoftware.set(version.software_id, []);
+        }
+        previewVersionsBySoftware.get(version.software_id)!.push(version);
+      }
+
+      const newSoftware = (newSoftwareData || []).map(s => {
+        const versions = previewVersionsBySoftware.get(s.id) || [];
+        const currentVer = getCurrentVersionFromHistory(versions, true);
+
+        return {
+          software_id: s.id,
+          name: s.name,
+          manufacturer: s.manufacturer,
+          category: s.category,
+          initial_version: currentVer?.version || 'N/A',
+          added_date: s.created_at,
+        };
+      });
 
       // Generate preview HTML (simplified version of the actual template)
       const html = generatePreviewHtml(userName, sampleUpdates, newSoftware, activeSponsor);
@@ -972,25 +926,46 @@ export function AdminNewsletter() {
               </Button>
             </div>
 
-            <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t">
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handlePreviewEmail}
-                disabled={previewLoading}
-              >
-                <FileText className="h-4 w-4 mr-1" />
-                Preview Email
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleSendTestEmail}
-                disabled={testEmailLoading}
-              >
-                <TestTube className="h-4 w-4 mr-1" />
-                {testEmailLoading ? 'Sending...' : 'Send Test to Me'}
-              </Button>
+            <div className="mt-4 pt-4 border-t space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handlePreviewEmail}
+                  disabled={previewLoading}
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  Preview Email
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="test-email" className="text-xs text-muted-foreground">
+                  Send test email to (leave blank to send to yourself)
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="test-email"
+                    type="email"
+                    placeholder={user?.email || 'email@example.com'}
+                    value={testEmailAddress}
+                    onChange={(e) => setTestEmailAddress(e.target.value)}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={handleSendTestEmail}
+                    disabled={testEmailLoading}
+                  >
+                    <TestTube className="h-4 w-4 mr-1" />
+                    {testEmailLoading ? 'Queueing...' : 'Queue Test'}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Test emails have high priority and will be processed first when you click "Process Now"
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1254,7 +1229,7 @@ export function AdminNewsletter() {
             </Button>
             <Button onClick={handleSendTestEmail} disabled={testEmailLoading}>
               <TestTube className="h-4 w-4 mr-1" />
-              {testEmailLoading ? 'Sending...' : 'Send Test to Me'}
+              {testEmailLoading ? 'Queueing...' : 'Queue Test Email'}
             </Button>
           </DialogFooter>
         </DialogContent>
