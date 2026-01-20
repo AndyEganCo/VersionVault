@@ -69,6 +69,7 @@ serve(async (req) => {
     // Get frequency from query parameter or request body, default to weekly
     let frequency = 'weekly'
     let testUserId: string | undefined = undefined
+    let testEmail: string | undefined = undefined
     let priority = 0
 
     // First try query parameter (more reliable)
@@ -89,7 +90,11 @@ serve(async (req) => {
         }
         if (body.test_user_id) {
           testUserId = body.test_user_id
-          console.log(`🧪 Test mode: queuing for user ${testUserId}`)
+          console.log(`🧪 Test mode: queuing for user ID ${testUserId}`)
+        }
+        if (body.test_email) {
+          testEmail = body.test_email
+          console.log(`🧪 Test mode: queuing for email ${testEmail}`)
         }
         if (body.priority !== undefined) {
           priority = body.priority
@@ -99,6 +104,42 @@ serve(async (req) => {
     } catch (error) {
       console.log('No additional params in body, using defaults')
       // No body or invalid JSON, use defaults
+    }
+
+    // If test_email provided, look up the user ID
+    if (testEmail && !testUserId) {
+      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
+        perPage: 1000
+      })
+
+      if (authError) {
+        console.error('Failed to fetch users for email lookup:', authError)
+        return new Response(
+          JSON.stringify({ error: 'Failed to look up user by email' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const targetUser = authUsers.users.find(u => u.email === testEmail)
+
+      if (!targetUser) {
+        console.log(`❌ User not found with email ${testEmail}`)
+        return new Response(
+          JSON.stringify({
+            error: `User not found with email ${testEmail}`,
+            totalUsers: 0,
+            queued: 0,
+            withUpdates: 0,
+            allQuiet: 0,
+            skipped: 0,
+            errors: []
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      testUserId = targetUser.id
+      console.log(`✅ Found user ${testUserId} for email ${testEmail}`)
     }
 
     console.log(`📬 Starting ${frequency} digest queue generation...`)

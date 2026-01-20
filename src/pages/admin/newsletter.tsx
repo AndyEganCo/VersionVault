@@ -538,35 +538,10 @@ export function AdminNewsletter() {
 
     setTestEmailLoading(true);
     try {
-      // Find the user by email in auth.users
-      const { data: authUsers, error: listError } = await supabase.auth.admin.listUsers();
+      console.log(`🧪 Queuing test newsletter for ${recipientEmail}`);
 
-      if (listError) {
-        throw new Error('Failed to fetch users');
-      }
-
-      const targetUser = authUsers.users.find(u => u.email === recipientEmail);
-
-      if (!targetUser) {
-        toast.error(`User not found with email ${recipientEmail}`);
-        return;
-      }
-
-      // Check if user has newsletter settings enabled
-      const { data: settings } = await supabase
-        .from('user_settings')
-        .select('email_notifications, notification_frequency')
-        .eq('user_id', targetUser.id)
-        .single();
-
-      if (!settings?.email_notifications) {
-        toast.error(`User ${recipientEmail} has email notifications disabled. Enable them first in user settings.`);
-        return;
-      }
-
-      console.log(`🧪 Queuing test newsletter for ${recipientEmail} (${targetUser.id})`);
-
-      // Call queue-weekly-digest for this specific user with high priority
+      // Call queue-weekly-digest and let it look up the user by email
+      // Edge function has service role access to look up users
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/queue-weekly-digest`,
         {
@@ -576,7 +551,7 @@ export function AdminNewsletter() {
             Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
           },
           body: JSON.stringify({
-            test_user_id: targetUser.id, // Special param to queue only this user
+            test_email: recipientEmail, // Edge function will look up user by email
             priority: 100, // High priority for immediate processing
           }),
         }
@@ -590,7 +565,7 @@ export function AdminNewsletter() {
       const result = await response.json();
 
       if (result.queued === 0) {
-        toast.warning(`No newsletter queued for ${recipientEmail}. User may not be tracking any software.`);
+        toast.warning(`No newsletter queued for ${recipientEmail}. User may not exist, have notifications disabled, or not be tracking software.`);
       } else {
         toast.success(
           `Test email queued for ${recipientEmail}. ${result.queued || 1} item(s) added. Click "Process Now" to send.`
