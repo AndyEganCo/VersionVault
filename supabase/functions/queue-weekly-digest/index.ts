@@ -339,6 +339,7 @@ serve(async (req) => {
 
         // ✅ OPTIMIZED: Use utility function to get new software with current versions
         const newSoftware = await getNewSoftware(supabase, sub.user_id, sinceDate)
+        console.log(`📦 Found ${newSoftware.length} new software for ${userEmail} (looking back to ${sinceDate.toISOString()})`)
 
         // Check if we should send an all_quiet email based on user preference
         if (!hasUpdates) {
@@ -361,7 +362,7 @@ serve(async (req) => {
         const idempotencyKey = generateIdempotencyKey(sub.user_id, frequency)
 
         // ✅ Calculate scheduled time (8am in user's timezone - next occurrence)
-        const scheduledFor = calculateScheduledTime(frequency as any, sub.timezone || 'America/New_York')
+        const scheduledFor = calculateScheduledTime(sub.timezone || 'America/New_York', 8, frequency)
 
         // Determine email type and payload
         const emailType = hasUpdates ? `${frequency}_digest` : 'all_quiet'

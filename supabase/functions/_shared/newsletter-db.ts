@@ -210,6 +210,8 @@ export async function getNewSoftware(
     throw new Error(`Failed to fetch new software: ${softwareError.message}`)
   }
 
+  console.log(`  📊 Platform software added since ${sinceDate.toISOString()}: ${newSoftwareData?.length || 0}`)
+
   if (!newSoftwareData || newSoftwareData.length === 0) return []
 
   // Get software the user is already tracking
@@ -227,6 +229,8 @@ export async function getNewSoftware(
 
   // Filter out software the user is already tracking
   const untrackedSoftware = newSoftwareData.filter(s => !trackedIds.has(s.id))
+
+  console.log(`  📊 After filtering tracked software: ${untrackedSoftware.length} untracked (user tracks ${trackedIds.size} total)`)
 
   if (untrackedSoftware.length === 0) return []
 
