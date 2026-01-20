@@ -163,9 +163,9 @@ export async function getNewSoftware(
   // Get tracked software added in the time period
   const { data: trackedData, error: trackedError } = await supabase
     .from('tracked_software')
-    .select('software_id, tracked_at')
+    .select('software_id, created_at')
     .eq('user_id', userId)
-    .gte('tracked_at', sinceDate.toISOString())
+    .gte('created_at', sinceDate.toISOString())
 
   if (trackedError) {
     throw new Error(`Failed to fetch new software: ${trackedError.message}`)
