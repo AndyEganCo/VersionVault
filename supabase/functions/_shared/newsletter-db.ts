@@ -204,8 +204,7 @@ export async function getNewSoftware(
     .from('software')
     .select('id, name, manufacturer, category, created_at')
     .gte('created_at', sinceDate.toISOString())
-    .order('created_at', { ascending: false })
-    .limit(50) // Get up to 50 most recent
+    .order('created_at', { ascending: false }) // Newest first
 
   if (softwareError) {
     throw new Error(`Failed to fetch new software: ${softwareError.message}`)
@@ -229,12 +228,9 @@ export async function getNewSoftware(
   // Filter out software the user is already tracking
   const untrackedSoftware = newSoftwareData.filter(s => !trackedIds.has(s.id))
 
-  // Limit to 10 items for the newsletter
-  const limitedSoftware = untrackedSoftware.slice(0, 10)
+  if (untrackedSoftware.length === 0) return []
 
-  if (limitedSoftware.length === 0) return []
-
-  const softwareIds = limitedSoftware.map(s => s.id)
+  const softwareIds = untrackedSoftware.map(s => s.id)
 
   // Get current versions for the new software
   const currentVersions = await getCurrentVersionsBatch(supabase, softwareIds)
@@ -244,8 +240,8 @@ export async function getNewSoftware(
     currentVersions.map(v => [v.software_id, v.current_version])
   )
 
-  // Combine the data
-  return limitedSoftware.map(software => ({
+  // Combine the data (already sorted by created_at descending)
+  return untrackedSoftware.map(software => ({
     software_id: software.id,
     name: software.name,
     manufacturer: software.manufacturer,

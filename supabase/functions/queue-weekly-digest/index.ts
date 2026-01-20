@@ -327,6 +327,13 @@ serve(async (req) => {
           })
         }
 
+        // Sort updates by release date (newest first)
+        updates.sort((a, b) => {
+          const dateA = new Date(a.release_date).getTime()
+          const dateB = new Date(b.release_date).getTime()
+          return dateB - dateA
+        })
+
         // Show all updates (no limit)
         const hasUpdates = updates.length > 0
 
