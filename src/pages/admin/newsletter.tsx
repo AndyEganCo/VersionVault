@@ -594,10 +594,8 @@ export function AdminNewsletter() {
           const releaseDate = currentVersionEntry.release_date || currentVersionEntry.detected_at || software.updated_at;
           const releaseDateObj = new Date(releaseDate);
 
-          // Only include versions released in the last 30 days (matching production logic)
-          if (releaseDateObj < thirtyDaysAgo) {
-            continue;
-          }
+          // For test emails, prefer recent updates but accept any if none are recent
+          const isRecent = releaseDateObj >= thirtyDaysAgo;
 
           // Find previous version (next in semantically sorted array)
           const sortedHistory = [...allVersionHistory].sort((a, b) => compareVersions(b.version, a.version));
@@ -614,14 +612,19 @@ export function AdminNewsletter() {
             release_date: releaseDate,
             release_notes: currentVersionEntry.notes || [],
             update_type: currentVersionEntry.type || 'minor',
+            is_recent: isRecent, // Mark if it's actually recent
           });
+
+          // Stop after we have 5 updates for the test email
+          if (sampleUpdates.length >= 5) break;
         }
 
-        console.log(`📧 Updates: ${recentSoftware.length} software checked -> ${sampleUpdates.length} recent updates found`);
+        console.log(`📧 Test email: Found ${sampleUpdates.length} software versions from database`);
       }
 
       // Only use fallback if truly no data in database
       if (sampleUpdates.length === 0) {
+        console.warn('⚠️ No software versions found in database - using sample data');
         sampleUpdates = [
           {
             software_id: 'sample-1',
@@ -631,7 +634,7 @@ export function AdminNewsletter() {
             old_version: '2.4.0',
             new_version: '2.5.0',
             release_date: new Date().toISOString(),
-            release_notes: ['No version updates found in database', 'This is sample data for testing'],
+            release_notes: ['No version data found in database', 'This is sample data for testing the email format'],
             update_type: 'minor',
           },
         ];
