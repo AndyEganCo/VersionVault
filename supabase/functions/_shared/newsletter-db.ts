@@ -181,8 +181,24 @@ export async function getNewSoftware(
 
   if (!data || data.length === 0) return []
 
-  // Get current versions for new software
-  const softwareIds = data.map(d => d.software_id)
+  // Filter out invalid UUIDs and get current versions for new software
+  const isValidUUID = (str: string) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    return uuidRegex.test(str)
+  }
+
+  const softwareIds = data
+    .map(d => d.software_id)
+    .filter(id => {
+      if (!isValidUUID(id)) {
+        console.warn(`⚠️ Skipping invalid UUID in new software: ${id}`)
+        return false
+      }
+      return true
+    })
+
+  if (softwareIds.length === 0) return []
+
   const currentVersions = await getCurrentVersionsBatch(supabase, softwareIds)
 
   // Map current versions
@@ -190,12 +206,15 @@ export async function getNewSoftware(
     currentVersions.map(v => [v.software_id, v.current_version])
   )
 
-  return data.map(item => ({
-    software_id: item.software_id,
-    name: item.software.name,
-    manufacturer: item.software.manufacturer,
-    category: item.software.category,
-    initial_version: versionMap.get(item.software_id) || 'N/A',
-    added_date: item.tracked_at
-  }))
+  // Only return items with valid UUIDs
+  return data
+    .filter(item => isValidUUID(item.software_id))
+    .map(item => ({
+      software_id: item.software_id,
+      name: item.software.name,
+      manufacturer: item.software.manufacturer,
+      category: item.software.category,
+      initial_version: versionMap.get(item.software_id) || 'N/A',
+      added_date: item.tracked_at
+    }))
 }
