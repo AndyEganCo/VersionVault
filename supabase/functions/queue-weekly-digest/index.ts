@@ -311,6 +311,14 @@ serve(async (req) => {
             continue
           }
 
+          // ✅ Check if this is actually a NEW version for the user
+          // Skip if user was already notified about this version
+          if (tracked.last_notified_version &&
+              tracked.last_notified_version === currentVersion.current_version) {
+            // User already knows about this version, skip
+            continue
+          }
+
           // ✅ Previous version is tracked in last_notified_version
           const oldVersion = tracked.last_notified_version || 'N/A'
 
