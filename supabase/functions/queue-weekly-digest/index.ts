@@ -68,6 +68,8 @@ serve(async (req) => {
 
     // Get frequency from query parameter or request body, default to weekly
     let frequency = 'weekly'
+    let testUserId: string | undefined = undefined
+    let priority = 0
 
     // First try query parameter (more reliable)
     const url = new URL(req.url)
@@ -75,18 +77,28 @@ serve(async (req) => {
     if (queryFrequency) {
       frequency = queryFrequency
       console.log(`✅ Frequency from query param: ${frequency}`)
-    } else {
-      // Fallback to request body
-      try {
-        const body = await req.json()
-        if (body && body.frequency) {
+    }
+
+    // Parse request body for additional params
+    try {
+      const body = await req.json()
+      if (body) {
+        if (body.frequency) {
           frequency = body.frequency
           console.log(`✅ Frequency from request body: ${frequency}`)
         }
-      } catch (error) {
-        console.log('No frequency specified, using default: weekly')
-        // No body or invalid JSON, use default weekly
+        if (body.test_user_id) {
+          testUserId = body.test_user_id
+          console.log(`🧪 Test mode: queuing for user ${testUserId}`)
+        }
+        if (body.priority !== undefined) {
+          priority = body.priority
+          console.log(`⚡ Priority set to: ${priority}`)
+        }
       }
+    } catch (error) {
+      console.log('No additional params in body, using defaults')
+      // No body or invalid JSON, use defaults
     }
 
     console.log(`📬 Starting ${frequency} digest queue generation...`)
@@ -95,11 +107,18 @@ serve(async (req) => {
     const sinceDays = getSinceDays(frequency as any)
 
     // Get users who want this frequency of emails
-    const { data: userSettings, error: subError } = await supabase
+    let userSettingsQuery = supabase
       .from('user_settings')
       .select('user_id, timezone, all_quiet_preference')
       .eq('email_notifications', true)
       .eq('notification_frequency', frequency)
+
+    // If test mode, filter to specific user
+    if (testUserId) {
+      userSettingsQuery = userSettingsQuery.eq('user_id', testUserId)
+    }
+
+    const { data: userSettings, error: subError } = await userSettingsQuery
 
     if (subError) {
       throw new Error(`Failed to fetch subscribers: ${subError.message}`)
@@ -305,6 +324,7 @@ serve(async (req) => {
             status: 'pending',
             scheduled_for: scheduledFor.toISOString(),
             timezone: sub.timezone || 'America/New_York',
+            priority: priority, // Support test sends with high priority
             idempotency_key: idempotencyKey,
           }, {
             onConflict: 'idempotency_key',
