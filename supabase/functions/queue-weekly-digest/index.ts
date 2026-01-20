@@ -295,6 +295,8 @@ serve(async (req) => {
 
         // Process each tracked software to find updates
         const updates: SoftwareUpdateSummary[] = []
+        let skippedOldRelease = 0
+        let skippedNoChange = 0
 
         for (const tracked of trackedSoftware) {
           const software = tracked.software as any
@@ -308,20 +310,21 @@ serve(async (req) => {
           const releaseDateObj = new Date(releaseDate)
           if (releaseDateObj < sinceDate) {
             // Current version was released before the time period, skip
+            skippedOldRelease++
             continue
           }
 
-          // ✅ Check if this is actually a NEW version for the user
-          // Skip if user was already notified about this version
-          if (tracked.last_notified_version &&
-              tracked.last_notified_version === currentVersion.current_version) {
-            // User already knows about this version, skip
-            continue
-          }
-
-          // ✅ Previous version is tracked in last_notified_version
+          // Get the old version (what user was last notified about)
           const oldVersion = tracked.last_notified_version || 'N/A'
 
+          // Skip if there's no actual change (old version = new version)
+          if (oldVersion === currentVersion.current_version) {
+            console.log(`  ⏭️  Skipping ${software.name}: no change (${oldVersion})`)
+            skippedNoChange++
+            continue
+          }
+
+          console.log(`  ✅ Including ${software.name}: ${oldVersion} → ${currentVersion.current_version} (released ${releaseDate})`)
           updates.push({
             software_id: tracked.software_id,
             name: software.name,
@@ -334,6 +337,8 @@ serve(async (req) => {
             update_type: currentVersion.type || 'patch',
           })
         }
+
+        console.log(`  📊 Update filtering: ${updates.length} included, ${skippedOldRelease} too old, ${skippedNoChange} no change`)
 
         // Sort updates by release date (newest first)
         updates.sort((a, b) => {
