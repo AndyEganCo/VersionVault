@@ -160,42 +160,49 @@ export async function getNewSoftware(
   userId: string,
   sinceDate: Date
 ) {
-  const { data, error } = await supabase
+  // Get tracked software added in the time period
+  const { data: trackedData, error: trackedError } = await supabase
     .from('tracked_software')
-    .select(`
-      software_id,
-      tracked_at,
-      software:software_id (
-        id,
-        name,
-        manufacturer,
-        category
-      )
-    `)
+    .select('software_id, tracked_at')
     .eq('user_id', userId)
     .gte('tracked_at', sinceDate.toISOString())
 
-  if (error) {
-    throw new Error(`Failed to fetch new software: ${error.message}`)
+  if (trackedError) {
+    throw new Error(`Failed to fetch new software: ${trackedError.message}`)
   }
 
-  if (!data || data.length === 0) return []
+  if (!trackedData || trackedData.length === 0) return []
 
-  // Get current versions for new software
-  const softwareIds = data.map(d => d.software_id)
+  const softwareIds = trackedData.map(d => d.software_id)
+
+  // Get software details using the existing utility
+  const softwareDetails = await getSoftwareDetails(supabase, softwareIds)
+
+  // Get current versions
   const currentVersions = await getCurrentVersionsBatch(supabase, softwareIds)
 
-  // Map current versions
+  // Create maps for easy lookup
+  const softwareMap = new Map(
+    softwareDetails.map(s => [s.id, s])
+  )
   const versionMap = new Map(
     currentVersions.map(v => [v.software_id, v.current_version])
   )
 
-  return data.map(item => ({
-    software_id: item.software_id,
-    name: item.software.name,
-    manufacturer: item.software.manufacturer,
-    category: item.software.category,
-    initial_version: versionMap.get(item.software_id) || 'N/A',
-    added_date: item.tracked_at
-  }))
+  // Combine the data
+  return trackedData
+    .map(tracked => {
+      const software = softwareMap.get(tracked.software_id)
+      if (!software) return null // Skip if software not found
+
+      return {
+        software_id: tracked.software_id,
+        name: software.name,
+        manufacturer: software.manufacturer,
+        category: software.category,
+        initial_version: versionMap.get(tracked.software_id) || 'N/A',
+        added_date: tracked.tracked_at
+      }
+    })
+    .filter(Boolean) // Remove nulls
 }
