@@ -37,8 +37,8 @@ export async function authorizeRequest(req: Request): Promise<void> {
   // Check if user is admin
   const { data: adminUser, error: adminError } = await supabase
     .from('admin_users')
-    .select('id')
-    .eq('id', user.id)
+    .select('user_id')
+    .eq('user_id', user.id)
     .single()
 
   if (adminError || !adminUser) {
