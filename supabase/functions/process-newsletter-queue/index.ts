@@ -6,7 +6,7 @@ import { Resend } from 'https://esm.sh/resend@2.0.0'
 import PQueue from 'https://esm.sh/p-queue@7.3.4'
 import { authorizeRequest, getCorsHeaders } from '../_shared/newsletter-auth.ts'
 import { isTargetHourInTimezone } from '../_shared/newsletter-scheduler.ts'
-import { updateLastNotified } from '../_shared/newsletter-db.ts'
+import { updateLastNotified, incrementSponsorImpressions } from '../_shared/newsletter-db.ts'
 
 const corsHeaders = getCorsHeaders()
 
@@ -192,12 +192,7 @@ serve(async (req) => {
 
         // Increment sponsor impressions if present
         if (item.payload.sponsor?.id) {
-          await supabase
-            .from('newsletter_sponsors')
-            .update({
-              impression_count: supabase.raw('impression_count + 1')
-            })
-            .eq('id', item.payload.sponsor.id)
+          await incrementSponsorImpressions(supabase, item.payload.sponsor.id)
         }
 
         result.sent++
