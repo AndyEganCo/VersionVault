@@ -264,7 +264,22 @@ serve(async (req) => {
         }
 
         // ✅ Get software details using shared utility
-        const softwareIds = trackedSoftwareRaw.map(t => t.software_id)
+        // Filter out invalid UUIDs (data quality issue)
+        const isValidUUID = (str: string) => {
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+          return uuidRegex.test(str)
+        }
+
+        const softwareIds = trackedSoftwareRaw
+          .map(t => t.software_id)
+          .filter(id => {
+            if (!isValidUUID(id)) {
+              console.warn(`⚠️ Skipping invalid UUID in tracked_software: ${id}`)
+              return false
+            }
+            return true
+          })
+
         const softwareDetails = await getSoftwareDetails(supabase, softwareIds)
 
         // Map software details
@@ -272,12 +287,14 @@ serve(async (req) => {
           softwareDetails.map(s => [s.id, s])
         )
 
-        // Combine tracked software with details
-        const trackedSoftware = trackedSoftwareRaw.map(tracked => ({
-          software_id: tracked.software_id,
-          last_notified_version: tracked.last_notified_version,
-          software: softwareMap.get(tracked.software_id)
-        }))
+        // Combine tracked software with details (filter out invalid UUIDs)
+        const trackedSoftware = trackedSoftwareRaw
+          .filter(tracked => isValidUUID(tracked.software_id))
+          .map(tracked => ({
+            software_id: tracked.software_id,
+            last_notified_version: tracked.last_notified_version,
+            software: softwareMap.get(tracked.software_id)
+          }))
 
         // ✅ OPTIMIZED: Use batch function to get ONLY current versions
         // This is much faster than fetching all version history (1000+ rows → 100 rows)
