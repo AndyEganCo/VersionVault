@@ -23,8 +23,9 @@ export async function getTrackedSoftware(
 }
 
 /**
- * Get current versions for multiple software using Postgres batch function
- * This is optimized for users tracking 1000+ software
+ * Get current versions for multiple software
+ * Uses the same logic as getCurrentVersionFromHistory() to ensure consistency
+ * This is optimized for users tracking 1000+ software by batching queries
  */
 export async function getCurrentVersionsBatch(
   supabase: SupabaseClient,
@@ -32,16 +33,53 @@ export async function getCurrentVersionsBatch(
 ) {
   if (softwareIds.length === 0) return []
 
-  const { data, error } = await supabase
-    .rpc('get_current_versions_batch', {
-      software_ids: softwareIds
-    })
+  // Import the version comparison utility
+  const { getCurrentVersionFromHistory } = await import('./version-utils.ts')
+
+  // Fetch ALL version history for the software IDs
+  // Filter to newsletter_verified != false (includes true and null)
+  const { data: allVersions, error } = await supabase
+    .from('software_version_history')
+    .select('software_id, version, release_date, detected_at, notes, type, is_current_override, newsletter_verified')
+    .in('software_id', softwareIds)
+    .neq('newsletter_verified', false)
 
   if (error) {
-    throw new Error(`Failed to fetch current versions: ${error.message}`)
+    throw new Error(`Failed to fetch version history: ${error.message}`)
   }
 
-  return data || []
+  if (!allVersions || allVersions.length === 0) return []
+
+  // Group versions by software_id
+  const versionsBySoftware = new Map<string, typeof allVersions>()
+  for (const version of allVersions) {
+    const softwareId = version.software_id
+    if (!versionsBySoftware.has(softwareId)) {
+      versionsBySoftware.set(softwareId, [])
+    }
+    versionsBySoftware.get(softwareId)!.push(version)
+  }
+
+  // Use getCurrentVersionFromHistory() to find the current version for each software
+  const results = []
+  for (const softwareId of softwareIds) {
+    const versions = versionsBySoftware.get(softwareId)
+    if (!versions || versions.length === 0) continue
+
+    const currentVersion = getCurrentVersionFromHistory(versions, true)
+    if (currentVersion) {
+      results.push({
+        software_id: softwareId,
+        current_version: currentVersion.version,
+        release_date: currentVersion.release_date,
+        detected_at: currentVersion.detected_at,
+        notes: currentVersion.notes,
+        type: currentVersion.type
+      })
+    }
+  }
+
+  return results
 }
 
 /**
@@ -201,7 +239,7 @@ export async function getNewSoftware(
         manufacturer: software.manufacturer,
         category: software.category,
         initial_version: versionMap.get(tracked.software_id) || 'N/A',
-        added_date: tracked.tracked_at
+        added_date: tracked.created_at
       }
     })
     .filter(Boolean) // Remove nulls
