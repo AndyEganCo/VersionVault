@@ -296,6 +296,7 @@ serve(async (req) => {
         // Process each tracked software to find updates
         const updates: SoftwareUpdateSummary[] = []
         let skippedOldRelease = 0
+        let skippedNoChange = 0
 
         for (const tracked of trackedSoftware) {
           const software = tracked.software as any
@@ -316,6 +317,14 @@ serve(async (req) => {
           // Get the old version (what user was last notified about)
           const oldVersion = tracked.last_notified_version || 'N/A'
 
+          // Skip if there's no actual change (old version = new version)
+          // This prevents showing "570 → 570" as an "update"
+          if (oldVersion !== 'N/A' && oldVersion === currentVersion.current_version) {
+            console.log(`  ⏭️  Skipping ${software.name}: no change (${oldVersion})`)
+            skippedNoChange++
+            continue
+          }
+
           console.log(`  ✅ Including ${software.name}: ${oldVersion} → ${currentVersion.current_version} (released ${releaseDate})`)
           updates.push({
             software_id: tracked.software_id,
@@ -330,7 +339,7 @@ serve(async (req) => {
           })
         }
 
-        console.log(`  📊 Update filtering: ${updates.length} included, ${skippedOldRelease} released before lookback period`)
+        console.log(`  📊 Update filtering: ${updates.length} included, ${skippedOldRelease} too old, ${skippedNoChange} no change`)
 
         // Sort updates by release date (newest first)
         updates.sort((a, b) => {
@@ -463,140 +472,3 @@ serve(async (req) => {
     )
   }
 })
-
-// Helper: Compare versions
-function isNewerVersion(newVersion: string, currentVersion: string): boolean {
-  const parseVersion = (v: string) => {
-    const cleaned = v.replace(/^[vr]/i, '').split('-')[0]
-    return cleaned.split('.').map(p => parseInt(p, 10) || 0)
-  }
-
-  const newParts = parseVersion(newVersion)
-  const currentParts = parseVersion(currentVersion)
-
-  for (let i = 0; i < Math.max(newParts.length, currentParts.length); i++) {
-    const n = newParts[i] || 0
-    const c = currentParts[i] || 0
-    if (n > c) return true
-    if (n < c) return false
-  }
-  return false
-}
-
-// Helper: Calculate scheduled time for 8am in user's timezone
-// Returns the next occurrence based on frequency:
-// - daily: next 8 AM (today if before 8 AM, tomorrow if after)
-// - weekly: next Monday at 8 AM
-// - monthly: next 1st of month at 8 AM
-function calculateScheduledTime(timezone: string, hour: number, frequency: string): Date {
-  try {
-    const now = new Date()
-
-    // Get current time components in user's timezone
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    })
-
-    const parts = formatter.formatToParts(now)
-    const getValue = (type: string) => parts.find(p => p.type === type)?.value || '0'
-
-    const userNow = {
-      year: parseInt(getValue('year')),
-      month: parseInt(getValue('month')),
-      day: parseInt(getValue('day')),
-      hour: parseInt(getValue('hour')),
-    }
-
-    // Start with today in user's timezone
-    let targetDate = new Date(Date.UTC(userNow.year, userNow.month - 1, userNow.day))
-
-    // Calculate target date based on frequency
-    if (frequency === 'daily') {
-      // If current hour >= target hour, move to tomorrow
-      if (userNow.hour >= hour) {
-        targetDate.setUTCDate(targetDate.getUTCDate() + 1)
-      }
-    } else if (frequency === 'weekly') {
-      // Find next Monday
-      const weekdayFormatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        weekday: 'short',
-      })
-      const dayOfWeek = weekdayFormatter.format(now)
-      const dayNum = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[dayOfWeek] || 0
-
-      let daysToAdd = 0
-      if (dayNum === 1) {
-        // It's Monday
-        if (userNow.hour >= hour) {
-          daysToAdd = 7 // Past target hour, schedule for next Monday
-        } else {
-          daysToAdd = 0 // Before target hour, schedule for today
-        }
-      } else if (dayNum === 0) {
-        // Sunday
-        daysToAdd = 1
-      } else {
-        // Tuesday-Saturday: days until next Monday
-        daysToAdd = (8 - dayNum) % 7
-      }
-
-      targetDate.setUTCDate(targetDate.getUTCDate() + daysToAdd)
-    } else if (frequency === 'monthly') {
-      // Find next 1st of month
-      if (userNow.day === 1 && userNow.hour < hour) {
-        // It's the 1st and before target hour - keep current date
-      } else {
-        // Schedule for 1st of next month
-        targetDate = new Date(Date.UTC(userNow.year, userNow.month, 1))
-      }
-    }
-
-    // Build target time string in local timezone
-    const targetYear = targetDate.getUTCFullYear()
-    const targetMonth = targetDate.getUTCMonth() + 1
-    const targetDay = targetDate.getUTCDate()
-    const localTimeStr = `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}T${String(hour).padStart(2, '0')}:00:00`
-
-    // Get timezone offset at target date
-    const testDate = new Date(`${localTimeStr}Z`)
-    const offsetFormatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      timeZoneName: 'shortOffset',
-    })
-    const offsetParts = offsetFormatter.formatToParts(testDate)
-    const offsetPart = offsetParts.find(p => p.type === 'timeZoneName')?.value || ''
-
-    const offsetMatch = offsetPart.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/)
-    if (offsetMatch) {
-      const sign = offsetMatch[1] === '+' ? 1 : -1
-      const offsetHours = parseInt(offsetMatch[2], 10)
-      const offsetMins = parseInt(offsetMatch[3] || '0', 10)
-      const totalOffsetMins = sign * (offsetHours * 60 + offsetMins)
-
-      // Convert local time to UTC by subtracting offset
-      // Example: 08:00 GMT+5 = 03:00 UTC
-      // Example: 08:00 GMT-5 = 13:00 UTC
-      const utcDate = new Date(`${localTimeStr}Z`)
-      utcDate.setMinutes(utcDate.getMinutes() - totalOffsetMins)
-
-      console.log(`📅 Scheduled for ${timezone}: ${localTimeStr} (local) = ${utcDate.toISOString()} (UTC)`)
-      return utcDate
-    }
-
-    // Fallback: interpret as UTC
-    return new Date(`${localTimeStr}Z`)
-  } catch (error) {
-    console.error('Error calculating scheduled time:', error)
-    // Fallback: 8 hours from now
-    const fallback = new Date()
-    fallback.setHours(fallback.getHours() + 8)
-    return fallback
-  }
-}

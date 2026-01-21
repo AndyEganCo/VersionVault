@@ -25,7 +25,7 @@ export async function getTrackedSoftware(
 /**
  * Get current versions for multiple software
  * Uses the same logic as getCurrentVersionFromHistory() to ensure consistency
- * This is optimized for users tracking 1000+ software by batching queries
+ * This is optimized for users tracking 1000+ software by batching queries in chunks
  */
 export async function getCurrentVersionsBatch(
   supabase: SupabaseClient,
@@ -36,19 +36,38 @@ export async function getCurrentVersionsBatch(
   // Import the version comparison utility
   const { getCurrentVersionFromHistory } = await import('./version-utils.ts')
 
-  // Fetch ALL version history for the software IDs
-  // Filter to newsletter_verified = true (only explicitly verified versions, same as webapp)
-  const { data: allVersions, error } = await supabase
-    .from('software_version_history')
-    .select('software_id, version, release_date, detected_at, notes, type, is_current_override, newsletter_verified')
-    .in('software_id', softwareIds)
-    .eq('newsletter_verified', true)
-
-  if (error) {
-    throw new Error(`Failed to fetch version history: ${error.message}`)
+  // Process in chunks to avoid hitting query limits
+  // With 100+ software × 50 versions each = 5,000+ rows, we need to chunk
+  const CHUNK_SIZE = 20
+  const chunks = []
+  for (let i = 0; i < softwareIds.length; i += CHUNK_SIZE) {
+    chunks.push(softwareIds.slice(i, i + CHUNK_SIZE))
   }
 
-  if (!allVersions || allVersions.length === 0) return []
+  console.log(`📊 Fetching versions for ${softwareIds.length} software in ${chunks.length} chunks`)
+
+  // Fetch version history for each chunk
+  const allVersions = []
+  for (const chunk of chunks) {
+    const { data, error } = await supabase
+      .from('software_version_history')
+      .select('software_id, version, release_date, detected_at, notes, type, is_current_override, newsletter_verified')
+      .in('software_id', chunk)
+      .eq('newsletter_verified', true)
+      .limit(10000) // High limit per chunk to get all versions
+
+    if (error) {
+      throw new Error(`Failed to fetch version history: ${error.message}`)
+    }
+
+    if (data && data.length > 0) {
+      allVersions.push(...data)
+    }
+  }
+
+  console.log(`📊 Retrieved ${allVersions.length} total version records`)
+
+  if (allVersions.length === 0) return []
 
   // Group versions by software_id
   const versionsBySoftware = new Map<string, typeof allVersions>()
