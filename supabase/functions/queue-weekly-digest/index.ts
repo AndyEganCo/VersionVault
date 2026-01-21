@@ -296,7 +296,6 @@ serve(async (req) => {
         // Process each tracked software to find updates
         const updates: SoftwareUpdateSummary[] = []
         let skippedOldRelease = 0
-        let skippedNoChange = 0
 
         for (const tracked of trackedSoftware) {
           const software = tracked.software as any
@@ -314,24 +313,12 @@ serve(async (req) => {
             continue
           }
 
-          // Get the old version (what user was last notified about)
-          const oldVersion = tracked.last_notified_version || 'N/A'
-
-          // Skip if there's no actual change (old version = new version)
-          // This prevents showing "570 → 570" as an "update"
-          if (oldVersion !== 'N/A' && oldVersion === currentVersion.current_version) {
-            console.log(`  ⏭️  Skipping ${software.name}: no change (${oldVersion})`)
-            skippedNoChange++
-            continue
-          }
-
-          console.log(`  ✅ Including ${software.name}: ${oldVersion} → ${currentVersion.current_version} (released ${releaseDate})`)
+          console.log(`  ✅ Including ${software.name}: ${currentVersion.current_version} (released ${releaseDate})`)
           updates.push({
             software_id: tracked.software_id,
             name: software.name,
             manufacturer: software.manufacturer,
             category: software.category,
-            old_version: oldVersion,
             new_version: currentVersion.current_version,
             release_date: releaseDate,
             release_notes: currentVersion.notes || [],
@@ -339,7 +326,7 @@ serve(async (req) => {
           })
         }
 
-        console.log(`  📊 Update filtering: ${updates.length} included, ${skippedOldRelease} too old, ${skippedNoChange} no change`)
+        console.log(`  📊 Update filtering: ${updates.length} included, ${skippedOldRelease} released before lookback period`)
 
         // Sort updates by release date (newest first)
         updates.sort((a, b) => {
