@@ -25,7 +25,7 @@ export async function getTrackedSoftware(
 /**
  * Get current versions for multiple software
  * Uses the same logic as getCurrentVersionFromHistory() to ensure consistency
- * This is optimized for users tracking 1000+ software by batching queries
+ * This is optimized for users tracking 1000+ software by batching queries in chunks
  */
 export async function getCurrentVersionsBatch(
   supabase: SupabaseClient,
@@ -36,19 +36,38 @@ export async function getCurrentVersionsBatch(
   // Import the version comparison utility
   const { getCurrentVersionFromHistory } = await import('./version-utils.ts')
 
-  // Fetch ALL version history for the software IDs
-  // Filter to newsletter_verified = true (only explicitly verified versions, same as webapp)
-  const { data: allVersions, error } = await supabase
-    .from('software_version_history')
-    .select('software_id, version, release_date, detected_at, notes, type, is_current_override, newsletter_verified')
-    .in('software_id', softwareIds)
-    .eq('newsletter_verified', true)
-
-  if (error) {
-    throw new Error(`Failed to fetch version history: ${error.message}`)
+  // Process in chunks to avoid hitting query limits
+  // With 100+ software × 50 versions each = 5,000+ rows, we need to chunk
+  const CHUNK_SIZE = 20
+  const chunks = []
+  for (let i = 0; i < softwareIds.length; i += CHUNK_SIZE) {
+    chunks.push(softwareIds.slice(i, i + CHUNK_SIZE))
   }
 
-  if (!allVersions || allVersions.length === 0) return []
+  console.log(`📊 Fetching versions for ${softwareIds.length} software in ${chunks.length} chunks`)
+
+  // Fetch version history for each chunk
+  const allVersions = []
+  for (const chunk of chunks) {
+    const { data, error } = await supabase
+      .from('software_version_history')
+      .select('software_id, version, release_date, detected_at, notes, type, is_current_override, newsletter_verified')
+      .in('software_id', chunk)
+      .eq('newsletter_verified', true)
+      .limit(10000) // High limit per chunk to get all versions
+
+    if (error) {
+      throw new Error(`Failed to fetch version history: ${error.message}`)
+    }
+
+    if (data && data.length > 0) {
+      allVersions.push(...data)
+    }
+  }
+
+  console.log(`📊 Retrieved ${allVersions.length} total version records`)
+
+  if (allVersions.length === 0) return []
 
   // Group versions by software_id
   const versionsBySoftware = new Map<string, typeof allVersions>()
@@ -66,7 +85,18 @@ export async function getCurrentVersionsBatch(
     const versions = versionsBySoftware.get(softwareId)
     if (!versions || versions.length === 0) continue
 
+    // DEBUG: Log versions for ELM 2025
+    if (versions.some(v => v.software_id === '32784ed8-c38f-4d51-bb87-e8ec9b06524c')) {
+      console.log(`🔍 DEBUG ELM 2025: Found ${versions.length} versions:`, versions.map(v => v.version).join(', '))
+    }
+
     const currentVersion = getCurrentVersionFromHistory(versions, true)
+
+    // DEBUG: Log result for ELM 2025
+    if (versions.some(v => v.software_id === '32784ed8-c38f-4d51-bb87-e8ec9b06524c')) {
+      console.log(`🔍 DEBUG ELM 2025: getCurrentVersionFromHistory returned:`, currentVersion?.version)
+    }
+
     if (currentVersion) {
       results.push({
         software_id: softwareId,
@@ -191,8 +221,8 @@ export async function incrementSponsorImpressions(
 }
 
 /**
- * Get newly added software to the platform (not tracked by user yet)
- * This shows software recently added to VersionVault that the user might want to track
+ * Get newly added software to the platform
+ * Shows all software recently added to VersionVault within the time window
  */
 export async function getNewSoftware(
   supabase: SupabaseClient,
@@ -214,27 +244,7 @@ export async function getNewSoftware(
 
   if (!newSoftwareData || newSoftwareData.length === 0) return []
 
-  // Get software the user is already tracking
-  const { data: trackedData, error: trackedError } = await supabase
-    .from('tracked_software')
-    .select('software_id')
-    .eq('user_id', userId)
-
-  if (trackedError) {
-    throw new Error(`Failed to fetch tracked software: ${trackedError.message}`)
-  }
-
-  // Create a set of tracked software IDs for fast lookup
-  const trackedIds = new Set(trackedData?.map(t => t.software_id) || [])
-
-  // Filter out software the user is already tracking
-  const untrackedSoftware = newSoftwareData.filter(s => !trackedIds.has(s.id))
-
-  console.log(`  📊 After filtering tracked software: ${untrackedSoftware.length} untracked (user tracks ${trackedIds.size} total)`)
-
-  if (untrackedSoftware.length === 0) return []
-
-  const softwareIds = untrackedSoftware.map(s => s.id)
+  const softwareIds = newSoftwareData.map(s => s.id)
 
   // Get current versions for the new software
   const currentVersions = await getCurrentVersionsBatch(supabase, softwareIds)
@@ -245,7 +255,7 @@ export async function getNewSoftware(
   )
 
   // Combine the data (already sorted by created_at descending)
-  return untrackedSoftware.map(software => ({
+  return newSoftwareData.map(software => ({
     software_id: software.id,
     name: software.name,
     manufacturer: software.manufacturer,
