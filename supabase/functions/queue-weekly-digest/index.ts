@@ -376,7 +376,7 @@ serve(async (req) => {
         const idempotencyKey = generateIdempotencyKey(sub.user_id, frequency)
 
         // ✅ Calculate scheduled time (8am in user's timezone - next occurrence)
-        const scheduledFor = calculateScheduledTime(sub.timezone || 'America/New_York', 8, frequency)
+        const scheduledFor = calculateScheduledTime(frequency as any, sub.timezone || 'America/New_York')
 
         // Determine email type and payload
         const emailType = hasUpdates ? `${frequency}_digest` : 'all_quiet'
