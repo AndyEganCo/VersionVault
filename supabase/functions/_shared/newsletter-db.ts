@@ -221,8 +221,8 @@ export async function incrementSponsorImpressions(
 }
 
 /**
- * Get newly added software to the platform (not tracked by user yet)
- * This shows software recently added to VersionVault that the user might want to track
+ * Get newly added software to the platform
+ * Shows all software recently added to VersionVault within the time window
  */
 export async function getNewSoftware(
   supabase: SupabaseClient,
@@ -244,27 +244,7 @@ export async function getNewSoftware(
 
   if (!newSoftwareData || newSoftwareData.length === 0) return []
 
-  // Get software the user is already tracking
-  const { data: trackedData, error: trackedError } = await supabase
-    .from('tracked_software')
-    .select('software_id')
-    .eq('user_id', userId)
-
-  if (trackedError) {
-    throw new Error(`Failed to fetch tracked software: ${trackedError.message}`)
-  }
-
-  // Create a set of tracked software IDs for fast lookup
-  const trackedIds = new Set(trackedData?.map(t => t.software_id) || [])
-
-  // Filter out software the user is already tracking
-  const untrackedSoftware = newSoftwareData.filter(s => !trackedIds.has(s.id))
-
-  console.log(`  📊 After filtering tracked software: ${untrackedSoftware.length} untracked (user tracks ${trackedIds.size} total)`)
-
-  if (untrackedSoftware.length === 0) return []
-
-  const softwareIds = untrackedSoftware.map(s => s.id)
+  const softwareIds = newSoftwareData.map(s => s.id)
 
   // Get current versions for the new software
   const currentVersions = await getCurrentVersionsBatch(supabase, softwareIds)
@@ -275,7 +255,7 @@ export async function getNewSoftware(
   )
 
   // Combine the data (already sorted by created_at descending)
-  return untrackedSoftware.map(software => ({
+  return newSoftwareData.map(software => ({
     software_id: software.id,
     name: software.name,
     manufacturer: software.manufacturer,
@@ -283,4 +263,5 @@ export async function getNewSoftware(
     initial_version: versionMap.get(software.id) || 'N/A',
     added_date: software.created_at
   }))
+}
 }
