@@ -264,4 +264,3 @@ export async function getNewSoftware(
     added_date: software.created_at
   }))
 }
-}
