@@ -528,9 +528,26 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
         } else {
           // Fallback: search text for version patterns
           const text = element.textContent || '';
-          const versionMatch = text.match(/v?(\d+\.\d+\.?\d*)/i);
-          if (versionMatch) {
-            version = versionMatch[1];
+
+          // First, try explicitly labeled versions: "Version 1.2.3", "Firmware 1.0", "v2.1.0"
+          const labeledMatch = text.match(/(?:version|firmware|ver\.?|release)\s+v?(\d+\.\d+(?:\.\d+)*)/i);
+          if (labeledMatch) {
+            version = labeledMatch[1];
+          } else {
+            // Fallback: match bare version patterns, but skip date-like values (MM.DD.YY)
+            const bareMatches = [...text.matchAll(/\b(\d+\.\d+(?:\.\d+)*)\b/g)];
+            for (const m of bareMatches) {
+              const candidate = m[1];
+              const parts = candidate.split('.');
+              // Skip 3-part patterns that look like dates (MM.DD.YY or DD.MM.YY)
+              if (parts.length === 3) {
+                const [a, b, c] = parts.map(Number);
+                if (a >= 1 && a <= 12 && b >= 1 && b <= 31 && c >= 0 && c <= 99) continue;
+                if (a >= 1 && a <= 31 && b >= 1 && b <= 12 && c >= 0 && c <= 99) continue;
+              }
+              version = candidate;
+              break;
+            }
           }
         }
 
@@ -539,6 +556,12 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
         const dateElement = element.querySelector('.date, .release-date, [class*="date"]');
         if (dateElement) {
           date = dateElement.textContent?.trim() || '';
+        }
+
+        // Safety: if version matches the date value, it's a date misidentified as a version
+        if (version && date && date.includes(version)) {
+          console.log(`  ⚠️ Version "${version}" matches date "${date}" - clearing misidentified version`);
+          version = '';
         }
 
         // Extract release notes link (look for links to .txt, .pdf, or "release notes" links)
