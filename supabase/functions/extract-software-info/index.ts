@@ -50,7 +50,8 @@ import {
 import {
   detectBotBlocker,
   logBotBlocking,
-  type BlockerDetection
+  type BlockerDetection,
+  type FetchMethod
 } from '../_shared/bot-blocker-handler.ts'
 
 import {
@@ -663,7 +664,7 @@ async function fetchWebpageContent(
     }
 
     // Determine starting method based on strategy and useBrowserless flag
-    let startingMethod: 'static' | 'browserless' | 'browserless-extended' | 'interactive' = 'static'
+    let startingMethod: FetchMethod = 'static'
 
     if (strategy && (strategy.releaseNotesSelectors || strategy.expandSelectors || strategy.customScript || strategy.waitForSelector)) {
       startingMethod = 'interactive'
@@ -680,7 +681,7 @@ async function fetchWebpageContent(
       startingMethod,
       scrapingStrategy: strategy, // Pass through the scraping strategy for interactive method
       retryConfig: {
-        maxAttempts: isKnownDifficult ? 2 : 3, // Reduced from 5 and 4 to prevent timeouts
+        maxAttempts: isKnownDifficult ? 3 : 4, // Allow enough attempts for residential proxy escalation
         baseDelay: isKnownDifficult ? 2000 : 1500, // Reduced delays
         rotateUserAgent: true,
         escalateMethods: true,
@@ -2482,12 +2483,15 @@ serve(async (req) => {
     }
 
     // Set extraction method based on fetch method (Phase 3 tracking)
-    // Priority: interactive > pdf > browserless > static
+    // Priority: interactive > pdf > browserless-residential > browserless > static
     if (fetchMethod === 'interactive') {
       extracted.extractionMethod = 'interactive'
       console.log('✅ Extraction method: INTERACTIVE (Phase 3)')
     } else if (fetchMethod === 'pdf') {
       extracted.extractionMethod = 'pdf'
+    } else if (fetchMethod === 'browserless-residential') {
+      extracted.extractionMethod = extracted.extractionMethod || 'browserless'
+      console.log('✅ Extraction method: BROWSERLESS (residential proxy)')
     } else if (fetchMethod === 'browserless') {
       extracted.extractionMethod = extracted.extractionMethod || 'browserless'
     } else if (!extracted.extractionMethod || extracted.extractionMethod === 'legacy') {

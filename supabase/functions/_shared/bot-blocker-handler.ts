@@ -259,7 +259,7 @@ export interface RetryConfig {
  * Default retry configuration
  */
 export const DEFAULT_RETRY_CONFIG: RetryConfig = {
-  maxAttempts: 4,
+  maxAttempts: 5,
   baseDelay: 2000,
   rotateUserAgent: true,
   escalateMethods: true,
@@ -268,7 +268,7 @@ export const DEFAULT_RETRY_CONFIG: RetryConfig = {
 /**
  * Fetch method types
  */
-export type FetchMethod = 'static' | 'browserless' | 'browserless-extended' | 'interactive'
+export type FetchMethod = 'static' | 'browserless' | 'browserless-extended' | 'browserless-residential' | 'interactive'
 
 /**
  * Get next fetch method in escalation chain
@@ -278,6 +278,7 @@ export function getNextFetchMethod(current: FetchMethod): FetchMethod | null {
     'static',
     'browserless',
     'browserless-extended',
+    'browserless-residential',
     'interactive',
   ]
 
