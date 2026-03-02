@@ -6,7 +6,8 @@
  * 2. Retry with different User-Agent + exponential backoff
  * 3. Browserless with stealth
  * 4. Browserless with extended wait (for Cloudflare)
- * 5. Interactive scraping (if strategy provided)
+ * 5. Browserless with residential proxy (for IP-reputation blocking)
+ * 6. Interactive scraping (if strategy provided)
  */
 
 import {
@@ -71,11 +72,17 @@ async function fetchBrowserless(
   url: string,
   apiKey: string,
   extended: boolean = false,
-  blockerType: any = null
+  blockerType: any = null,
+  useResidentialProxy: boolean = false
 ): Promise<string> {
-  console.log(`🌐 Fetching with Browserless${extended ? ' (extended)' : ''}: ${url}`)
+  const label = useResidentialProxy ? ' (residential proxy)' : extended ? ' (extended)' : ''
+  console.log(`🌐 Fetching with Browserless${label}: ${url}`)
 
-  const browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}&stealth=true&bestAttempt=true`
+  let browserlessUrl = `https://chrome.browserless.io/content?token=${apiKey}&stealth=true&bestAttempt=true`
+
+  if (useResidentialProxy) {
+    browserlessUrl += '&proxy=residential&proxyCountry=us&proxySticky=true'
+  }
 
   const options = getBrowserlessOptions(blockerType, extended)
 
@@ -96,7 +103,7 @@ async function fetchBrowserless(
   }
 
   const html = await response.text()
-  console.log(`✅ Browserless${extended ? ' (extended)' : ''}: ${html.length} characters`)
+  console.log(`✅ Browserless${label}: ${html.length} characters`)
 
   return html
 }
@@ -155,6 +162,19 @@ export async function fetchWithRetry(
             options.browserlessApiKey,
             true,
             lastBlockerDetection?.blockerType
+          )
+          break
+
+        case 'browserless-residential':
+          if (!options.browserlessApiKey) {
+            throw new Error('Browserless API key required for this method')
+          }
+          html = await fetchBrowserless(
+            url,
+            options.browserlessApiKey,
+            true,
+            lastBlockerDetection?.blockerType,
+            true // residential proxy
           )
           break
 
@@ -300,7 +320,7 @@ export async function fetchWebpage(
   const result = await fetchWithRetry(url, {
     browserlessApiKey,
     retryConfig: {
-      maxAttempts: 4,
+      maxAttempts: 5,
       rotateUserAgent: true,
       escalateMethods: true,
     },
