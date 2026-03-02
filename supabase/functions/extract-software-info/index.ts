@@ -534,10 +534,17 @@ function parseProductBlocks(doc: any, targetProduct: string): Array<{name: strin
           if (labeledMatch) {
             version = labeledMatch[1];
           } else {
-            // Fallback: match bare version patterns, but skip date-like values (MM.DD.YY)
+            // Fallback: match bare version patterns, but skip dates and file sizes
             const bareMatches = [...text.matchAll(/\b(\d+\.\d+(?:\.\d+)*)\b/g)];
             for (const m of bareMatches) {
               const candidate = m[1];
+              const matchEnd = (m.index || 0) + m[0].length;
+              const textAfter = text.substring(matchEnd, matchEnd + 10).trim().toLowerCase();
+              const textBefore = text.substring(Math.max(0, (m.index || 0) - 15), m.index || 0).toLowerCase();
+
+              // Skip file sizes: numbers followed by KB, MB, GB, TB, or preceded by "size"
+              if (/^(kb|mb|gb|tb|bytes)\b/i.test(textAfter) || textBefore.includes('size')) continue;
+
               const parts = candidate.split('.');
               // Skip 3-part patterns that look like dates (MM.DD.YY or DD.MM.YY)
               if (parts.length === 3) {
@@ -793,7 +800,9 @@ async function fetchWebpageContent(
           console.log(`  ✅ Found ${goodMatches.length} high-priority blocks (score >= 85)`);
         }
 
-        if (goodMatches.length > 0) {
+        // Only use structured extraction if at least one block has an actual version
+        const hasAnyVersion = goodMatches.some(b => b.version);
+        if (goodMatches.length > 0 && hasAnyVersion) {
           console.log(`\n✅ STRUCTURED EXTRACTION: Found ${goodMatches.length} matching product blocks`);
 
           // Combine the content from matching blocks
@@ -848,6 +857,8 @@ async function fetchWebpageContent(
             method: 'structured_blocks',
             blockerDetected: result.blockerDetected?.isBlocked ? result.blockerDetected : undefined
           };
+        } else if (goodMatches.length > 0 && !hasAnyVersion) {
+          console.log(`⚠️ Found ${goodMatches.length} matching blocks but none had extractable versions - falling through to full-page extraction`);
         } else {
           console.log(`⚠️ Found ${productBlocks.length} product blocks but none matched well (best score: ${productBlocks[0]?.score || 0})`);
         }
