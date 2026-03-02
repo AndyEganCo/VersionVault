@@ -178,9 +178,9 @@ serve(async (req) => {
         console.error(`❌ Error sending to ${userEmail}:`, error)
       }
 
-      // Rate limit: wait 500ms between emails (2 per second)
+      // Rate limit: wait 600ms between emails (~1.6 per second, under Resend's 2 req/sec limit)
       if (i < admins.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 500))
+        await new Promise(resolve => setTimeout(resolve, 600))
       }
     }
 
