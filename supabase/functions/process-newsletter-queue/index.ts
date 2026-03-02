@@ -3,7 +3,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Resend } from 'https://esm.sh/resend@2.0.0'
-import PQueue from 'https://esm.sh/p-queue@7.3.4'
 import { authorizeRequest, getCorsHeaders } from '../_shared/newsletter-auth.ts'
 import { isTargetHourInTimezone } from '../_shared/newsletter-scheduler.ts'
 import { updateLastNotified, incrementSponsorImpressions } from '../_shared/newsletter-db.ts'
@@ -12,15 +11,11 @@ const corsHeaders = getCorsHeaders()
 
 const BATCH_SIZE = 100
 const MAX_RETRY_ATTEMPTS = 3
+const RATE_LIMIT_DELAY_MS = 600 // Resend allows 2 req/sec; 600ms gives a safe margin
 const VERSIONVAULT_FROM = 'VersionVault <digest@updates.versionvault.dev>'
 const VERSIONVAULT_URL = 'https://versionvault.dev'
 
-// ✅ Parallel queue with rate limiting (2 req/sec = Resend limit)
-const emailQueue = new PQueue({
-  concurrency: 2,      // 2 requests at a time
-  interval: 1000,      // per second
-  intervalCap: 2       // = 2 req/sec
-})
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 interface ProcessResult {
   processed: number
@@ -117,8 +112,8 @@ serve(async (req) => {
       errors: [],
     }
 
-    // ✅ Process items in PARALLEL with rate limiting using p-queue
-    console.log(`⚡ Processing ${itemsToProcess.length} emails in parallel (2 concurrent, rate limited to 2 req/sec)`)
+    // Process items sequentially with rate limiting (600ms delay = ~1.6 req/sec, under Resend's 2 req/sec limit)
+    console.log(`⚡ Processing ${itemsToProcess.length} emails sequentially (rate limited to ~1.6 req/sec)`)
 
     const startTime = Date.now()
 
@@ -216,13 +211,12 @@ serve(async (req) => {
       }
     }
 
-    // Add all items to the queue for parallel processing
-    for (const item of itemsToProcess) {
-      emailQueue.add(() => processQueueItem(item))
+    for (let i = 0; i < itemsToProcess.length; i++) {
+      await processQueueItem(itemsToProcess[i])
+      if (i < itemsToProcess.length - 1) {
+        await delay(RATE_LIMIT_DELAY_MS)
+      }
     }
-
-    // Wait for all emails to be processed
-    await emailQueue.onIdle()
 
     const executionTime = Date.now() - startTime
     console.log(`\n✅ Queue processing complete in ${executionTime}ms!`)

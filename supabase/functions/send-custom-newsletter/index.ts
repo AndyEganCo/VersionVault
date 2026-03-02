@@ -11,7 +11,7 @@ const corsHeaders = {
 
 const VERSIONVAULT_FROM = 'VersionVault <newsletter@updates.versionvault.dev>';
 const VERSIONVAULT_URL = 'https://versionvault.dev';
-const RATE_LIMIT_DELAY_MS = 500; // Resend allows 2 req/sec
+const RATE_LIMIT_DELAY_MS = 600; // Resend allows 2 req/sec; 600ms gives a safe margin
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
