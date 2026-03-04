@@ -13,7 +13,7 @@ import {
 } from '../_shared/newsletter-db.ts'
 import {
   calculateScheduledTime,
-  getSinceDays,
+  getSinceDate,
   generateIdempotencyKey
 } from '../_shared/newsletter-scheduler.ts'
 import type {
@@ -138,8 +138,8 @@ serve(async (req) => {
 
     console.log(`📬 Starting ${frequency} digest queue generation...`)
 
-    // ✅ Calculate days to look back using shared utility
-    let sinceDays = getSinceDays(frequency)
+    // ✅ Calculate since date snapped to start of day (midnight UTC)
+    let sinceDate = getSinceDate(frequency)
 
     // Get users who want this frequency of emails
     let userSettingsQuery = supabase
@@ -182,9 +182,9 @@ serve(async (req) => {
     if (testUserId && userSettings.length > 0 && userSettings[0].notification_frequency) {
       frequency = userSettings[0].notification_frequency as NotificationFrequency
       console.log(`🧪 Test mode: using user's actual frequency: ${frequency}`)
-      // Recalculate sinceDays based on user's actual frequency
-      sinceDays = getSinceDays(frequency)
-      console.log(`📅 Looking back ${sinceDays} days for updates`)
+      // Recalculate sinceDate based on user's actual frequency
+      sinceDate = getSinceDate(frequency)
+      console.log(`📅 Looking back to ${sinceDate.toISOString()} for updates`)
     }
 
     // Combine user settings with emails
@@ -217,9 +217,8 @@ serve(async (req) => {
       cta_text: sponsor.cta_text,
     } : null
 
-    // Calculate sinceDate once outside the loop (same for all subscribers)
-    const sinceDate = new Date()
-    sinceDate.setDate(sinceDate.getDate() - sinceDays)
+    // sinceDate already calculated above (snapped to midnight UTC)
+    console.log(`📅 Using sinceDate: ${sinceDate.toISOString()}`)
 
     // Process each subscriber
     for (const sub of subscribers) {
