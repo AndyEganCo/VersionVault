@@ -2,7 +2,6 @@
 // Triggered by cron job on Sunday evening to prepare Monday's emails
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { compareVersions } from '../_shared/version-utils.ts'
 import { authorizeRequest, getCorsHeaders } from '../_shared/newsletter-auth.ts'
 import {
   getTrackedSoftware,
@@ -21,13 +20,14 @@ import type {
   QueueSummary,
   QueueResult,
   SoftwareUpdateSummary,
-  NewSoftwareSummary
+  NotificationFrequency,
+  CurrentVersion,
+  SoftwareDetails,
+  AllQuietPreference,
 } from '../_shared/newsletter-types.ts'
 
 const corsHeaders = getCorsHeaders()
 
-// Constants
-const MAX_UPDATES_PER_EMAIL = 20
 const ALL_QUIET_MESSAGES = [
   "Your software is suspiciously stable this week. We're keeping an eye on it.",
   "Nothing to report. Your apps are quietly doing their jobs.",
@@ -38,15 +38,6 @@ const ALL_QUIET_MESSAGES = [
   "The update fairy took the week off. Check back soon!",
   "Silence in the changelog. Your software is vibing.",
 ]
-
-interface QueueResult {
-  userId: string
-  email: string
-  success: boolean
-  hasUpdates: boolean
-  updateCount: number
-  error?: string
-}
 
 serve(async (req) => {
   console.log(`📥 Received ${req.method} request to queue-weekly-digest`)
@@ -67,7 +58,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Get frequency from query parameter or request body, default to weekly
-    let frequency = 'weekly'
+    let frequency: NotificationFrequency = 'weekly'
     let testUserId: string | undefined = undefined
     let testEmail: string | undefined = undefined
     let priority = 0
@@ -75,8 +66,8 @@ serve(async (req) => {
     // First try query parameter (more reliable)
     const url = new URL(req.url)
     const queryFrequency = url.searchParams.get('frequency')
-    if (queryFrequency) {
-      frequency = queryFrequency
+    if (queryFrequency && ['daily', 'weekly', 'monthly'].includes(queryFrequency)) {
+      frequency = queryFrequency as NotificationFrequency
       console.log(`✅ Frequency from query param: ${frequency}`)
     }
 
@@ -84,8 +75,8 @@ serve(async (req) => {
     try {
       const body = await req.json()
       if (body) {
-        if (body.frequency) {
-          frequency = body.frequency
+        if (body.frequency && ['daily', 'weekly', 'monthly'].includes(body.frequency)) {
+          frequency = body.frequency as NotificationFrequency
           console.log(`✅ Frequency from request body: ${frequency}`)
         }
         if (body.test_user_id) {
@@ -106,20 +97,23 @@ serve(async (req) => {
       // No body or invalid JSON, use defaults
     }
 
+    // Fetch all auth users once (used for email lookup and subscriber mapping)
+    // Note: listUsers() has a default limit of 50. Set perPage to ensure we get all users.
+    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
+      perPage: 1000
+    })
+
+    if (authError) {
+      throw new Error(`Failed to fetch user emails: ${authError.message}`)
+    }
+
+    // Create a map of user_id -> email
+    const userEmailMap = new Map(
+      authUsers.users.map(u => [u.id, u.email])
+    )
+
     // If test_email provided, look up the user ID
     if (testEmail && !testUserId) {
-      const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
-        perPage: 1000
-      })
-
-      if (authError) {
-        console.error('Failed to fetch users for email lookup:', authError)
-        return new Response(
-          JSON.stringify({ error: 'Failed to look up user by email' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
-
       const targetUser = authUsers.users.find(u => u.email === testEmail)
 
       if (!targetUser) {
@@ -145,7 +139,7 @@ serve(async (req) => {
     console.log(`📬 Starting ${frequency} digest queue generation...`)
 
     // ✅ Calculate days to look back using shared utility
-    let sinceDays = getSinceDays(frequency as any)
+    let sinceDays = getSinceDays(frequency)
 
     // Get users who want this frequency of emails
     let userSettingsQuery = supabase
@@ -186,27 +180,12 @@ serve(async (req) => {
 
     // In test mode, use the user's actual notification frequency
     if (testUserId && userSettings.length > 0 && userSettings[0].notification_frequency) {
-      frequency = userSettings[0].notification_frequency
+      frequency = userSettings[0].notification_frequency as NotificationFrequency
       console.log(`🧪 Test mode: using user's actual frequency: ${frequency}`)
       // Recalculate sinceDays based on user's actual frequency
-      sinceDays = getSinceDays(frequency as any)
+      sinceDays = getSinceDays(frequency)
       console.log(`📅 Looking back ${sinceDays} days for updates`)
     }
-
-    // Get user emails from auth.users
-    // Note: listUsers() has a default limit of 50. Set perPage to ensure we get all users.
-    const { data: authUsers, error: authError } = await supabase.auth.admin.listUsers({
-      perPage: 1000 // Fetch up to 1000 users (covers growth)
-    })
-
-    if (authError) {
-      throw new Error(`Failed to fetch user emails: ${authError.message}`)
-    }
-
-    // Create a map of user_id -> email
-    const userEmailMap = new Map(
-      authUsers.users.map(u => [u.id, u.email])
-    )
 
     // Combine user settings with emails
     const subscribers = userSettings
@@ -238,6 +217,10 @@ serve(async (req) => {
       cta_text: sponsor.cta_text,
     } : null
 
+    // Calculate sinceDate once outside the loop (same for all subscribers)
+    const sinceDate = new Date()
+    sinceDate.setDate(sinceDate.getDate() - sinceDays)
+
     // Process each subscriber
     for (const sub of subscribers) {
       const userEmail = sub.email
@@ -268,7 +251,7 @@ serve(async (req) => {
         const softwareDetails = await getSoftwareDetails(supabase, softwareIds)
 
         // Map software details
-        const softwareMap = new Map(
+        const softwareMap = new Map<string, SoftwareDetails>(
           softwareDetails.map(s => [s.id, s])
         )
 
@@ -280,16 +263,12 @@ serve(async (req) => {
         }))
 
         // ✅ OPTIMIZED: Use batch function to get ONLY current versions
-        // This is much faster than fetching all version history (1000+ rows → 100 rows)
-        const sinceDate = new Date()
-        sinceDate.setDate(sinceDate.getDate() - sinceDays)
-
         console.log(`📊 Fetching current versions for ${softwareIds.length} tracked software...`)
         const currentVersions = await getCurrentVersionsBatch(supabase, softwareIds)
         console.log(`✅ Got ${currentVersions.length} current versions`)
 
         // Create a map of software_id -> current version
-        const currentVersionMap = new Map(
+        const currentVersionMap = new Map<string, CurrentVersion>(
           currentVersions.map(v => [v.software_id, v])
         )
 
@@ -298,7 +277,7 @@ serve(async (req) => {
         let skippedOldRelease = 0
 
         for (const tracked of trackedSoftware) {
-          const software = tracked.software as any
+          const software = tracked.software
           if (!software) continue
 
           const currentVersion = currentVersionMap.get(tracked.software_id)
@@ -319,10 +298,11 @@ serve(async (req) => {
             name: software.name,
             manufacturer: software.manufacturer,
             category: software.category,
+            old_version: tracked.last_notified_version || currentVersion.current_version,
             new_version: currentVersion.current_version,
             release_date: releaseDate,
             release_notes: currentVersion.notes || [],
-            update_type: currentVersion.type || 'patch',
+            update_type: currentVersion.type as SoftwareUpdateSummary['update_type'] || 'patch',
           })
         }
 
@@ -335,7 +315,6 @@ serve(async (req) => {
           return dateB - dateA
         })
 
-        // Show all updates (no limit)
         const hasUpdates = updates.length > 0
 
         // ✅ OPTIMIZED: Use utility function to get new software with current versions
@@ -344,7 +323,7 @@ serve(async (req) => {
 
         // Check if we should send an all_quiet email based on user preference
         if (!hasUpdates) {
-          const allQuietPref = sub.all_quiet_preference || 'always'
+          const allQuietPref: AllQuietPreference = (sub.all_quiet_preference as AllQuietPreference) || 'always'
 
           // Determine if we should send all quiet email
           const shouldSendAllQuiet =
@@ -363,7 +342,7 @@ serve(async (req) => {
         const idempotencyKey = generateIdempotencyKey(sub.user_id, frequency)
 
         // ✅ Calculate scheduled time (8am in user's timezone - next occurrence)
-        const scheduledFor = calculateScheduledTime(frequency as any, sub.timezone || 'America/New_York')
+        const scheduledFor = calculateScheduledTime(frequency, sub.timezone || 'America/New_York')
 
         // Determine email type and payload
         const emailType = hasUpdates ? `${frequency}_digest` : 'all_quiet'
@@ -373,7 +352,7 @@ serve(async (req) => {
           sponsor: sponsorData,
           all_quiet_message: hasUpdates ? undefined : ALL_QUIET_MESSAGES[Math.floor(Math.random() * ALL_QUIET_MESSAGES.length)],
           tracked_count: trackedSoftware.length,
-          frequency: frequency, // Include frequency for all_quiet emails
+          frequency: frequency,
         }
 
         // Insert into queue
@@ -387,7 +366,7 @@ serve(async (req) => {
             status: 'pending',
             scheduled_for: scheduledFor.toISOString(),
             timezone: sub.timezone || 'America/New_York',
-            priority: priority, // Support test sends with high priority
+            priority: priority,
             idempotency_key: idempotencyKey,
           }, {
             onConflict: 'idempotency_key',
@@ -405,22 +384,18 @@ serve(async (req) => {
         }
 
         results.push({
-          userId: sub.user_id,
+          user_id: sub.user_id,
           email: userEmail,
           success: true,
-          hasUpdates,
-          updateCount: updates.length,
         })
 
         console.log(`✅ Queued for ${userEmail}: ${updates.length} updates`)
 
       } catch (error) {
         const result: QueueResult = {
-          userId: sub.user_id,
+          user_id: sub.user_id,
           email: userEmail,
           success: false,
-          hasUpdates: false,
-          updateCount: 0,
           error: error.message,
         }
         results.push(result)
@@ -430,7 +405,7 @@ serve(async (req) => {
     }
 
     const summary: QueueSummary = {
-      totalUsers: subscribers?.length || 0,
+      totalUsers: subscribers.length,
       queued: results.filter(r => r.success).length,
       withUpdates,
       allQuiet,
