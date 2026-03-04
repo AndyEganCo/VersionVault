@@ -147,6 +147,19 @@ export function getSinceDays(frequency: 'daily' | 'weekly' | 'monthly'): number 
 }
 
 /**
+ * Get the since date snapped to the start of the day (midnight UTC).
+ * This prevents releases with midnight timestamps (e.g. 2026-03-03T00:00:00Z)
+ * from being missed when the digest runs slightly after midnight.
+ */
+export function getSinceDate(frequency: 'daily' | 'weekly' | 'monthly'): Date {
+  const sinceDays = getSinceDays(frequency)
+  const sinceDate = new Date()
+  sinceDate.setUTCDate(sinceDate.getUTCDate() - sinceDays)
+  sinceDate.setUTCHours(0, 0, 0, 0)
+  return sinceDate
+}
+
+/**
  * Generate idempotency key for queue entry
  */
 export function generateIdempotencyKey(
