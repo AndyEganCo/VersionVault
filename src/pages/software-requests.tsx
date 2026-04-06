@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select';
-import { Check, X, Trash2, ExternalLink, Loader2, CheckCircle, User, Mail, AlertCircle, Filter } from 'lucide-react';
+import { Check, X, Trash2, ExternalLink, Loader2, CheckCircle, User, Mail, AlertCircle, Filter, GitMerge } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
@@ -31,6 +31,7 @@ import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
 import { RequestSoftwareModal } from '@/components/software/request-software-modal';
 import { RequestFeatureModal } from '@/components/software/request-feature-modal';
 import { RejectRequestDialog } from '@/components/software/reject-request-dialog';
+import { MergeRequestDialog } from '@/components/software/merge-request-dialog';
 import { Link } from 'react-router-dom';
 
 export function SoftwareRequests() {
@@ -48,6 +49,9 @@ export function SoftwareRequests() {
   const [rejectingRequest, setRejectingRequest] = useState<{ id: string; name: string; type: 'software' | 'feature' } | null>(null);
   const [softwareStatusFilter, setSoftwareStatusFilter] = useState<string>('all');
   const [featureStatusFilter, setFeatureStatusFilter] = useState<string>('all');
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [mergingRequest, setMergingRequest] = useState<{ id: string; name: string; userId: string } | null>(null);
+  const [mergeProcessing, setMergeProcessing] = useState(false);
 
   const handleApprove = async (id: string) => {
     // Find the request to get its details
@@ -208,6 +212,44 @@ export function SoftwareRequests() {
       } else {
         toast.error('Failed to delete request');
       }
+    }
+  };
+
+  const handleMerge = (id: string, name: string, userId: string) => {
+    setMergingRequest({ id, name, userId });
+    setMergeDialogOpen(true);
+  };
+
+  const handleMergeConfirm = async (softwareId: string, softwareName: string) => {
+    if (!mergingRequest) return;
+
+    setMergeProcessing(true);
+    try {
+      const { error: updateError } = await supabase
+        .from('software_requests')
+        .update({
+          status: 'approved',
+          software_id: softwareId,
+          approved_at: new Date().toISOString(),
+          approved_by: (await supabase.auth.getUser()).data.user?.id,
+        })
+        .eq('id', mergingRequest.id);
+
+      if (updateError) throw updateError;
+
+      // Auto-track the software for the requester
+      await toggleSoftwareTracking(mergingRequest.userId, softwareId, true);
+
+      await refreshRequests();
+
+      toast.success(`"${mergingRequest.name}" approved and merged with "${softwareName}"`);
+      setMergeDialogOpen(false);
+      setMergingRequest(null);
+    } catch (error) {
+      console.error('Error merging request:', error);
+      toast.error('Failed to merge request');
+    } finally {
+      setMergeProcessing(false);
     }
   };
 
@@ -424,6 +466,16 @@ export function SoftwareRequests() {
                     </Button>
                     <Button
                       size="sm"
+                      variant="outline"
+                      onClick={() => handleMerge(request.id, request.name, request.user_id)}
+                      className="flex items-center gap-1"
+                      disabled={processingId === request.id}
+                    >
+                      <GitMerge className="h-4 w-4" />
+                      Approve & Merge
+                    </Button>
+                    <Button
+                      size="sm"
                       variant="destructive"
                       onClick={() => handleReject(request.id, request.name)}
                       className="flex items-center gap-1"
@@ -637,6 +689,14 @@ export function SoftwareRequests() {
         onOpenChange={setRejectDialogOpen}
         onConfirm={handleRejectConfirm}
         requestName={rejectingRequest?.name || ''}
+      />
+
+      <MergeRequestDialog
+        open={mergeDialogOpen}
+        onOpenChange={setMergeDialogOpen}
+        onConfirm={handleMergeConfirm}
+        requestName={mergingRequest?.name || ''}
+        isLoading={mergeProcessing}
       />
     </PageLayout>
   );
