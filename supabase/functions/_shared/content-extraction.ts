@@ -40,8 +40,11 @@ export function findVersionPatterns(
     // "(Version 27.1)" - often in headings
     /\(version\s+(\d+\.[\d.]+)\)/gi,
     // Standalone version numbers in headings (e.g., "27.1" or "27.1.0")
-    // Must be followed by release notes context
+    // Must be followed by release notes context (with or without whitespace for concatenated text)
     /\b(\d{1,3}\.\d{1,3}(?:\.\d{1,3})?)\b(?=\s*(?:release|update|changelog|notes|fixes|features|improvements))/gi,
+    // Concatenated version numbers (no whitespace) - common in scraped HTML
+    // e.g., "1.5.4See Release Notes" or "1.5.4Download"
+    /(\d{1,3}\.\d{1,3}\.\d{1,3})(?=(?:See|Download|Release|Update|Contact|Get))/g,
     // Month Year (Version X.Y) - Adobe style
     /\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}\s*\(version\s+(\d+\.[\d.]+)\)/gi,
   ];
@@ -69,6 +72,33 @@ export function findVersionPatterns(
 }
 
 /**
+ * Extract model number tokens from a product name
+ * Model numbers are alphanumeric identifiers like "AD4Q", "SM58", "KSM8", "PSM1000"
+ * They typically contain both letters and digits, or are short uppercase identifiers
+ */
+export function extractModelTokens(productName: string): string[] {
+  const tokens: string[] = [];
+
+  // Split on common separators: spaces, hyphens, dashes, slashes
+  const parts = productName.split(/[\s\-–—\/]+/);
+
+  for (const part of parts) {
+    const cleaned = part.replace(/[^a-zA-Z0-9]/g, '');
+    if (!cleaned || cleaned.length < 2) continue;
+
+    // Model numbers contain both letters and digits (e.g., "AD4Q", "PSM1000")
+    const hasLetters = /[a-zA-Z]/.test(cleaned);
+    const hasDigits = /\d/.test(cleaned);
+
+    if (hasLetters && hasDigits && cleaned.length >= 3) {
+      tokens.push(cleaned);
+    }
+  }
+
+  return tokens;
+}
+
+/**
  * Generate product name variants to search for
  * e.g., "Teranex" → ["Teranex", "Teranex Mini", "Teranex 3D", "Teranex AV"]
  */
@@ -86,6 +116,15 @@ export function generateProductVariants(productName: string): string[] {
   // Add variants with each suffix
   for (const suffix of suffixes) {
     variants.push(`${productName} ${suffix}`);
+  }
+
+  // Also add model number tokens as standalone search terms
+  // This helps match e.g., "AD4Q" from "Axient AD4Q - Wireless Receiver"
+  const modelTokens = extractModelTokens(productName);
+  for (const token of modelTokens) {
+    if (!variants.some(v => v.toLowerCase() === token.toLowerCase())) {
+      variants.push(token);
+    }
   }
 
   return variants;
