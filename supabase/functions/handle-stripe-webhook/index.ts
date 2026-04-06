@@ -212,6 +212,9 @@ async function handleCheckoutCompleted(
 
     console.log(`✅ Created subscription for user ${userId}`)
 
+    // Check if this user was referred — grant referrer paid conversion reward
+    await processReferralPaidReward(userId, supabase)
+
     // Send welcome email
     await sendSubscriptionWelcomeEmail(userId, supabase)
 
@@ -366,4 +369,54 @@ async function sendDonationThankYouEmail(userId: string, amount: number, supabas
   // TODO: Queue thank you email via Resend
   // This will be implemented when we create the email templates
   console.log(`📧 TODO: Send thank you email to user ${userId} for ${amount / 100}`)
+}
+
+// ============================================
+// Referral Helper Functions
+// ============================================
+
+async function processReferralPaidReward(subscriberId: string, supabase: any) {
+  try {
+    // Check if this subscriber was referred by someone
+    const { data: referral } = await supabase
+      .from('referrals')
+      .select('*')
+      .eq('referred_user_id', subscriberId)
+      .eq('paid_rewarded', false)
+      .maybeSingle()
+
+    if (!referral) {
+      console.log('ℹ️ No unrewarded referral found for subscriber')
+      return
+    }
+
+    // Grant 3 months to referrer for paid conversion
+    const expiry = new Date()
+    expiry.setMonth(expiry.getMonth() + 3)
+
+    const { error: grantError } = await supabase
+      .from('premium_grants')
+      .insert({
+        user_id: referral.referrer_id,
+        months_granted: 3,
+        source: 'referral_paid',
+        referral_id: referral.id,
+        expires_at: expiry.toISOString(),
+      })
+
+    if (grantError) {
+      console.error('❌ Error granting referral paid reward:', grantError)
+      return
+    }
+
+    // Mark referral as paid
+    await supabase
+      .from('referrals')
+      .update({ status: 'paid', paid_rewarded: true })
+      .eq('id', referral.id)
+
+    console.log(`✅ Granted 3 months to referrer ${referral.referrer_id} for paid conversion`)
+  } catch (error) {
+    console.error('❌ Error processing referral paid reward:', error)
+  }
 }

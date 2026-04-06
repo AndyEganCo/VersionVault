@@ -4,7 +4,7 @@ import { EmailPreferences } from '@/components/notifications/email-preferences';
 import { getUserSettings, updateUserSettings, type UserSettings, NotificationFrequency } from '@/lib/settings';
 
 export function UserNotifications() {
-  const { user } = useAuth();
+  const { user, isPremium } = useAuth();
   const [loading, setLoading] = useState(true);
   const [preferences, setPreferences] = useState<UserSettings>({
     emailNotifications: true,
@@ -28,7 +28,7 @@ export function UserNotifications() {
     if (!user) return;
 
     setLoading(true);
-    const success = await updateUserSettings(user.id, key as keyof UserSettings, value);
+    const success = await updateUserSettings(user.id, key as keyof UserSettings, value, isPremium);
     
     if (success) {
       setPreferences(prev => ({ ...prev, [key]: value }));

@@ -11,6 +11,7 @@ import { UserProfile } from '@/pages/user/profile';
 import { UserSettings } from '@/pages/user/settings';
 import { UserNotifications } from '@/pages/user/notifications';
 import { Contribute } from '@/pages/user/contribute';
+import { UserReferrals } from '@/pages/user/referrals';
 import { Signup } from '@/pages/signup';
 import { Premium } from '@/pages/premium';
 import { Donate } from '@/pages/donate';
@@ -58,6 +59,7 @@ export function Routes() {
           <Route path="settings" element={<UserSettings />} />
           <Route path="notifications" element={<UserNotifications />} />
           <Route path="contribute" element={<Contribute />} />
+          <Route path="referrals" element={<UserReferrals />} />
         </Route>
 
         {/* Admin routes */}

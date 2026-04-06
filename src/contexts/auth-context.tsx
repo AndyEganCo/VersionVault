@@ -9,7 +9,7 @@ type AuthContextType = {
   isPremium: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string, referralCode?: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Check if user is premium
+    // Check if user is premium (via subscription OR referral/trial grant)
     const checkPremium = async (userId: string | undefined) => {
       if (!userId) {
         setIsPremium(false);
@@ -57,11 +57,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const { data } = await supabase
           .from('premium_users')
-          .select('user_id')
+          .select('user_id, granted_until')
           .eq('user_id', userId)
           .maybeSingle();
 
-        setIsPremium(!!data);
+        if (!data) {
+          setIsPremium(false);
+          return;
+        }
+
+        // Premium if: subscription-based (no granted_until) OR grant hasn't expired
+        const hasActiveGrant = data.granted_until && new Date(data.granted_until) > new Date();
+        // If user exists in premium_users, they have an active subscription OR a grant
+        // The sync_premium_from_subscription trigger handles subscription-based entries
+        // granted_until is only set for referral/trial grants
+        setIsPremium(data.granted_until === null || !!hasActiveGrant);
       } catch (err) {
         console.error('[Auth] Premium check failed:', err);
         setIsPremium(false);
@@ -124,12 +134,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) throw error;
         navigate('/dashboard');
       },
-      signUp: async (email, password) => {
+      signUp: async (email, password, referralCode) => {
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/auth/callback`,
+            data: referralCode ? { referral_code: referralCode } : undefined,
           },
         });
         if (error) throw error;

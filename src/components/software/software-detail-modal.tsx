@@ -17,12 +17,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getVersionHistory } from '@/lib/software/api/api';
-import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
+import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT } from '@/lib/software/utils/tracking';
 import { formatDate, formatRelativeDate } from '@/lib/date';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
 import type { Software, VersionHistory } from '@/lib/software/types';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Lock } from 'lucide-react';
 import { breakPhonePattern } from '@/lib/utils/version-display';
 
 interface SoftwareDetailModalProps {
@@ -31,6 +31,7 @@ interface SoftwareDetailModalProps {
   software: Software;
   isTracked?: boolean;
   onTrackingChange?: (tracked: boolean) => void;
+  trackedCount?: number;
 }
 
 export function SoftwareDetailModal({
@@ -39,8 +40,9 @@ export function SoftwareDetailModal({
   software,
   isTracked = false,
   onTrackingChange,
+  trackedCount = 0,
 }: SoftwareDetailModalProps) {
-  const { user } = useAuth();
+  const { user, isPremium } = useAuth();
   const [versionHistory, setVersionHistory] = useState<VersionHistory[]>([]);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -76,19 +78,30 @@ export function SoftwareDetailModal({
   const currentVersionInfo = versionHistory.find(v => v.version === software.current_version);
   const currentVersionDate = currentVersionInfo?.release_date || currentVersionInfo?.detected_at;
 
+  const atTrackingLimit = !isPremium && !tracked && trackedCount >= FREE_TIER_TRACKING_LIMIT;
+
   const handleTrackingChange = async (checked: boolean) => {
     if (!user) {
       toast.error('Please sign in to track software');
       return;
     }
 
+    if (checked && atTrackingLimit) {
+      toast.error(`Free accounts can track up to ${FREE_TIER_TRACKING_LIMIT} apps. Upgrade to Pro for unlimited tracking.`);
+      return;
+    }
+
     setTrackingLoading(true);
     try {
-      const success = await toggleSoftwareTracking(user.id, software.id, checked);
+      const success = await toggleSoftwareTracking(user.id, software.id, checked, isPremium);
       if (success) {
         setTracked(checked);
         onTrackingChange?.(checked);
         toast.success(checked ? 'Software tracked' : 'Software untracked');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === 'TRACKING_LIMIT_REACHED') {
+        toast.error(`Free accounts can track up to ${FREE_TIER_TRACKING_LIMIT} apps. Upgrade to Pro for unlimited tracking.`);
       }
     } finally {
       setTrackingLoading(false);
@@ -160,15 +173,27 @@ export function SoftwareDetailModal({
 
             {/* Tracking Section */}
             {user && (
-              <div className="border-t pt-4">
+              <div className="border-t pt-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">Track Updates</span>
                   <Switch
                     checked={tracked}
                     onCheckedChange={handleTrackingChange}
-                    disabled={trackingLoading}
+                    disabled={trackingLoading || atTrackingLimit}
                   />
                 </div>
+                {atTrackingLimit && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 rounded-md p-3">
+                    <Lock className="h-4 w-4 flex-shrink-0" />
+                    <span>
+                      You've reached the free limit of {FREE_TIER_TRACKING_LIMIT} apps.{' '}
+                      <a href="/premium" className="text-primary hover:underline font-medium">
+                        Upgrade to Pro
+                      </a>{' '}
+                      for unlimited tracking.
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 

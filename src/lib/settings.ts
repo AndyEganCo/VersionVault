@@ -60,11 +60,18 @@ export async function getUserSettings(userId: string): Promise<UserSettings> {
 export async function updateUserSettings(
   userId: string,
   key: keyof UserSettings,
-  value: boolean | NotificationFrequency | AllQuietPreference | string
+  value: boolean | NotificationFrequency | AllQuietPreference | string,
+  isPremium: boolean = false
 ): Promise<boolean> {
   try {
+    // Enforce weekly-only for free users
+    if (key === 'notificationFrequency' && !isPremium && value !== 'weekly') {
+      toast.error('Daily and monthly notifications are a Pro feature. Upgrade to unlock.');
+      return false;
+    }
+
     const dbKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
-    
+
     const { error } = await supabase
       .from('user_settings')
       .upsert({

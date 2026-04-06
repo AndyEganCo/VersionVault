@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
+import { useSearchParams } from 'react-router-dom';
 
 type AuthFormProps = {
   mode: 'signin' | 'signup';
@@ -15,6 +16,8 @@ export function AuthForm({ mode }: AuthFormProps) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const { signIn, signUp, signInWithGoogle } = useAuth();
+  const [searchParams] = useSearchParams();
+  const referralCode = searchParams.get('ref') || undefined;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +25,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
     try {
       if (mode === 'signup') {
-        await signUp(email, password);
+        await signUp(email, password, referralCode);
         toast.success('Account created successfully');
       } else {
         await signIn(email, password);

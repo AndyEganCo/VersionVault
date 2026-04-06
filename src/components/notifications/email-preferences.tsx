@@ -20,7 +20,7 @@ type EmailPreferencesProps = {
 };
 
 export function EmailPreferences({ preferences, onPreferenceChange, loading }: EmailPreferencesProps) {
-  const { user } = useAuth();
+  const { user, isPremium } = useAuth();
 
   return (
     <Card className="p-5">
@@ -56,7 +56,7 @@ export function EmailPreferences({ preferences, onPreferenceChange, loading }: E
                   onValueChange={(value) => onPreferenceChange('notificationFrequency', value as NotificationFrequency)}
                   disabled={loading}
                 >
-                  <FrequencyOptions />
+                  <FrequencyOptions isPremium={isPremium} />
                 </RadioGroup>
               </div>
 
