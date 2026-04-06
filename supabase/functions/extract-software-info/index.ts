@@ -2405,6 +2405,16 @@ serve(async (req) => {
     const stillLowContent = versionContent.length < 2000
     const noContentAtAll = versionContent.length === 0
 
+    // Check if existing content already contains version-like data (e.g., "1.5.4", "2.0.1")
+    // If so, the content is likely a firmware/software download page and should NOT be replaced
+    // by longer but irrelevant sitemap content (e.g., newsroom articles)
+    const versionDataPattern = /\d+\.\d+\.\d+/g
+    const existingVersionMatches = versionContent.match(versionDataPattern)
+    const hasExistingVersionData = existingVersionMatches && existingVersionMatches.length >= 2
+    if (hasExistingVersionData) {
+      console.log(`✅ Existing content contains ${existingVersionMatches!.length} version patterns - skipping sitemap fallback`)
+    }
+
     // Check if this is a known difficult domain (skip sitemap for these to save time)
     const isKnownDifficultDomain = versionUrl && (
       versionUrl.includes('adobe.com') ||
@@ -2417,7 +2427,8 @@ serve(async (req) => {
 
     // Try sitemap discovery if webpage content is low and this is a webpage source
     // Skip for known difficult domains as it wastes time and rarely works
-    if (stillLowContent && detectedSourceType === 'webpage' && website && !isKnownDifficultDomain) {
+    // Skip if existing content already has version data (it's relevant even if short)
+    if (stillLowContent && !hasExistingVersionData && detectedSourceType === 'webpage' && website && !isKnownDifficultDomain) {
       console.log('\n🗺️ Low content detected, attempting sitemap discovery...')
       try {
         const releaseUrls = await discoverReleaseUrls(website, 3)
