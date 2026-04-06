@@ -15,7 +15,14 @@ import {
   CardTitle
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Check, X, Trash2, ExternalLink, Loader2, CheckCircle, User, Mail, AlertCircle } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
+import { Check, X, Trash2, ExternalLink, Loader2, CheckCircle, User, Mail, AlertCircle, Filter, GitMerge } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { extractSoftwareInfo } from '@/lib/ai/extract-software-info';
@@ -24,6 +31,7 @@ import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
 import { RequestSoftwareModal } from '@/components/software/request-software-modal';
 import { RequestFeatureModal } from '@/components/software/request-feature-modal';
 import { RejectRequestDialog } from '@/components/software/reject-request-dialog';
+import { MergeRequestDialog } from '@/components/software/merge-request-dialog';
 import { Link } from 'react-router-dom';
 
 export function SoftwareRequests() {
@@ -39,6 +47,11 @@ export function SoftwareRequests() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectingRequest, setRejectingRequest] = useState<{ id: string; name: string; type: 'software' | 'feature' } | null>(null);
+  const [softwareStatusFilter, setSoftwareStatusFilter] = useState<string>('all');
+  const [featureStatusFilter, setFeatureStatusFilter] = useState<string>('all');
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [mergingRequest, setMergingRequest] = useState<{ id: string; name: string; userId: string } | null>(null);
+  const [mergeProcessing, setMergeProcessing] = useState(false);
 
   const handleApprove = async (id: string) => {
     // Find the request to get its details
@@ -202,6 +215,44 @@ export function SoftwareRequests() {
     }
   };
 
+  const handleMerge = (id: string, name: string, userId: string) => {
+    setMergingRequest({ id, name, userId });
+    setMergeDialogOpen(true);
+  };
+
+  const handleMergeConfirm = async (softwareId: string, softwareName: string) => {
+    if (!mergingRequest) return;
+
+    setMergeProcessing(true);
+    try {
+      const { error: updateError } = await supabase
+        .from('software_requests')
+        .update({
+          status: 'approved',
+          software_id: softwareId,
+          approved_at: new Date().toISOString(),
+          approved_by: (await supabase.auth.getUser()).data.user?.id,
+        })
+        .eq('id', mergingRequest.id);
+
+      if (updateError) throw updateError;
+
+      // Auto-track the software for the requester
+      await toggleSoftwareTracking(mergingRequest.userId, softwareId, true);
+
+      await refreshRequests();
+
+      toast.success(`"${mergingRequest.name}" approved and merged with "${softwareName}"`);
+      setMergeDialogOpen(false);
+      setMergingRequest(null);
+    } catch (error) {
+      console.error('Error merging request:', error);
+      toast.error('Failed to merge request');
+    } finally {
+      setMergeProcessing(false);
+    }
+  };
+
   // Feature request handlers
   const handleFeatureApprove = async (id: string) => {
     const success = await updateFeatureStatus(id, 'approved');
@@ -241,6 +292,14 @@ export function SoftwareRequests() {
     return <LoadingPage />;
   }
 
+  const filteredRequests = softwareStatusFilter === 'all'
+    ? requests
+    : requests.filter(r => r.status === softwareStatusFilter);
+
+  const filteredFeatureRequests = featureStatusFilter === 'all'
+    ? featureRequests
+    : featureRequests.filter(r => r.status === featureStatusFilter);
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'approved':
@@ -268,24 +327,40 @@ export function SoftwareRequests() {
         </TabsList>
 
         <TabsContent value="software" className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select value={softwareStatusFilter} onValueChange={setSoftwareStatusFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <RequestSoftwareModal onSuccess={refreshRequests} />
           </div>
 
           <div className="space-y-4">
-        {requests.length === 0 ? (
+        {filteredRequests.length === 0 ? (
           <Card>
             <CardContent className="flex items-center justify-center py-12">
               <p className="text-muted-foreground">
-                {isAdmin
-                  ? "No software requests found"
-                  : "You haven't submitted any software requests yet"
+                {requests.length === 0
+                  ? (isAdmin
+                      ? "No software requests found"
+                      : "You haven't submitted any software requests yet")
+                  : "No requests match the selected filter"
                 }
               </p>
             </CardContent>
           </Card>
         ) : (
-          requests.map((request) => (
+          filteredRequests.map((request) => (
             <Card key={request.id}>
               <CardHeader>
                 <div className="flex items-start justify-between">
@@ -391,6 +466,16 @@ export function SoftwareRequests() {
                     </Button>
                     <Button
                       size="sm"
+                      variant="outline"
+                      onClick={() => handleMerge(request.id, request.name, request.user_id)}
+                      className="flex items-center gap-1"
+                      disabled={processingId === request.id}
+                    >
+                      <GitMerge className="h-4 w-4" />
+                      Approve & Merge
+                    </Button>
+                    <Button
+                      size="sm"
                       variant="destructive"
                       onClick={() => handleReject(request.id, request.name)}
                       className="flex items-center gap-1"
@@ -443,24 +528,41 @@ export function SoftwareRequests() {
         </TabsContent>
 
         <TabsContent value="features" className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select value={featureStatusFilter} onValueChange={setFeatureStatusFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <RequestFeatureModal onSuccess={refetchFeatures} />
           </div>
 
           <div className="space-y-4">
-            {featureRequests.length === 0 ? (
+            {filteredFeatureRequests.length === 0 ? (
               <Card>
                 <CardContent className="flex items-center justify-center py-12">
                   <p className="text-muted-foreground">
-                    {isAdmin
-                      ? "No feature requests found"
-                      : "You haven't submitted any feature requests yet"
+                    {featureRequests.length === 0
+                      ? (isAdmin
+                          ? "No feature requests found"
+                          : "You haven't submitted any feature requests yet")
+                      : "No requests match the selected filter"
                     }
                   </p>
                 </CardContent>
               </Card>
             ) : (
-              featureRequests.map((request) => (
+              filteredFeatureRequests.map((request) => (
                 <Card key={request.id}>
                   <CardHeader>
                     <div className="flex items-start justify-between">
@@ -587,6 +689,14 @@ export function SoftwareRequests() {
         onOpenChange={setRejectDialogOpen}
         onConfirm={handleRejectConfirm}
         requestName={rejectingRequest?.name || ''}
+      />
+
+      <MergeRequestDialog
+        open={mergeDialogOpen}
+        onOpenChange={setMergeDialogOpen}
+        onConfirm={handleMergeConfirm}
+        requestName={mergingRequest?.name || ''}
+        isLoading={mergeProcessing}
       />
     </PageLayout>
   );
