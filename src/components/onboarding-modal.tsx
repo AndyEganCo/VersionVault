@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Sparkles, Package, Bell, CheckCircle2, Loader2, User, Globe, Search, Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { getSoftwareList } from '@/lib/software/api/api';
-import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
+import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT, isVersionVaultName } from '@/lib/software/utils/tracking';
 import { updateUserSettings, NotificationFrequency, AllQuietPreference } from '@/lib/settings';
 import { Software } from '@/lib/software/types';
 import { Switch } from '@/components/ui/switch';
@@ -29,7 +29,7 @@ const TIMEZONES = [
 ];
 
 export function OnboardingModal() {
-  const { user } = useAuth();
+  const { user, isPremium } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState<Step>(1);
   const [loading, setLoading] = useState(false);
@@ -95,16 +95,13 @@ export function OnboardingModal() {
       }
 
       // Find VersionVault
-      const vv = allSoftware.find(s =>
-        s.name.toLowerCase().includes('versionvault') ||
-        s.name.toLowerCase().includes('version vault')
-      );
+      const vv = allSoftware.find(s => isVersionVaultName(s.name));
 
       if (vv) {
         setVersionVaultId(vv.id);
         // Auto-track VersionVault if not already tracked
         if (user && !existingTrackedIds.has(vv.id)) {
-          await toggleSoftwareTracking(user.id, vv.id, true);
+          await toggleSoftwareTracking(user.id, vv.id, true, isPremium);
           setTrackedIds(prev => new Set([...prev, vv.id]));
         }
       }
@@ -125,7 +122,19 @@ export function OnboardingModal() {
   const handleTrackingToggle = async (softwareId: string, tracked: boolean) => {
     if (!user) return;
 
-    const success = await toggleSoftwareTracking(user.id, softwareId, tracked);
+    // VersionVault doesn't count toward the limit
+    const isVv = softwareId === versionVaultId;
+    // Count tracked apps excluding VersionVault
+    const countableCount = versionVaultId
+      ? Array.from(trackedIds).filter(id => id !== versionVaultId).length
+      : trackedIds.size;
+
+    if (tracked && !isPremium && !isVv && countableCount >= FREE_TIER_TRACKING_LIMIT) {
+      toast.error(`Free accounts can track up to ${FREE_TIER_TRACKING_LIMIT} apps. Upgrade to Pro for unlimited tracking.`);
+      return;
+    }
+
+    const success = await toggleSoftwareTracking(user.id, softwareId, tracked, isPremium);
     if (success) {
       setTrackedIds(prev => {
         const next = new Set(prev);
@@ -172,13 +181,13 @@ export function OnboardingModal() {
       }
 
       // Save digest frequency
-      await updateUserSettings(user.id, 'notificationFrequency', selectedFrequency);
+      await updateUserSettings(user.id, 'notificationFrequency', selectedFrequency, isPremium);
 
       // Save timezone
-      await updateUserSettings(user.id, 'timezone', selectedTimezone);
+      await updateUserSettings(user.id, 'timezone', selectedTimezone, isPremium);
 
       // Save all quiet preference
-      await updateUserSettings(user.id, 'allQuietPreference', selectedAllQuietPref);
+      await updateUserSettings(user.id, 'allQuietPreference', selectedAllQuietPref, isPremium);
 
       toast.success('Setup complete! Welcome to VersionVault.');
 
@@ -404,30 +413,43 @@ export function OnboardingModal() {
                 <Label>How often should we email you?</Label>
                 <div className="space-y-2">
                   {[
-                    { value: 'daily' as NotificationFrequency, label: 'Daily', desc: 'Get updates every day' },
-                    { value: 'weekly' as NotificationFrequency, label: 'Weekly', desc: 'Updates once a week (recommended)' },
-                    { value: 'monthly' as NotificationFrequency, label: 'Monthly', desc: 'Monthly digest of updates' },
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => setSelectedFrequency(option.value)}
-                      className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                        selectedFrequency === option.value
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">{option.label}</p>
-                          <p className="text-sm text-muted-foreground">{option.desc}</p>
+                    { value: 'daily' as NotificationFrequency, label: 'Daily', desc: 'Get updates every day', proOnly: true },
+                    { value: 'weekly' as NotificationFrequency, label: 'Weekly', desc: 'Updates once a week (recommended)', proOnly: false },
+                    { value: 'monthly' as NotificationFrequency, label: 'Monthly', desc: 'Monthly digest of updates', proOnly: true },
+                  ].map((option) => {
+                    const locked = option.proOnly && !isPremium;
+                    return (
+                      <button
+                        key={option.value}
+                        onClick={() => !locked && setSelectedFrequency(option.value)}
+                        disabled={locked}
+                        className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                          locked
+                            ? 'border-border opacity-60 cursor-not-allowed'
+                            : selectedFrequency === option.value
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border hover:border-primary/50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium flex items-center gap-2">
+                              {option.label}
+                              {locked && (
+                                <span className="inline-flex items-center gap-1 text-xs font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                                  Pro
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-sm text-muted-foreground">{option.desc}</p>
+                          </div>
+                          {selectedFrequency === option.value && !locked && (
+                            <CheckCircle2 className="h-5 w-5 text-primary" />
+                          )}
                         </div>
-                        {selectedFrequency === option.value && (
-                          <CheckCircle2 className="h-5 w-5 text-primary" />
-                        )}
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

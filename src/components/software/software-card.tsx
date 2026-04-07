@@ -11,9 +11,10 @@ import { useSearchParams } from 'react-router-dom';
 interface SoftwareCardProps {
   software: Software;
   onTrackingChange: (id: string, tracked: boolean) => Promise<void>;
+  atTrackingLimit?: boolean;
 }
 
-export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) {
+export function SoftwareCard({ software, onTrackingChange, atTrackingLimit = false }: SoftwareCardProps) {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -46,6 +47,7 @@ export function SoftwareCard({ software, onTrackingChange }: SoftwareCardProps) 
                 checked={software.tracked}
                 onCheckedChange={(checked) => handleTrackingChange(null, checked)}
                 onClick={(e) => e.stopPropagation()}
+                disabled={!software.tracked && atTrackingLimit}
                 className="scale-75 origin-top-right shrink-0"
               />
             )}

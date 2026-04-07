@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { useSoftwareList, useTrackedSoftware } from '@/lib/software/hooks/hooks';
-import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
+import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT, isVersionVaultName } from '@/lib/software/utils/tracking';
 import { LoadingPage } from '@/components/loading';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -45,6 +45,13 @@ export function Software() {
       tracked: trackedIds.has(s.id)
     }));
 
+  // Countable tracked count — excludes VersionVault from free tier limit
+  const countableTrackedCount = software.filter(s =>
+    trackedIds.has(s.id) && !isVersionVaultName(s.name)
+  ).length;
+
+  const isVersionVault = (s: { name: string }) => isVersionVaultName(s.name);
+
   const sortedSoftware = filteredSoftware.sort((a, b) => {
     switch (sortBy) {
       case 'releaseDate':
@@ -72,13 +79,19 @@ export function Software() {
       return;
     }
 
-    const success = await toggleSoftwareTracking(user.id, id, tracked);
-    if (success) {
-      await Promise.all([
-        refreshSoftware(),
-        refreshTracking()
-      ]);
-      toast.success(tracked ? 'Software tracked' : 'Software untracked');
+    try {
+      const success = await toggleSoftwareTracking(user.id, id, tracked, isPremium);
+      if (success) {
+        await Promise.all([
+          refreshSoftware(),
+          refreshTracking()
+        ]);
+        toast.success(tracked ? 'Software tracked' : 'Software untracked');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === 'TRACKING_LIMIT_REACHED') {
+        toast.error(`Free accounts can track up to ${FREE_TIER_TRACKING_LIMIT} apps. Upgrade to Pro for unlimited tracking.`);
+      }
     }
   };
 
@@ -97,8 +110,20 @@ export function Software() {
         return;
       }
 
-      for (const item of untracked) {
-        await toggleSoftwareTracking(user.id, item.id, true);
+      // Respect tracking limit for free users (VersionVault doesn't count)
+      const slotsAvailable = isPremium ? untracked.length : Math.max(0, FREE_TIER_TRACKING_LIMIT - countableTrackedCount);
+      // Always allow tracking VersionVault even if at limit
+      const vvUntracked = untracked.filter(isVersionVault);
+      const nonVvUntracked = untracked.filter(s => !isVersionVault(s));
+      const toTrack = [...vvUntracked, ...nonVvUntracked.slice(0, slotsAvailable)];
+
+      if (toTrack.length === 0) {
+        toast.error(`Free accounts can track up to ${FREE_TIER_TRACKING_LIMIT} apps. Upgrade to Pro for unlimited tracking.`);
+        return;
+      }
+
+      for (const item of toTrack) {
+        await toggleSoftwareTracking(user.id, item.id, true, isPremium);
       }
 
       await Promise.all([
@@ -106,7 +131,11 @@ export function Software() {
         refreshTracking()
       ]);
 
-      toast.success(`Tracked ${untracked.length} software`);
+      if (!isPremium && toTrack.length < untracked.length) {
+        toast.success(`Tracked ${toTrack.length} software (free limit of ${FREE_TIER_TRACKING_LIMIT} reached)`);
+      } else {
+        toast.success(`Tracked ${toTrack.length} software`);
+      }
     } catch (error) {
       toast.error('Failed to track software');
       console.error(error);
@@ -179,10 +208,16 @@ export function Software() {
               const isTracked = trackedIds.has(data.id);
 
               if (!isTracked) {
-                const success = await toggleSoftwareTracking(user.id, data.id, true);
-                if (success) {
-                  await refreshTracking();
-                  toast.success('Now tracking ' + data.name);
+                try {
+                  const success = await toggleSoftwareTracking(user.id, data.id, true, isPremium);
+                  if (success) {
+                    await refreshTracking();
+                    toast.success('Now tracking ' + data.name);
+                  }
+                } catch (error) {
+                  if (error instanceof Error && error.message === 'TRACKING_LIMIT_REACHED') {
+                    toast.error(`Free accounts can track up to ${FREE_TIER_TRACKING_LIMIT} apps. Upgrade to Pro for unlimited tracking.`);
+                  }
                 }
               }
             }
@@ -302,6 +337,7 @@ export function Software() {
               key={s.id}
               software={s}
               onTrackingChange={handleTrackingChange}
+              atTrackingLimit={!isPremium && !isVersionVault(s) && countableTrackedCount >= FREE_TIER_TRACKING_LIMIT}
             />
           ))}
         </div>
@@ -314,6 +350,7 @@ export function Software() {
           onOpenChange={(open) => !open && handleModalClose()}
           software={urlSoftware}
           isTracked={trackedIds.has(urlSoftware.id)}
+          trackedCount={trackedIds.size}
           onTrackingChange={() => {
             refreshTracking();
           }}

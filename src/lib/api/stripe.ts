@@ -117,6 +117,69 @@ export async function getUserDonations(userId: string) {
 }
 
 /**
+ * Generate or retrieve user's referral code
+ */
+export async function getReferralCode(userId: string): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('generate-referral-code', {
+    body: { userId },
+  });
+
+  if (error) {
+    console.error('Error generating referral code:', error);
+    throw new Error('Failed to generate referral code');
+  }
+
+  return data.code;
+}
+
+/**
+ * Get user's referral stats
+ */
+export async function getReferralStats(userId: string) {
+  const { data: referrals, error: refError } = await supabase
+    .from('referrals')
+    .select('*')
+    .eq('referrer_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (refError) {
+    console.error('Error fetching referrals:', refError);
+    return { referrals: [], grants: [], totalReferrals: 0, verifiedReferrals: 0, paidReferrals: 0 };
+  }
+
+  const { data: grants, error: grantError } = await supabase
+    .from('premium_grants')
+    .select('*')
+    .eq('user_id', userId)
+    .order('granted_at', { ascending: false });
+
+  if (grantError) {
+    console.error('Error fetching grants:', grantError);
+  }
+
+  return {
+    referrals: referrals || [],
+    grants: grants || [],
+    totalReferrals: referrals?.length || 0,
+    verifiedReferrals: referrals?.filter(r => r.status === 'verified' || r.status === 'paid').length || 0,
+    paidReferrals: referrals?.filter(r => r.status === 'paid').length || 0,
+  };
+}
+
+/**
+ * Get user's active premium grant expiration
+ */
+export async function getGrantedUntil(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('premium_users')
+    .select('granted_until')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  return data?.granted_until || null;
+}
+
+/**
  * Get public donors for supporters page
  */
 export async function getPublicDonors(limit = 50) {

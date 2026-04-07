@@ -1,9 +1,10 @@
 import { useAuth } from '@/contexts/auth-context';
 import { useSoftwareList } from '@/lib/software/hooks/hooks';
-import { toggleSoftwareTracking } from '@/lib/software/utils/tracking';
+import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT, isVersionVaultName } from '@/lib/software/utils/tracking';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Badge } from '@/components/ui/badge';
 import { formatDate } from '@/lib/date';
 import { toast } from 'sonner';
 import { Software } from '@/lib/software/types';
@@ -16,11 +17,13 @@ interface TrackedSoftwareProps {
 }
 
 export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftwareProps) {
-  const { user } = useAuth();
+  const { user, isPremium } = useAuth();
   const { software, loading: softwareLoading } = useSoftwareList();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const trackedSoftware = software.filter((s) => trackedIds.has(s.id));
+  // VersionVault doesn't count toward the free tier limit
+  const countableTrackedCount = trackedSoftware.filter(s => !isVersionVaultName(s.name)).length;
   const loading = softwareLoading;
 
   const handleSoftwareClick = (softwareId: string) => {
@@ -70,9 +73,28 @@ export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftware
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold mb-2">Your Tracked Software</h2>
+        <div className="flex items-center gap-3 mb-2">
+          <h2 className="text-2xl font-bold">Your Tracked Software</h2>
+          {!isPremium && (
+            <Badge variant="secondary" className="text-xs">
+              {countableTrackedCount}/{FREE_TIER_TRACKING_LIMIT}
+            </Badge>
+          )}
+        </div>
         <p className="text-muted-foreground">
-          You're tracking {trackedSoftware.length} software {trackedSoftware.length === 1 ? 'item' : 'items'}
+          {isPremium ? (
+            <>You're tracking {trackedSoftware.length} software {trackedSoftware.length === 1 ? 'item' : 'items'}</>
+          ) : countableTrackedCount >= FREE_TIER_TRACKING_LIMIT ? (
+            <>
+              You've reached the free limit of {FREE_TIER_TRACKING_LIMIT} apps.{' '}
+              <a href="/premium" className="text-primary hover:underline">Upgrade to Pro</a> for unlimited tracking.
+            </>
+          ) : (
+            <>
+              {FREE_TIER_TRACKING_LIMIT - countableTrackedCount} {FREE_TIER_TRACKING_LIMIT - countableTrackedCount === 1 ? 'slot' : 'slots'} remaining.{' '}
+              <a href="/premium" className="text-primary hover:underline">Upgrade to Pro</a> for unlimited tracking.
+            </>
+          )}
         </p>
       </div>
 

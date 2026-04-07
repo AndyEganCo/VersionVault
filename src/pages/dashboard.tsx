@@ -2,11 +2,13 @@ import { RecentUpdates } from '@/components/recent-updates';
 import { Metrics } from '@/components/dashboard/metrics';
 import { TrackedSoftware } from '@/components/dashboard/tracked-software';
 import { AdBanner } from '@/components/dashboard/ad-banner';
+import { GracePeriodBanner } from '@/components/dashboard/grace-period-banner';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { BetaBanner } from '@/components/beta-banner';
 import { OnboardingModal } from '@/components/onboarding-modal';
-import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks/hooks';
+import { useRecentUpdates, useTrackedSoftware, useSoftwareList } from '@/lib/software/hooks/hooks';
+import { isVersionVaultName } from '@/lib/software/utils/tracking';
 import { useAuth } from '@/contexts/auth-context';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
@@ -19,12 +21,18 @@ export function Dashboard() {
   const { isPremium } = useAuth();
   const { updates } = useRecentUpdates();
   const { trackedIds, refreshTracking } = useTrackedSoftware();
+  const { software } = useSoftwareList();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [urlSoftware, setUrlSoftware] = useState<Software | null>(null);
   const [isLoadingSoftware, setIsLoadingSoftware] = useState(false);
 
+  // Total tracked count (used for display)
   const trackedCount = trackedIds.size;
+  // Countable tracked count — excludes VersionVault, used for free tier limit checks
+  const countableTrackedCount = software.filter(s =>
+    trackedIds.has(s.id) && !isVersionVaultName(s.name)
+  ).length;
 
   const thisWeeksUpdates = updates.filter(s => {
     const dateStr = s.release_date || s.last_checked;
@@ -50,8 +58,8 @@ export function Dashboard() {
     }
 
     if (premium === 'success') {
-      toast.success('Welcome to Premium! 🎉', {
-        description: 'Your subscription is now active. Enjoy ad-free browsing!',
+      toast.success('Welcome to Pro! 🎉', {
+        description: 'Your subscription is now active. Enjoy unlimited tracking!',
       });
       // Clean up URL
       searchParams.delete('premium');
@@ -106,6 +114,7 @@ export function Dashboard() {
       />
       <OnboardingModal />
       <BetaBanner />
+      <GracePeriodBanner trackedCount={countableTrackedCount} />
       <Metrics
         trackedCount={trackedCount}
         thisWeeksUpdates={thisWeeksUpdates}
@@ -124,6 +133,7 @@ export function Dashboard() {
           onOpenChange={(open) => !open && handleModalClose()}
           software={urlSoftware}
           isTracked={trackedIds.has(urlSoftware.id)}
+          trackedCount={countableTrackedCount}
           onTrackingChange={() => {
             refreshTracking();
           }}
