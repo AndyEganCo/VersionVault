@@ -3,6 +3,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Resend } from 'https://esm.sh/resend@2.0.0'
+import { throttledResendSend } from '../_shared/resend-throttle.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -260,7 +261,7 @@ async function sendReferralRewardEmail(
     console.log(`📧 [dry-run] referral ${type} → ${email} (+${months}mo)`)
     return
   }
-  const { error } = await resend.emails.send({ from: VERSIONVAULT_FROM, to: email, subject: subjects[type], html, text })
+  const { error } = await throttledResendSend(resend, { from: VERSIONVAULT_FROM, to: email, subject: subjects[type], html, text })
   if (error) console.error(`❌ referral ${type} send failed for ${email}:`, error)
   else console.log(`✅ Sent referral ${type} email to ${email}`)
 }

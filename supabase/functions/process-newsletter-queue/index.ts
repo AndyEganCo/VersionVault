@@ -6,6 +6,7 @@ import { Resend } from 'https://esm.sh/resend@2.0.0'
 import { authorizeRequest, getCorsHeaders } from '../_shared/newsletter-auth.ts'
 import { isTargetHourInTimezone } from '../_shared/newsletter-scheduler.ts'
 import { updateLastNotified, incrementSponsorImpressions } from '../_shared/newsletter-db.ts'
+import { throttledResendSend } from '../_shared/resend-throttle.ts'
 
 const corsHeaders = getCorsHeaders()
 
@@ -132,7 +133,7 @@ serve(async (req) => {
         const { subject, html, text } = generateEmailContent(item)
 
         // Send via Resend
-        const { data: emailData, error: emailError } = await resend.emails.send({
+        const { data: emailData, error: emailError } = await throttledResendSend(resend, {
           from: VERSIONVAULT_FROM,
           to: item.email,
           subject,
@@ -143,7 +144,7 @@ serve(async (req) => {
             'List-Unsubscribe': `<${VERSIONVAULT_URL}/unsubscribe?uid=${item.user_id}>`,
             'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
           },
-        })
+        }) as { data: { id?: string } | null; error: { message?: string } | null }
 
         if (emailError) {
           throw new Error(emailError.message)
