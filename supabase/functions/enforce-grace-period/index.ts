@@ -4,9 +4,12 @@
 // - Auto-untracks oldest apps beyond 5 when grace period expires
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { Resend } from 'https://esm.sh/resend@2.0.0'
 
 const FREE_TIER_TRACKING_LIMIT = 5
 const GRACE_PERIOD_DAYS = 30
+const VERSIONVAULT_FROM = 'VersionVault <updates@updates.versionvault.dev>'
+const VERSIONVAULT_URL = 'https://versionvault.dev'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,7 +26,12 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const resendApiKey = Deno.env.get('RESEND_API_KEY')
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    const resend = resendApiKey ? new Resend(resendApiKey) : null
+    if (!resend) {
+      console.warn('⚠️ RESEND_API_KEY not set — emails will be logged only')
+    }
 
     // Find VersionVault software ID — it's excluded from the tracking limit
     const { data: vvData } = await supabase
@@ -97,21 +105,21 @@ serve(async (req) => {
 
       // Day 0: Start email
       if (daysSinceStart >= 0 && !emailsSent.includes('day_0')) {
-        await sendGracePeriodEmail(userEmail, 'start', trackedCount ?? 0, GRACE_PERIOD_DAYS)
+        await sendGracePeriodEmail(resend, userEmail, 'start', trackedCount ?? 0, GRACE_PERIOD_DAYS)
         emailsSent.push('day_0')
         results.emailsSent++
       }
 
       // Day 15: Midpoint reminder
       if (daysSinceStart >= 15 && !emailsSent.includes('day_15')) {
-        await sendGracePeriodEmail(userEmail, 'reminder', trackedCount ?? 0, GRACE_PERIOD_DAYS - daysSinceStart)
+        await sendGracePeriodEmail(resend, userEmail, 'reminder', trackedCount ?? 0, GRACE_PERIOD_DAYS - daysSinceStart)
         emailsSent.push('day_15')
         results.emailsSent++
       }
 
       // Day 27: Final warning
       if (daysSinceStart >= 27 && !emailsSent.includes('day_27')) {
-        await sendGracePeriodEmail(userEmail, 'final_warning', trackedCount ?? 0, GRACE_PERIOD_DAYS - daysSinceStart)
+        await sendGracePeriodEmail(resend, userEmail, 'final_warning', trackedCount ?? 0, GRACE_PERIOD_DAYS - daysSinceStart)
         emailsSent.push('day_27')
         results.emailsSent++
       }
@@ -153,6 +161,7 @@ serve(async (req) => {
 
           // Send expiration email
           await sendGracePeriodExpiredEmail(
+            resend,
             userEmail,
             keptSoftware?.map(s => s.name) || [],
             removedSoftware?.map(s => s.name) || []
@@ -193,20 +202,75 @@ serve(async (req) => {
 })
 
 async function sendGracePeriodEmail(
+  resend: Resend | null,
   email: string,
   type: 'start' | 'reminder' | 'final_warning',
   trackedCount: number,
   daysLeft: number
 ) {
-  // TODO: Integrate with Resend email service
-  console.log(`📧 Sending grace period ${type} email to ${email} (${trackedCount} apps, ${daysLeft} days left)`)
+  const subjects = {
+    start: `Heads up: you're tracking ${trackedCount} apps on the free plan`,
+    reminder: `${daysLeft} days left to reduce your tracked apps`,
+    final_warning: `Final reminder: ${daysLeft} days until auto-removal`,
+  }
+  const headlines = {
+    start: `You're tracking ${trackedCount} apps — free plan allows ${FREE_TIER_TRACKING_LIMIT}`,
+    reminder: `${daysLeft} days left in your grace period`,
+    final_warning: `Last chance: ${daysLeft} days until we auto-remove your oldest apps`,
+  }
+  const subject = subjects[type]
+  const headline = headlines[type]
+
+  const html = `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#0f172a;">
+    <h1 style="font-size:22px;margin:0 0 16px;">${headline}</h1>
+    <p>VersionVault recently introduced a free tier with a limit of <strong>${FREE_TIER_TRACKING_LIMIT} tracked apps</strong>. You're currently tracking <strong>${trackedCount}</strong>.</p>
+    <p>You have <strong>${daysLeft} days</strong> to either reduce your tracked apps to ${FREE_TIER_TRACKING_LIMIT} or upgrade to Pro. After that, we'll automatically remove your oldest tracked apps beyond the limit.</p>
+    <p style="margin:24px 0;">
+      <a href="${VERSIONVAULT_URL}/dashboard" style="background:#0f172a;color:#fff;padding:12px 20px;text-decoration:none;border-radius:6px;display:inline-block;margin-right:8px;">Manage tracked apps</a>
+      <a href="${VERSIONVAULT_URL}/premium" style="background:#f59e0b;color:#0f172a;padding:12px 20px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:600;">Upgrade to Pro — $25/yr</a>
+    </p>
+    <p style="font-size:12px;color:#64748b;margin-top:32px;">VersionVault · <a href="${VERSIONVAULT_URL}/unsubscribe" style="color:#64748b;">Unsubscribe</a></p>
+  </body></html>`
+
+  const text = `${headline}\n\nVersionVault recently introduced a free tier with a limit of ${FREE_TIER_TRACKING_LIMIT} tracked apps. You're currently tracking ${trackedCount}.\n\nYou have ${daysLeft} days to reduce your tracked apps or upgrade to Pro.\n\nManage apps: ${VERSIONVAULT_URL}/dashboard\nUpgrade: ${VERSIONVAULT_URL}/premium\n`
+
+  if (!resend) {
+    console.log(`📧 [dry-run] ${type} → ${email} (${trackedCount} apps, ${daysLeft} days)`)
+    return
+  }
+  const { error } = await resend.emails.send({ from: VERSIONVAULT_FROM, to: email, subject, html, text })
+  if (error) console.error(`❌ grace period ${type} send failed for ${email}:`, error)
+  else console.log(`✅ Sent grace period ${type} email to ${email}`)
 }
 
 async function sendGracePeriodExpiredEmail(
+  resend: Resend | null,
   email: string,
   keptApps: string[],
   removedApps: string[]
 ) {
-  // TODO: Integrate with Resend email service
-  console.log(`📧 Sending grace period expired email to ${email} (kept: ${keptApps.join(', ')}, removed: ${removedApps.join(', ')})`)
+  const subject = `We removed ${removedApps.length} apps from your tracking list`
+  const html = `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#0f172a;">
+    <h1 style="font-size:22px;margin:0 0 16px;">Your grace period ended</h1>
+    <p>Your 30-day grace period has ended. Since you were still tracking more than ${FREE_TIER_TRACKING_LIMIT} apps on the free plan, we've automatically removed your oldest tracked apps beyond the limit.</p>
+    <h3 style="font-size:16px;margin:24px 0 8px;">Still tracking (${keptApps.length}):</h3>
+    <ul>${keptApps.map(n => `<li>${n}</li>`).join('')}</ul>
+    <h3 style="font-size:16px;margin:24px 0 8px;">Removed (${removedApps.length}):</h3>
+    <ul>${removedApps.map(n => `<li>${n}</li>`).join('')}</ul>
+    <p>You can re-track any of these instantly by upgrading to Pro.</p>
+    <p style="margin:24px 0;">
+      <a href="${VERSIONVAULT_URL}/premium" style="background:#f59e0b;color:#0f172a;padding:12px 20px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:600;">Upgrade to Pro — $25/yr</a>
+    </p>
+    <p style="font-size:12px;color:#64748b;margin-top:32px;">VersionVault · <a href="${VERSIONVAULT_URL}/unsubscribe" style="color:#64748b;">Unsubscribe</a></p>
+  </body></html>`
+
+  const text = `Your grace period ended.\n\nStill tracking: ${keptApps.join(', ')}\nRemoved: ${removedApps.join(', ')}\n\nUpgrade: ${VERSIONVAULT_URL}/premium\n`
+
+  if (!resend) {
+    console.log(`📧 [dry-run] expired → ${email} (kept ${keptApps.length}, removed ${removedApps.length})`)
+    return
+  }
+  const { error } = await resend.emails.send({ from: VERSIONVAULT_FROM, to: email, subject, html, text })
+  if (error) console.error(`❌ grace period expired send failed for ${email}:`, error)
+  else console.log(`✅ Sent grace period expired email to ${email}`)
 }
