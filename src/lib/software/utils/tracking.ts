@@ -6,6 +6,12 @@ export const FREE_TIER_TRACKING_LIMIT = 5;
 // (we want users to keep it tracked for their own update notifications)
 let cachedVersionVaultId: string | null | undefined = undefined;
 
+export function isVersionVaultName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const lower = name.toLowerCase();
+  return lower.includes('versionvault') || lower.includes('version vault');
+}
+
 export async function getVersionVaultSoftwareId(): Promise<string | null> {
   if (cachedVersionVaultId !== undefined) {
     return cachedVersionVaultId;
@@ -17,10 +23,7 @@ export async function getVersionVaultSoftwareId(): Promise<string | null> {
       .select('id, name')
       .or('name.ilike.%versionvault%,name.ilike.%version vault%');
 
-    const vv = data?.find(s =>
-      s.name.toLowerCase().includes('versionvault') ||
-      s.name.toLowerCase().includes('version vault')
-    );
+    const vv = data?.find(s => isVersionVaultName(s.name));
 
     cachedVersionVaultId = vv?.id ?? null;
     return cachedVersionVaultId;
@@ -75,11 +78,14 @@ export async function toggleSoftwareTracking(
 ): Promise<boolean> {
   try {
     if (isTracking) {
-      // Enforce tracking limit for free users
+      // Enforce tracking limit for free users (VersionVault never counts)
       if (!isPremium) {
-        const count = await getTrackedCount(userId);
-        if (count >= FREE_TIER_TRACKING_LIMIT) {
-          throw new Error('TRACKING_LIMIT_REACHED');
+        const vvId = await getVersionVaultSoftwareId();
+        if (softwareId !== vvId) {
+          const count = await getTrackedCount(userId);
+          if (count >= FREE_TIER_TRACKING_LIMIT) {
+            throw new Error('TRACKING_LIMIT_REACHED');
+          }
         }
       }
 

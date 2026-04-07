@@ -1,6 +1,6 @@
 import { useAuth } from '@/contexts/auth-context';
 import { useSoftwareList } from '@/lib/software/hooks/hooks';
-import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT } from '@/lib/software/utils/tracking';
+import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT, isVersionVaultName } from '@/lib/software/utils/tracking';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -23,10 +23,7 @@ export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftware
 
   const trackedSoftware = software.filter((s) => trackedIds.has(s.id));
   // VersionVault doesn't count toward the free tier limit
-  const countableTrackedCount = trackedSoftware.filter(s =>
-    !s.name.toLowerCase().includes('versionvault') &&
-    !s.name.toLowerCase().includes('version vault')
-  ).length;
+  const countableTrackedCount = trackedSoftware.filter(s => !isVersionVaultName(s.name)).length;
   const loading = softwareLoading;
 
   const handleSoftwareClick = (softwareId: string) => {

@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { useSoftwareList, useTrackedSoftware } from '@/lib/software/hooks/hooks';
-import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT } from '@/lib/software/utils/tracking';
+import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT, isVersionVaultName } from '@/lib/software/utils/tracking';
 import { LoadingPage } from '@/components/loading';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -47,14 +47,10 @@ export function Software() {
 
   // Countable tracked count — excludes VersionVault from free tier limit
   const countableTrackedCount = software.filter(s =>
-    trackedIds.has(s.id) &&
-    !s.name.toLowerCase().includes('versionvault') &&
-    !s.name.toLowerCase().includes('version vault')
+    trackedIds.has(s.id) && !isVersionVaultName(s.name)
   ).length;
 
-  const isVersionVault = (s: { name: string }) =>
-    s.name.toLowerCase().includes('versionvault') ||
-    s.name.toLowerCase().includes('version vault');
+  const isVersionVault = (s: { name: string }) => isVersionVaultName(s.name);
 
   const sortedSoftware = filteredSoftware.sort((a, b) => {
     switch (sortBy) {

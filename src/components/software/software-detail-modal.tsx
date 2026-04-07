@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { getVersionHistory } from '@/lib/software/api/api';
-import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT } from '@/lib/software/utils/tracking';
+import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT, isVersionVaultName } from '@/lib/software/utils/tracking';
 import { formatDate, formatRelativeDate } from '@/lib/date';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
@@ -78,9 +78,7 @@ export function SoftwareDetailModal({
   const currentVersionInfo = versionHistory.find(v => v.version === software.current_version);
   const currentVersionDate = currentVersionInfo?.release_date || currentVersionInfo?.detected_at;
 
-  const isVersionVault =
-    software.name.toLowerCase().includes('versionvault') ||
-    software.name.toLowerCase().includes('version vault');
+  const isVersionVault = isVersionVaultName(software.name);
 
   const atTrackingLimit = !isPremium && !tracked && !isVersionVault && trackedCount >= FREE_TIER_TRACKING_LIMIT;
 

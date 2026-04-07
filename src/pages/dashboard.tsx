@@ -8,6 +8,7 @@ import { PageLayout } from '@/components/layout/page-layout';
 import { BetaBanner } from '@/components/beta-banner';
 import { OnboardingModal } from '@/components/onboarding-modal';
 import { useRecentUpdates, useTrackedSoftware, useSoftwareList } from '@/lib/software/hooks/hooks';
+import { isVersionVaultName } from '@/lib/software/utils/tracking';
 import { useAuth } from '@/contexts/auth-context';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
@@ -30,9 +31,7 @@ export function Dashboard() {
   const trackedCount = trackedIds.size;
   // Countable tracked count — excludes VersionVault, used for free tier limit checks
   const countableTrackedCount = software.filter(s =>
-    trackedIds.has(s.id) &&
-    !s.name.toLowerCase().includes('versionvault') &&
-    !s.name.toLowerCase().includes('version vault')
+    trackedIds.has(s.id) && !isVersionVaultName(s.name)
   ).length;
 
   const thisWeeksUpdates = updates.filter(s => {

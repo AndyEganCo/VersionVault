@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Sparkles, Package, Bell, CheckCircle2, Loader2, User, Globe, Search, Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { getSoftwareList } from '@/lib/software/api/api';
-import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT } from '@/lib/software/utils/tracking';
+import { toggleSoftwareTracking, FREE_TIER_TRACKING_LIMIT, isVersionVaultName } from '@/lib/software/utils/tracking';
 import { updateUserSettings, NotificationFrequency, AllQuietPreference } from '@/lib/settings';
 import { Software } from '@/lib/software/types';
 import { Switch } from '@/components/ui/switch';
@@ -95,10 +95,7 @@ export function OnboardingModal() {
       }
 
       // Find VersionVault
-      const vv = allSoftware.find(s =>
-        s.name.toLowerCase().includes('versionvault') ||
-        s.name.toLowerCase().includes('version vault')
-      );
+      const vv = allSoftware.find(s => isVersionVaultName(s.name));
 
       if (vv) {
         setVersionVaultId(vv.id);
