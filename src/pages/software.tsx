@@ -45,6 +45,17 @@ export function Software() {
       tracked: trackedIds.has(s.id)
     }));
 
+  // Countable tracked count — excludes VersionVault from free tier limit
+  const countableTrackedCount = software.filter(s =>
+    trackedIds.has(s.id) &&
+    !s.name.toLowerCase().includes('versionvault') &&
+    !s.name.toLowerCase().includes('version vault')
+  ).length;
+
+  const isVersionVault = (s: { name: string }) =>
+    s.name.toLowerCase().includes('versionvault') ||
+    s.name.toLowerCase().includes('version vault');
+
   const sortedSoftware = filteredSoftware.sort((a, b) => {
     switch (sortBy) {
       case 'releaseDate':
@@ -103,10 +114,12 @@ export function Software() {
         return;
       }
 
-      // Respect tracking limit for free users
-      const currentTracked = trackedIds.size;
-      const slotsAvailable = isPremium ? untracked.length : Math.max(0, FREE_TIER_TRACKING_LIMIT - currentTracked);
-      const toTrack = untracked.slice(0, slotsAvailable);
+      // Respect tracking limit for free users (VersionVault doesn't count)
+      const slotsAvailable = isPremium ? untracked.length : Math.max(0, FREE_TIER_TRACKING_LIMIT - countableTrackedCount);
+      // Always allow tracking VersionVault even if at limit
+      const vvUntracked = untracked.filter(isVersionVault);
+      const nonVvUntracked = untracked.filter(s => !isVersionVault(s));
+      const toTrack = [...vvUntracked, ...nonVvUntracked.slice(0, slotsAvailable)];
 
       if (toTrack.length === 0) {
         toast.error(`Free accounts can track up to ${FREE_TIER_TRACKING_LIMIT} apps. Upgrade to Pro for unlimited tracking.`);
@@ -328,7 +341,7 @@ export function Software() {
               key={s.id}
               software={s}
               onTrackingChange={handleTrackingChange}
-              atTrackingLimit={!isPremium && trackedIds.size >= FREE_TIER_TRACKING_LIMIT}
+              atTrackingLimit={!isPremium && !isVersionVault(s) && countableTrackedCount >= FREE_TIER_TRACKING_LIMIT}
             />
           ))}
         </div>

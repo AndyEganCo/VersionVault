@@ -25,6 +25,17 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+    // Find VersionVault software ID — it's excluded from the tracking limit
+    const { data: vvData } = await supabase
+      .from('software')
+      .select('id, name')
+      .or('name.ilike.%versionvault%,name.ilike.%version vault%')
+
+    const versionVaultId = vvData?.find((s: any) =>
+      s.name.toLowerCase().includes('versionvault') ||
+      s.name.toLowerCase().includes('version vault')
+    )?.id ?? null
+
     // Get all users with active grace periods
     const { data: usersInGrace, error: fetchError } = await supabase
       .from('user_settings')
@@ -58,11 +69,15 @@ serve(async (req) => {
         continue
       }
 
-      // Get user's tracked software count
-      const { count: trackedCount } = await supabase
+      // Get user's tracked software count (excluding VersionVault)
+      let countQuery = supabase
         .from('tracked_software')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userSettings.user_id)
+      if (versionVaultId) {
+        countQuery = countQuery.neq('software_id', versionVaultId)
+      }
+      const { count: trackedCount } = await countQuery
 
       // If user already reduced to <=5, clear grace period
       if ((trackedCount ?? 0) <= FREE_TIER_TRACKING_LIMIT) {
@@ -104,13 +119,17 @@ serve(async (req) => {
       // Day 30: Expire — auto-untrack oldest apps beyond 5
       if (daysSinceStart >= GRACE_PERIOD_DAYS) {
         // Get tracked apps ordered by created_at DESC (keep newest 5)
-        const { data: trackedApps } = await supabase
+        const { data: allTrackedApps } = await supabase
           .from('tracked_software')
           .select('id, software_id, created_at')
           .eq('user_id', userSettings.user_id)
           .order('created_at', { ascending: false })
 
-        if (trackedApps && trackedApps.length > FREE_TIER_TRACKING_LIMIT) {
+        // Always keep VersionVault (doesn't count toward limit)
+        const vvTracked = (allTrackedApps || []).filter((a: any) => a.software_id === versionVaultId)
+        const trackedApps = (allTrackedApps || []).filter((a: any) => a.software_id !== versionVaultId)
+
+        if (trackedApps.length > FREE_TIER_TRACKING_LIMIT) {
           const toRemove = trackedApps.slice(FREE_TIER_TRACKING_LIMIT)
           const removeIds = toRemove.map(app => app.id)
 

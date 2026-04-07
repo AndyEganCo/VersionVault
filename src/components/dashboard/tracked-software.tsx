@@ -22,6 +22,11 @@ export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftware
   const [searchParams, setSearchParams] = useSearchParams();
 
   const trackedSoftware = software.filter((s) => trackedIds.has(s.id));
+  // VersionVault doesn't count toward the free tier limit
+  const countableTrackedCount = trackedSoftware.filter(s =>
+    !s.name.toLowerCase().includes('versionvault') &&
+    !s.name.toLowerCase().includes('version vault')
+  ).length;
   const loading = softwareLoading;
 
   const handleSoftwareClick = (softwareId: string) => {
@@ -75,21 +80,21 @@ export function TrackedSoftware({ refreshTracking, trackedIds }: TrackedSoftware
           <h2 className="text-2xl font-bold">Your Tracked Software</h2>
           {!isPremium && (
             <Badge variant="secondary" className="text-xs">
-              {trackedSoftware.length}/{FREE_TIER_TRACKING_LIMIT}
+              {countableTrackedCount}/{FREE_TIER_TRACKING_LIMIT}
             </Badge>
           )}
         </div>
         <p className="text-muted-foreground">
           {isPremium ? (
             <>You're tracking {trackedSoftware.length} software {trackedSoftware.length === 1 ? 'item' : 'items'}</>
-          ) : trackedSoftware.length >= FREE_TIER_TRACKING_LIMIT ? (
+          ) : countableTrackedCount >= FREE_TIER_TRACKING_LIMIT ? (
             <>
               You've reached the free limit of {FREE_TIER_TRACKING_LIMIT} apps.{' '}
               <a href="/premium" className="text-primary hover:underline">Upgrade to Pro</a> for unlimited tracking.
             </>
           ) : (
             <>
-              {FREE_TIER_TRACKING_LIMIT - trackedSoftware.length} {FREE_TIER_TRACKING_LIMIT - trackedSoftware.length === 1 ? 'slot' : 'slots'} remaining.{' '}
+              {FREE_TIER_TRACKING_LIMIT - countableTrackedCount} {FREE_TIER_TRACKING_LIMIT - countableTrackedCount === 1 ? 'slot' : 'slots'} remaining.{' '}
               <a href="/premium" className="text-primary hover:underline">Upgrade to Pro</a> for unlimited tracking.
             </>
           )}

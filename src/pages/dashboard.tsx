@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { PageLayout } from '@/components/layout/page-layout';
 import { BetaBanner } from '@/components/beta-banner';
 import { OnboardingModal } from '@/components/onboarding-modal';
-import { useRecentUpdates, useTrackedSoftware } from '@/lib/software/hooks/hooks';
+import { useRecentUpdates, useTrackedSoftware, useSoftwareList } from '@/lib/software/hooks/hooks';
 import { useAuth } from '@/contexts/auth-context';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
@@ -20,12 +20,20 @@ export function Dashboard() {
   const { isPremium } = useAuth();
   const { updates } = useRecentUpdates();
   const { trackedIds, refreshTracking } = useTrackedSoftware();
+  const { software } = useSoftwareList();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [urlSoftware, setUrlSoftware] = useState<Software | null>(null);
   const [isLoadingSoftware, setIsLoadingSoftware] = useState(false);
 
+  // Total tracked count (used for display)
   const trackedCount = trackedIds.size;
+  // Countable tracked count — excludes VersionVault, used for free tier limit checks
+  const countableTrackedCount = software.filter(s =>
+    trackedIds.has(s.id) &&
+    !s.name.toLowerCase().includes('versionvault') &&
+    !s.name.toLowerCase().includes('version vault')
+  ).length;
 
   const thisWeeksUpdates = updates.filter(s => {
     const dateStr = s.release_date || s.last_checked;
@@ -107,7 +115,7 @@ export function Dashboard() {
       />
       <OnboardingModal />
       <BetaBanner />
-      <GracePeriodBanner trackedCount={trackedCount} />
+      <GracePeriodBanner trackedCount={countableTrackedCount} />
       <Metrics
         trackedCount={trackedCount}
         thisWeeksUpdates={thisWeeksUpdates}
@@ -126,7 +134,7 @@ export function Dashboard() {
           onOpenChange={(open) => !open && handleModalClose()}
           software={urlSoftware}
           isTracked={trackedIds.has(urlSoftware.id)}
-          trackedCount={trackedCount}
+          trackedCount={countableTrackedCount}
           onTrackingChange={() => {
             refreshTracking();
           }}

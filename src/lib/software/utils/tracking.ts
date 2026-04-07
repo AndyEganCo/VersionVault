@@ -2,6 +2,34 @@ import { supabase } from '@/lib/supabase';
 
 export const FREE_TIER_TRACKING_LIMIT = 5;
 
+// VersionVault is excluded from the free tier tracking limit
+// (we want users to keep it tracked for their own update notifications)
+let cachedVersionVaultId: string | null | undefined = undefined;
+
+export async function getVersionVaultSoftwareId(): Promise<string | null> {
+  if (cachedVersionVaultId !== undefined) {
+    return cachedVersionVaultId;
+  }
+
+  try {
+    const { data } = await supabase
+      .from('software')
+      .select('id, name')
+      .or('name.ilike.%versionvault%,name.ilike.%version vault%');
+
+    const vv = data?.find(s =>
+      s.name.toLowerCase().includes('versionvault') ||
+      s.name.toLowerCase().includes('version vault')
+    );
+
+    cachedVersionVaultId = vv?.id ?? null;
+    return cachedVersionVaultId;
+  } catch (error) {
+    console.error('Error finding VersionVault software:', error);
+    return null;
+  }
+}
+
 export async function getTrackedSoftware(userId: string): Promise<Set<string>> {
   const { data, error } = await supabase
     .from('tracked_software')
@@ -17,10 +45,19 @@ export async function getTrackedSoftware(userId: string): Promise<Set<string>> {
 }
 
 export async function getTrackedCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
+  const vvId = await getVersionVaultSoftwareId();
+
+  let query = supabase
     .from('tracked_software')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId);
+
+  // Exclude VersionVault from the count (doesn't count toward free tier limit)
+  if (vvId) {
+    query = query.neq('software_id', vvId);
+  }
+
+  const { count, error } = await query;
 
   if (error) {
     console.error('Error fetching tracked count:', error);

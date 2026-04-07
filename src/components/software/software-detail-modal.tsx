@@ -78,7 +78,11 @@ export function SoftwareDetailModal({
   const currentVersionInfo = versionHistory.find(v => v.version === software.current_version);
   const currentVersionDate = currentVersionInfo?.release_date || currentVersionInfo?.detected_at;
 
-  const atTrackingLimit = !isPremium && !tracked && trackedCount >= FREE_TIER_TRACKING_LIMIT;
+  const isVersionVault =
+    software.name.toLowerCase().includes('versionvault') ||
+    software.name.toLowerCase().includes('version vault');
+
+  const atTrackingLimit = !isPremium && !tracked && !isVersionVault && trackedCount >= FREE_TIER_TRACKING_LIMIT;
 
   const handleTrackingChange = async (checked: boolean) => {
     if (!user) {

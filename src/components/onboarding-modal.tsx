@@ -125,7 +125,14 @@ export function OnboardingModal() {
   const handleTrackingToggle = async (softwareId: string, tracked: boolean) => {
     if (!user) return;
 
-    if (tracked && !isPremium && trackedIds.size >= FREE_TIER_TRACKING_LIMIT) {
+    // VersionVault doesn't count toward the limit
+    const isVv = softwareId === versionVaultId;
+    // Count tracked apps excluding VersionVault
+    const countableCount = versionVaultId
+      ? Array.from(trackedIds).filter(id => id !== versionVaultId).length
+      : trackedIds.size;
+
+    if (tracked && !isPremium && !isVv && countableCount >= FREE_TIER_TRACKING_LIMIT) {
       toast.error(`Free accounts can track up to ${FREE_TIER_TRACKING_LIMIT} apps. Upgrade to Pro for unlimited tracking.`);
       return;
     }
