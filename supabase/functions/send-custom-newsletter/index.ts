@@ -2,6 +2,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { Resend } from 'https://esm.sh/resend@2.0.0';
+import { throttledResendSend } from '../_shared/resend-throttle.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -242,19 +243,17 @@ serve(async (req) => {
           sponsor,
         });
 
-        const { data: emailData, error: emailError } = await resend.emails.send(
-          {
-            from: VERSIONVAULT_FROM,
-            to: recipient.email,
-            subject,
-            html,
-            headers: {
-              'X-Entity-Ref-ID': sendRecord.id,
-              'List-Unsubscribe': `<${VERSIONVAULT_URL}/unsubscribe?uid=${recipient.user_id}>`,
-              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-            },
-          }
-        );
+        const { data: emailData, error: emailError } = await throttledResendSend(resend, {
+          from: VERSIONVAULT_FROM,
+          to: recipient.email,
+          subject,
+          html,
+          headers: {
+            'X-Entity-Ref-ID': sendRecord.id,
+            'List-Unsubscribe': `<${VERSIONVAULT_URL}/unsubscribe?uid=${recipient.user_id}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          },
+        }) as { data: { id?: string } | null; error: { message?: string } | null };
 
         if (emailError) {
           throw new Error(emailError.message);

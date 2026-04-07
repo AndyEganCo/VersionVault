@@ -3,6 +3,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Resend } from 'https://esm.sh/resend@2.0.0'
+import { throttledResendSend } from '../_shared/resend-throttle.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -159,7 +160,7 @@ serve(async (req) => {
       if (!userEmail) continue
 
       try {
-        const { error: emailError } = await resend.emails.send({
+        const { error: emailError } = await throttledResendSend(resend, {
           from: VERSIONVAULT_FROM,
           to: userEmail,
           subject,
