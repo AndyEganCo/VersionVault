@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -61,7 +62,7 @@ interface NewsletterDraft {
   updated_at: string;
 }
 
-type RecipientType = 'test' | 'all' | 'segment';
+type RecipientType = 'test' | 'all' | 'segment' | 'everyone';
 
 interface Sponsor {
   name: string;
@@ -94,8 +95,18 @@ export function NewsletterCompose() {
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
 
   // Stats
-  const [totalUsers, setTotalUsers] = useState(0);
+  const [audienceStats, setAudienceStats] = useState({
+    totalContacts: 0,
+    subscribers: 0,
+    unsubscribers: 0,
+    totalAuthUsers: 0,
+  });
   const [activeSponsor, setActiveSponsor] = useState<Sponsor | null>(null);
+
+  // "Send to everyone" confirmation gate
+  const [everyoneConfirmOpen, setEveryoneConfirmOpen] = useState(false);
+  const [everyoneAcknowledged, setEveryoneAcknowledged] = useState(false);
+  const [everyoneTypedConfirm, setEveryoneTypedConfirm] = useState('');
 
   useEffect(() => {
     if (user && isAdmin) {
@@ -123,18 +134,33 @@ export function NewsletterCompose() {
 
   const loadStats = async () => {
     try {
-      // Get total active users with email notifications enabled
-      // Use RPC function to bypass RLS policies
-      const { data: countData, error: countError } = await supabase
-        .rpc('get_newsletter_recipient_count');
+      // Pull live counts from Resend Audience (the source of truth for who
+      // will actually receive the newsletter). We hit an edge function so
+      // the RESEND_API_KEY stays server-side.
+      const session = (await supabase.auth.getSession()).data.session;
+      const statsResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-resend-audience-stats`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+        }
+      );
 
-      if (countError) {
-        console.error('Error fetching user count:', countError);
+      if (!statsResponse.ok) {
+        const err = await statsResponse.json().catch(() => ({}));
+        console.error('Error fetching audience stats:', err);
+      } else {
+        const stats = await statsResponse.json();
+        console.log('📊 Resend audience stats:', stats);
+        setAudienceStats({
+          totalContacts: stats.totalContacts || 0,
+          subscribers: stats.subscribers || 0,
+          unsubscribers: stats.unsubscribers || 0,
+          totalAuthUsers: stats.totalAuthUsers || 0,
+        });
       }
-
-      const userCount = countData || 0;
-      console.log('📊 User count result:', { userCount });
-      setTotalUsers(userCount);
 
       // Get active sponsor
       const { data: sponsorData } = await supabase
@@ -246,11 +272,24 @@ export function NewsletterCompose() {
 
     if (recipientType === 'all') {
       const confirmed = confirm(
-        `Are you sure you want to send this newsletter to ${totalUsers} users? This cannot be undone.`
+        `Are you sure you want to send this newsletter to ${audienceStats.subscribers} subscribed users? This cannot be undone.`
       );
       if (!confirmed) return;
     }
 
+    if (recipientType === 'everyone') {
+      // Hard-gated by a separate Dialog (see below). Open it and bail —
+      // the dialog will call performSend() once both confirmations pass.
+      setEveryoneAcknowledged(false);
+      setEveryoneTypedConfirm('');
+      setEveryoneConfirmOpen(true);
+      return;
+    }
+
+    await performSend();
+  };
+
+  const performSend = async () => {
     setSending(true);
     try {
       const response = await fetch(
@@ -464,9 +503,20 @@ export function NewsletterCompose() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="test">Test Email Only</SelectItem>
-                    <SelectItem value="all">All Users ({totalUsers})</SelectItem>
+                    <SelectItem value="all">
+                      All Subscribed Users ({audienceStats.subscribers})
+                    </SelectItem>
+                    <SelectItem value="everyone">
+                      Everyone — incl. unsubscribed ({audienceStats.totalAuthUsers})
+                    </SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Resend audience: {audienceStats.subscribers} subscribed ·{' '}
+                  {audienceStats.unsubscribers} unsubscribed ·{' '}
+                  {audienceStats.totalContacts} total · {audienceStats.totalAuthUsers}{' '}
+                  total accounts
+                </p>
               </div>
 
               {recipientType === 'test' && (
@@ -489,7 +539,26 @@ export function NewsletterCompose() {
                     <div>
                       <p className="font-medium text-yellow-500">Warning</p>
                       <p className="text-sm text-muted-foreground">
-                        This will send the newsletter to {totalUsers} users. Make sure to preview and test first!
+                        This will send the newsletter to {audienceStats.subscribers} subscribed users. Make sure to preview and test first!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {recipientType === 'everyone' && (
+                <div className="border-l-4 border-destructive bg-destructive/10 p-4 rounded">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-5 w-5 text-destructive mt-0.5 flex-shrink-0" />
+                    <div className="space-y-1">
+                      <p className="font-semibold text-destructive">Critical use only</p>
+                      <p className="text-sm text-muted-foreground">
+                        Sends to <strong>all {audienceStats.totalAuthUsers} accounts</strong>,
+                        including the {audienceStats.unsubscribers} unsubscribed and any
+                        with hard-bounced addresses. Reserve this for security alerts,
+                        account notices, or major policy/service changes —{' '}
+                        <strong>never marketing</strong>. Sending marketing to opted-out
+                        users may violate CAN-SPAM, GDPR, or CASL.
                       </p>
                     </div>
                   </div>
@@ -499,10 +568,15 @@ export function NewsletterCompose() {
               <Button
                 onClick={handleSend}
                 disabled={!subject || !content || sending}
+                variant={recipientType === 'everyone' ? 'destructive' : 'default'}
                 className="w-full"
               >
                 <Send className="h-4 w-4 mr-2" />
-                {sending ? 'Sending...' : `Send Newsletter${recipientType === 'all' ? ` to ${totalUsers} users` : ''}`}
+                {sending
+                  ? 'Sending...'
+                  : recipientType === 'everyone'
+                    ? `Send to Everyone (${audienceStats.totalAuthUsers} users)`
+                    : `Send Newsletter${recipientType === 'all' ? ` to ${audienceStats.subscribers} subscribed users` : ''}`}
               </Button>
             </CardContent>
           </Card>
@@ -648,6 +722,81 @@ export function NewsletterCompose() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* "Send to Everyone" hard confirmation gate */}
+      <Dialog open={everyoneConfirmOpen} onOpenChange={setEveryoneConfirmOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-destructive flex items-center gap-2">
+              <AlertCircle className="h-5 w-5" />
+              Send to Everyone — Confirm
+            </DialogTitle>
+            <DialogDescription>
+              You're about to email <strong>all {audienceStats.totalAuthUsers} accounts</strong>,
+              including {audienceStats.unsubscribers} unsubscribed users and any with
+              hard-bounced addresses. This bypasses normal opt-out protections.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="border-l-4 border-destructive bg-destructive/10 p-3 rounded text-sm text-muted-foreground">
+              Use this only for security alerts, account notices, or major
+              policy/service changes. Sending marketing content to opted-out
+              users may violate CAN-SPAM, GDPR, or CASL.
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="everyone-ack"
+                checked={everyoneAcknowledged}
+                onCheckedChange={(v) => setEveryoneAcknowledged(v === true)}
+              />
+              <Label
+                htmlFor="everyone-ack"
+                className="text-sm font-normal leading-snug cursor-pointer"
+              >
+                I confirm this is a critical / transactional message, not
+                marketing, and I accept responsibility for emailing
+                unsubscribed users.
+              </Label>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="everyone-typed">
+                Type <span className="font-mono font-semibold">EVERYONE</span> to confirm
+              </Label>
+              <Input
+                id="everyone-typed"
+                value={everyoneTypedConfirm}
+                onChange={(e) => setEveryoneTypedConfirm(e.target.value)}
+                placeholder="EVERYONE"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setEveryoneConfirmOpen(false)}
+              disabled={sending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={
+                !everyoneAcknowledged ||
+                everyoneTypedConfirm !== 'EVERYONE' ||
+                sending
+              }
+              onClick={async () => {
+                setEveryoneConfirmOpen(false);
+                await performSend();
+              }}
+            >
+              <Send className="h-4 w-4 mr-2" />
+              Send to {audienceStats.totalAuthUsers} users
             </Button>
           </DialogFooter>
         </DialogContent>
