@@ -156,42 +156,91 @@ serve(async (req) => {
         },
       ];
     } else if (recipientType === 'all') {
-      // Get all users with email notifications enabled
-      const { data: settingsData } = await supabase
-        .from('user_settings')
-        .select('user_id')
-        .eq('email_notifications', true);
+      // Source of truth = Resend Audience. Resend owns subscribe / unsubscribe
+      // state (including unsubscribes from email links), so we send to whoever
+      // Resend currently has marked as subscribed in the configured audience.
+      const audienceId = Deno.env.get('RESEND_AUDIENCE_ID');
+      if (!audienceId) {
+        return new Response(
+          JSON.stringify({ error: 'RESEND_AUDIENCE_ID not configured' }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
 
-      if (settingsData && settingsData.length > 0) {
-        const userIds = settingsData.map((s) => s.user_id);
-
-        // Get user emails from auth.users
-        // Note: listUsers() has a default limit of 50. Set perPage to ensure we get all users.
-        const { data: authData } = await supabase.auth.admin.listUsers({
-          perPage: 1000, // Fetch up to 1000 users (covers growth)
+      // Fetch all contacts in the audience (loop defensively in case Resend
+      // adds pagination later — currently this returns a single page).
+      type ResendContact = { id: string; email: string; unsubscribed: boolean };
+      const audienceContacts: ResendContact[] = [];
+      let nextUrl: string | null = `https://api.resend.com/audiences/${audienceId}/contacts`;
+      while (nextUrl) {
+        const resendRes: Response = await fetch(nextUrl, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
         });
+        if (!resendRes.ok) {
+          const errText = await resendRes.text();
+          console.error(`❌ Resend audience fetch failed: ${resendRes.status} - ${errText}`);
+          return new Response(
+            JSON.stringify({ error: `Failed to fetch Resend audience: ${resendRes.status}` }),
+            {
+              status: 502,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            }
+          );
+        }
+        const body: { data?: ResendContact[]; has_more?: boolean; next_url?: string } =
+          await resendRes.json();
+        if (Array.isArray(body.data)) {
+          audienceContacts.push(...body.data);
+        }
+        nextUrl = body.has_more && body.next_url ? body.next_url : null;
+      }
 
-        if (authData.users) {
-          const enabledUserIds = new Set(userIds);
-          recipients = authData.users
-            .filter((u) => enabledUserIds.has(u.id) && u.email)
-            .map((u) => ({
-              email: u.email!,
-              user_id: u.id,
-              name: u.user_metadata?.name || u.email!.split('@')[0],
-            }));
+      const subscribedContacts = audienceContacts.filter((c) => !c.unsubscribed && c.email);
+      console.log(
+        `📋 Resend audience: ${audienceContacts.length} total, ${subscribedContacts.length} subscribed`
+      );
+
+      // Resolve each contact email to a Supabase user so we can populate
+      // user_id for newsletter_logs and the per-user unsubscribe link.
+      // Contacts with no matching Supabase user are skipped (we can't issue
+      // a working unsubscribe link without a uid).
+      const { data: authData } = await supabase.auth.admin.listUsers({
+        perPage: 1000,
+      });
+      const usersByEmail = new Map<string, { id: string; metadata: any }>();
+      if (authData?.users) {
+        for (const u of authData.users) {
+          if (u.email) {
+            usersByEmail.set(u.email.toLowerCase(), { id: u.id, metadata: u.user_metadata });
+          }
         }
       }
 
-      // Filter out bounced emails
-      const { data: bouncedData } = await supabase
-        .from('email_bounces')
-        .select('email')
-        .eq('bounce_type', 'hard');
+      const skipped: string[] = [];
+      for (const contact of subscribedContacts) {
+        const match = usersByEmail.get(contact.email.toLowerCase());
+        if (!match) {
+          skipped.push(contact.email);
+          continue;
+        }
+        recipients.push({
+          email: contact.email,
+          user_id: match.id,
+          name: match.metadata?.name || contact.email.split('@')[0],
+        });
+      }
 
-      if (bouncedData && bouncedData.length > 0) {
-        const bouncedEmails = new Set(bouncedData.map((b) => b.email));
-        recipients = recipients.filter((r) => !bouncedEmails.has(r.email));
+      if (skipped.length > 0) {
+        console.warn(
+          `⚠️ Skipped ${skipped.length} Resend contact(s) with no matching Supabase user: ${skipped.join(', ')}`
+        );
       }
     }
 

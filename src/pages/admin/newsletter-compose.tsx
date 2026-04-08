@@ -94,7 +94,11 @@ export function NewsletterCompose() {
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
 
   // Stats
-  const [totalUsers, setTotalUsers] = useState(0);
+  const [audienceStats, setAudienceStats] = useState({
+    totalContacts: 0,
+    subscribers: 0,
+    unsubscribers: 0,
+  });
   const [activeSponsor, setActiveSponsor] = useState<Sponsor | null>(null);
 
   useEffect(() => {
@@ -123,18 +127,32 @@ export function NewsletterCompose() {
 
   const loadStats = async () => {
     try {
-      // Get total active users with email notifications enabled
-      // Use RPC function to bypass RLS policies
-      const { data: countData, error: countError } = await supabase
-        .rpc('get_newsletter_recipient_count');
+      // Pull live counts from Resend Audience (the source of truth for who
+      // will actually receive the newsletter). We hit an edge function so
+      // the RESEND_API_KEY stays server-side.
+      const session = (await supabase.auth.getSession()).data.session;
+      const statsResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-resend-audience-stats`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+        }
+      );
 
-      if (countError) {
-        console.error('Error fetching user count:', countError);
+      if (!statsResponse.ok) {
+        const err = await statsResponse.json().catch(() => ({}));
+        console.error('Error fetching audience stats:', err);
+      } else {
+        const stats = await statsResponse.json();
+        console.log('📊 Resend audience stats:', stats);
+        setAudienceStats({
+          totalContacts: stats.totalContacts || 0,
+          subscribers: stats.subscribers || 0,
+          unsubscribers: stats.unsubscribers || 0,
+        });
       }
-
-      const userCount = countData || 0;
-      console.log('📊 User count result:', { userCount });
-      setTotalUsers(userCount);
 
       // Get active sponsor
       const { data: sponsorData } = await supabase
@@ -246,7 +264,7 @@ export function NewsletterCompose() {
 
     if (recipientType === 'all') {
       const confirmed = confirm(
-        `Are you sure you want to send this newsletter to ${totalUsers} users? This cannot be undone.`
+        `Are you sure you want to send this newsletter to ${audienceStats.subscribers} subscribed users? This cannot be undone.`
       );
       if (!confirmed) return;
     }
@@ -464,9 +482,16 @@ export function NewsletterCompose() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="test">Test Email Only</SelectItem>
-                    <SelectItem value="all">All Users ({totalUsers})</SelectItem>
+                    <SelectItem value="all">
+                      All Subscribed Users ({audienceStats.subscribers})
+                    </SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Resend audience: {audienceStats.subscribers} subscribed ·{' '}
+                  {audienceStats.unsubscribers} unsubscribed ·{' '}
+                  {audienceStats.totalContacts} total
+                </p>
               </div>
 
               {recipientType === 'test' && (
@@ -489,7 +514,7 @@ export function NewsletterCompose() {
                     <div>
                       <p className="font-medium text-yellow-500">Warning</p>
                       <p className="text-sm text-muted-foreground">
-                        This will send the newsletter to {totalUsers} users. Make sure to preview and test first!
+                        This will send the newsletter to {audienceStats.subscribers} subscribed users. Make sure to preview and test first!
                       </p>
                     </div>
                   </div>
@@ -502,7 +527,7 @@ export function NewsletterCompose() {
                 className="w-full"
               >
                 <Send className="h-4 w-4 mr-2" />
-                {sending ? 'Sending...' : `Send Newsletter${recipientType === 'all' ? ` to ${totalUsers} users` : ''}`}
+                {sending ? 'Sending...' : `Send Newsletter${recipientType === 'all' ? ` to ${audienceStats.subscribers} subscribed users` : ''}`}
               </Button>
             </CardContent>
           </Card>
