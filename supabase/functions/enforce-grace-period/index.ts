@@ -12,11 +12,13 @@ const GRACE_PERIOD_DAYS = 30
 const VERSIONVAULT_FROM = 'VersionVault <updates@updates.versionvault.dev>'
 const VERSIONVAULT_URL = 'https://versionvault.dev'
 
-// Reason a user is in a grace/winddown period. Same templates serve all three:
+// Reason a user is in a grace/winddown period. Same templates serve all four:
 // - subscription_ending: Pro user with a known cancellation date in the future
 // - subscription_ended: Pro just ended (failed payment / cancel) and they're now over the free limit
 // - free_overage: Free user already over the limit (early-adopter migration case)
-type ReminderReason = 'subscription_ending' | 'subscription_ended' | 'free_overage'
+// - bonus_ending: Pro grant (e.g. launch_gift, referral) is ending but the user
+//   is already within the free-tier limit — informational only, no enforcement
+type ReminderReason = 'subscription_ending' | 'subscription_ended' | 'free_overage' | 'bonus_ending'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -41,7 +43,7 @@ serve(async (req) => {
     }
 
     // Test mode: send a single template to a target email without touching the DB.
-    // Body: { testMode: true, testEmail: 'x@y.z', testType: 'start'|'reminder'|'final_warning'|'expired', testReason?: 'subscription_ending'|'subscription_ended'|'free_overage', testUserId?: string, testUserName?: string }
+    // Body: { testMode: true, testEmail: 'x@y.z', testType: 'start'|'reminder'|'final_warning'|'expired'|'bonus_ended', testReason?: 'subscription_ending'|'subscription_ended'|'free_overage'|'bonus_ending', testUserId?: string, testUserName?: string }
     let testBody: any = null
     try { testBody = await req.clone().json() } catch (_) { /* not json */ }
     if (testBody?.testMode) {
@@ -107,6 +109,8 @@ serve(async (req) => {
           removed.length ? removed : ['Photoshop', 'Sketch', 'VS Code', 'Notion'],
           testReason === 'free_overage' ? 'free_overage' : 'subscription_ended'
         )
+      } else if (testType === 'bonus_ended') {
+        await sendBonusEndedEmail(resend, testEmail, testUserName, testUserId, trackedCountForTest)
       } else {
         const daysLeft = testType === 'start' ? 30 : testType === 'reminder' ? 15 : 3
         await sendGracePeriodEmail(resend, testEmail, testUserName, testUserId, testType as any, trackedCountForTest, daysLeft, testReason)
@@ -177,14 +181,12 @@ serve(async (req) => {
       }
       const { count: trackedCount } = await countQuery
 
-      // If user is at or under the free limit, no enforcement needed. We
-      // still DO want them to know their Pro is ending (for subscription
-      // lifecycle transparency), but only if they're above the free limit
-      // do we need the countdown / auto-untrack.
-      if ((trackedCount ?? 0) <= FREE_TIER_TRACKING_LIMIT) {
-        results.skipped++
-        continue
-      }
+      // If the user is at or under the free limit, nothing will be
+      // auto-removed when the grant expires — but we still want to tell
+      // them their Pro access is ending so there are no surprises. We
+      // send a calmer "bonus ending" variant of the same emails instead
+      // of the over-limit countdown copy.
+      const isUnderLimit = (trackedCount ?? 0) <= FREE_TIER_TRACKING_LIMIT
 
       // Get user email & name.
       const { data: userData } = await supabase.auth.admin.getUserById(userId)
@@ -199,10 +201,14 @@ serve(async (req) => {
 
       // Determine reason for the email. We can't cheaply tell "subscription
       // just ended" from "launch gift winddown" from here, but we CAN tell
-      // "already expired" from "expiring soon". Use subscription_ending
-      // while pro is still active, subscription_ended once it's passed.
-      const reason: ReminderReason =
-        msUntilExpiry > 0 ? 'subscription_ending' : 'subscription_ended'
+      // "already expired" from "expiring soon" and "over limit" from "under
+      // limit". Under-limit users get the calm bonus_ending copy since
+      // nothing will actually be removed from their account.
+      const reason: ReminderReason = isUnderLimit
+        ? 'bonus_ending'
+        : msUntilExpiry > 0
+        ? 'subscription_ending'
+        : 'subscription_ended'
 
       // De-dupe emails per grant cycle by prefixing with the granted_until
       // date. If the user gets a fresh grant (new granted_until), the
@@ -237,48 +243,57 @@ serve(async (req) => {
         results.emailsSent++
       }
 
-      // Past expiry: auto-untrack oldest apps beyond FREE_TIER_TRACKING_LIMIT
+      // Past expiry: handle under-limit and over-limit users differently.
+      // - Under-limit: send a calm "your Pro bonus ended" confirmation, no deletion.
+      // - Over-limit: auto-untrack oldest apps beyond FREE_TIER_TRACKING_LIMIT
+      //   and send the kept/removed expired email.
       if (msUntilExpiry <= 0 && !emailsSent.includes(`${grantKey}:expired`)) {
-        const { data: allTrackedApps } = await supabase
-          .from('tracked_software')
-          .select('id, software_id, created_at')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-
-        // Always keep VersionVault (doesn't count toward limit)
-        const trackedApps = (allTrackedApps || []).filter((a: any) => a.software_id !== versionVaultId)
-
-        if (trackedApps.length > FREE_TIER_TRACKING_LIMIT) {
-          const toRemove = trackedApps.slice(FREE_TIER_TRACKING_LIMIT)
-          const removeIds = toRemove.map((app: any) => app.id)
-
-          const keptApps = trackedApps.slice(0, FREE_TIER_TRACKING_LIMIT)
-          const { data: keptSoftware } = await supabase
-            .from('software')
-            .select('name')
-            .in('id', keptApps.map((a: any) => a.software_id))
-          const { data: removedSoftware } = await supabase
-            .from('software')
-            .select('name')
-            .in('id', toRemove.map((a: any) => a.software_id))
-
-          await supabase
-            .from('tracked_software')
-            .delete()
-            .in('id', removeIds)
-
-          await sendGracePeriodExpiredEmail(
-            resend,
-            userEmail,
-            userName,
-            userId,
-            keptSoftware?.map((s: any) => s.name) || [],
-            removedSoftware?.map((s: any) => s.name) || [],
-            'subscription_ended'
-          )
-
+        if (isUnderLimit) {
+          await sendBonusEndedEmail(resend, userEmail, userName, userId, trackedCount ?? 0)
           emailsSent.push(`${grantKey}:expired`)
           results.expired++
+        } else {
+          const { data: allTrackedApps } = await supabase
+            .from('tracked_software')
+            .select('id, software_id, created_at')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+
+          // Always keep VersionVault (doesn't count toward limit)
+          const trackedApps = (allTrackedApps || []).filter((a: any) => a.software_id !== versionVaultId)
+
+          if (trackedApps.length > FREE_TIER_TRACKING_LIMIT) {
+            const toRemove = trackedApps.slice(FREE_TIER_TRACKING_LIMIT)
+            const removeIds = toRemove.map((app: any) => app.id)
+
+            const keptApps = trackedApps.slice(0, FREE_TIER_TRACKING_LIMIT)
+            const { data: keptSoftware } = await supabase
+              .from('software')
+              .select('name')
+              .in('id', keptApps.map((a: any) => a.software_id))
+            const { data: removedSoftware } = await supabase
+              .from('software')
+              .select('name')
+              .in('id', toRemove.map((a: any) => a.software_id))
+
+            await supabase
+              .from('tracked_software')
+              .delete()
+              .in('id', removeIds)
+
+            await sendGracePeriodExpiredEmail(
+              resend,
+              userEmail,
+              userName,
+              userId,
+              keptSoftware?.map((s: any) => s.name) || [],
+              removedSoftware?.map((s: any) => s.name) || [],
+              'subscription_ended'
+            )
+
+            emailsSent.push(`${grantKey}:expired`)
+            results.expired++
+          }
         }
       }
 
@@ -360,16 +375,19 @@ async function sendGracePeriodEmail(
       subscription_ending: 'PRO ENDING SOON',
       subscription_ended: 'PRO HAS ENDED',
       free_overage: 'FREE PLAN NOTICE',
+      bonus_ending: 'PRO BONUS ENDING',
     },
     reminder: {
       subscription_ending: 'PRO ENDING REMINDER',
       subscription_ended: 'PRO ENDED REMINDER',
       free_overage: 'GRACE PERIOD REMINDER',
+      bonus_ending: 'PRO BONUS REMINDER',
     },
     final_warning: {
       subscription_ending: 'FINAL WARNING',
       subscription_ended: 'FINAL WARNING',
       free_overage: 'FINAL WARNING',
+      bonus_ending: 'PRO BONUS ENDING SOON',
     },
   }
   const subjects: Record<typeof type, Record<ReminderReason, string>> = {
@@ -377,16 +395,19 @@ async function sendGracePeriodEmail(
       subscription_ending: `Your VersionVault Pro ends in ${daysLeft} days`,
       subscription_ended: `Your VersionVault Pro has ended`,
       free_overage: `Heads up: you're tracking ${trackedCount} apps on the free plan`,
+      bonus_ending: `Your free month of VersionVault Pro ends in ${daysLeft} days`,
     },
     reminder: {
       subscription_ending: `${daysLeft} days until your Pro access ends`,
       subscription_ended: `${daysLeft} days left before we trim your tracked apps`,
       free_overage: `${daysLeft} days left to reduce your tracked apps`,
+      bonus_ending: `${daysLeft} days left on your free Pro month`,
     },
     final_warning: {
       subscription_ending: `Final reminder: Pro ends in ${daysLeft} days`,
       subscription_ended: `Final reminder: ${daysLeft} days until auto-removal`,
       free_overage: `Final reminder: ${daysLeft} days until auto-removal`,
+      bonus_ending: `${daysLeft} days left on your free Pro month`,
     },
   }
   const headlines: Record<typeof type, Record<ReminderReason, string>> = {
@@ -394,24 +415,28 @@ async function sendGracePeriodEmail(
       subscription_ending: `Your Pro subscription ends in ${daysLeft} days`,
       subscription_ended: `Your Pro subscription has ended`,
       free_overage: `You're tracking ${trackedCount} apps — free plan allows ${FREE_TIER_TRACKING_LIMIT}`,
+      bonus_ending: `Your free month of Pro ends in ${daysLeft} days`,
     },
     reminder: {
       subscription_ending: `${daysLeft} days until your Pro access ends`,
       subscription_ended: `${daysLeft} days left in your winddown period`,
       free_overage: `${daysLeft} days left in your grace period`,
+      bonus_ending: `${daysLeft} days left on your free Pro month`,
     },
     final_warning: {
       subscription_ending: `Last chance: Pro ends in ${daysLeft} days`,
       subscription_ended: `Last chance: ${daysLeft} days until auto-removal`,
       free_overage: `Last chance: ${daysLeft} days until auto-removal`,
+      bonus_ending: `${daysLeft} days left on your free Pro month`,
     },
   }
   const intros: Record<ReminderReason, string> = {
     subscription_ending: `Your VersionVault Pro subscription is set to end soon. After it ends, the free plan allows up to <strong style="color: #ffffff;">${FREE_TIER_TRACKING_LIMIT} tracked apps</strong>. You're currently tracking <strong style="color: #ffffff;">${trackedCount}</strong>.`,
     subscription_ended: `Your VersionVault Pro subscription has ended and you've been moved to the free plan, which allows up to <strong style="color: #ffffff;">${FREE_TIER_TRACKING_LIMIT} tracked apps</strong>. You're currently tracking <strong style="color: #ffffff;">${trackedCount}</strong>.`,
     free_overage: `VersionVault's free plan allows <strong style="color: #ffffff;">${FREE_TIER_TRACKING_LIMIT} tracked apps</strong>. You're currently tracking <strong style="color: #ffffff;">${trackedCount}</strong>. We wanted to give you a heads up before anything changes on your account.`,
+    bonus_ending: `Just a heads up — your free month of VersionVault Pro is ending. Good news: you're tracking <strong style="color: #ffffff;">${trackedCount}</strong> app${trackedCount === 1 ? '' : 's'}, well within the free plan limit of <strong style="color: #ffffff;">${FREE_TIER_TRACKING_LIMIT}</strong>, so nothing will change on your account. We just wanted you to know.`,
   }
-  const badgeColors = {
+  const badgeColors: Record<typeof type, string> = {
     start: '#3b82f6',
     reminder: '#f59e0b',
     final_warning: '#ef4444',
@@ -420,7 +445,15 @@ async function sendGracePeriodEmail(
   const label = labels[type][reason]
   const headline = headlines[type][reason]
   const intro = intros[reason]
-  const badgeColor = badgeColors[type]
+  // Bonus_ending is informational — keep the badge calm (blue) regardless
+  // of which reminder tier it's firing on, since there's no cliff.
+  const badgeColor = reason === 'bonus_ending' ? '#3b82f6' : badgeColors[type]
+  // Count color: red if over limit, green if the user is already compliant.
+  const countColor = trackedCount > FREE_TIER_TRACKING_LIMIT ? '#ef4444' : '#22c55e'
+
+  const actionLine = reason === 'bonus_ending'
+    ? `Nothing is going to change on your account when Pro ends — you're already within the free plan limit. If you'd like unlimited tracking back, you can <strong style="color: #ffffff;">upgrade to Pro</strong> or <strong style="color: #ffffff;">invite friends</strong> to earn more free Pro time.`
+    : `You have <strong style="color: #ffffff;">${daysLeft} day${daysLeft === 1 ? '' : 's'}</strong> to ${reason === 'subscription_ending' ? 'renew your Pro subscription, reduce your tracked apps to ' + FREE_TIER_TRACKING_LIMIT + ', or' : 'reduce your tracked apps to ' + FREE_TIER_TRACKING_LIMIT + ', resubscribe to Pro, or'} <strong style="color: #ffffff;">invite friends</strong> to earn free Pro time. After that, we'll automatically remove your oldest tracked apps beyond the limit.`
 
   const body = `
     <!-- Greeting -->
@@ -440,13 +473,13 @@ async function sendGracePeriodEmail(
         </div>
         <div style="font-size: 14px; font-family: monospace; margin-top: 8px;">
           <span style="color: #737373;">Tracking</span>
-          <span style="color: #ef4444; font-weight: 600;"> ${trackedCount}</span>
+          <span style="color: ${countColor}; font-weight: 600;"> ${trackedCount}</span>
           <span style="color: #525252;"> / </span>
           <span style="color: #22c55e; font-weight: 600;">${FREE_TIER_TRACKING_LIMIT}</span>
           <span style="color: #737373;"> allowed</span>
         </div>
         <div style="font-size: 13px; color: #a3a3a3; margin-top: 12px; line-height: 1.6;">
-          You have <strong style="color: #ffffff;">${daysLeft} day${daysLeft === 1 ? '' : 's'}</strong> to ${reason === 'subscription_ending' ? 'renew your Pro subscription, reduce your tracked apps to ' + FREE_TIER_TRACKING_LIMIT + ', or' : 'reduce your tracked apps to ' + FREE_TIER_TRACKING_LIMIT + ', resubscribe to Pro, or'} <strong style="color: #ffffff;">invite friends</strong> to earn free Pro time. After that, we'll automatically remove your oldest tracked apps beyond the limit.
+          ${actionLine}
         </div>
       </div>
     </div>
@@ -474,8 +507,13 @@ async function sendGracePeriodEmail(
     ? `Your VersionVault Pro subscription is set to end soon. After it ends, the free plan allows up to ${FREE_TIER_TRACKING_LIMIT} tracked apps. You're currently tracking ${trackedCount}.`
     : reason === 'subscription_ended'
     ? `Your VersionVault Pro subscription has ended and you've been moved to the free plan, which allows up to ${FREE_TIER_TRACKING_LIMIT} tracked apps. You're currently tracking ${trackedCount}.`
+    : reason === 'bonus_ending'
+    ? `Your free month of VersionVault Pro is ending in ${daysLeft} days. You're tracking ${trackedCount} app${trackedCount === 1 ? '' : 's'}, within the free plan limit of ${FREE_TIER_TRACKING_LIMIT}, so nothing will change on your account.`
     : `VersionVault's free plan allows ${FREE_TIER_TRACKING_LIMIT} tracked apps. You're currently tracking ${trackedCount}.`
-  const text = `>_ VersionVault - ${label}\n\nHey ${userName},\n\n${headline}\n\n${introText}\n\nYou have ${daysLeft} day${daysLeft === 1 ? '' : 's'} before we automatically remove your oldest tracked apps beyond the free-plan limit. Renew Pro, reduce your tracked apps, or invite friends to earn free Pro time.\n\nDon't want to pay? Invite a friend and you both get 1 free month of Pro.\n\nManage apps: ${VERSIONVAULT_URL}/dashboard\nInvite friends: ${VERSIONVAULT_URL}/user/referrals\nUpgrade: ${VERSIONVAULT_URL}/premium\n\n--\nVersionVault\nUnsubscribe: ${VERSIONVAULT_URL}/unsubscribe?uid=${userId}\n`
+  const actionTextLine = reason === 'bonus_ending'
+    ? `Nothing is going to change on your account. If you'd like unlimited tracking back, you can upgrade to Pro or invite friends to earn more free Pro time.`
+    : `You have ${daysLeft} day${daysLeft === 1 ? '' : 's'} before we automatically remove your oldest tracked apps beyond the free-plan limit. Renew Pro, reduce your tracked apps, or invite friends to earn free Pro time.`
+  const text = `>_ VersionVault - ${label}\n\nHey ${userName},\n\n${headline}\n\n${introText}\n\n${actionTextLine}\n\nDon't want to pay? Invite a friend and you both get 1 free month of Pro.\n\nManage apps: ${VERSIONVAULT_URL}/dashboard\nInvite friends: ${VERSIONVAULT_URL}/user/referrals\nUpgrade: ${VERSIONVAULT_URL}/premium\n\n--\nVersionVault\nUnsubscribe: ${VERSIONVAULT_URL}/unsubscribe?uid=${userId}\n`
 
   if (!resend) {
     console.log(`📧 [dry-run] ${type} → ${email} (${trackedCount} apps, ${daysLeft} days)`)
@@ -557,4 +595,75 @@ async function sendGracePeriodExpiredEmail(
   const { error } = await throttledResendSend(resend, { from: VERSIONVAULT_FROM, to: email, subject, html, text })
   if (error) console.error(`❌ grace period expired send failed for ${email}:`, error)
   else console.log(`✅ Sent grace period expired email to ${email}`)
+}
+
+// Sent at expiry for users whose Pro bonus ended while already under the
+// free-tier tracking limit. Nothing is removed from their account — this
+// is purely a confirmation so they know the bonus month has wrapped up.
+async function sendBonusEndedEmail(
+  resend: Resend | null,
+  email: string,
+  userName: string,
+  userId: string,
+  trackedCount: number,
+) {
+  const subject = `Your free month of VersionVault Pro has ended`
+  const label = 'PRO BONUS ENDED'
+
+  const body = `
+    <!-- Greeting -->
+    <div style="padding: 24px;">
+      <div style="font-size: 16px; color: #ffffff; margin-bottom: 12px;">Hey ${userName},</div>
+      <div style="font-size: 14px; color: #a3a3a3; line-height: 1.6;">
+        Your free month of VersionVault Pro has wrapped up. You're on the free plan now, tracking <strong style="color: #ffffff;">${trackedCount}</strong> app${trackedCount === 1 ? '' : 's'} — still within the free plan limit of <strong style="color: #ffffff;">${FREE_TIER_TRACKING_LIMIT}</strong>, so nothing changed on your account.
+      </div>
+    </div>
+
+    <!-- Status card -->
+    <div style="padding: 0 24px 24px 24px;">
+      <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <span style="font-size: 16px; font-weight: 600; color: #ffffff;">You're on the free plan</span>
+          <span style="font-size: 10px; font-weight: 600; color: #ffffff; background-color: #3b82f6; padding: 3px 8px; border-radius: 4px;">${label}</span>
+        </div>
+        <div style="font-size: 14px; font-family: monospace; margin-top: 8px;">
+          <span style="color: #737373;">Tracking</span>
+          <span style="color: #22c55e; font-weight: 600;"> ${trackedCount}</span>
+          <span style="color: #525252;"> / </span>
+          <span style="color: #22c55e; font-weight: 600;">${FREE_TIER_TRACKING_LIMIT}</span>
+          <span style="color: #737373;"> allowed</span>
+        </div>
+        <div style="font-size: 13px; color: #a3a3a3; margin-top: 12px; line-height: 1.6;">
+          Want unlimited tracking back? You can <strong style="color: #ffffff;">upgrade to Pro</strong> for $25/year, or <strong style="color: #ffffff;">invite friends</strong> to earn more free Pro time.
+        </div>
+      </div>
+    </div>
+
+    <!-- Referral hint card -->
+    <div style="padding: 0 24px 24px 24px;">
+      <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 16px 20px;">
+        <div style="font-size: 13px; color: #a3a3a3; line-height: 1.6;">
+          <span style="color: #ffffff; font-weight: 600;">Free Pro, the easy way:</span> invite a friend and you both get <strong style="color: #ffffff;">1 free month of Pro</strong>. Stack milestone bonuses (+2 / +3 / +6 months) at 5, 10, and 25 referrals.
+        </div>
+      </div>
+    </div>
+
+    <!-- CTAs -->
+    <div style="padding: 0 24px 32px 24px; text-align: center;">
+      <a href="${VERSIONVAULT_URL}/user/referrals" style="display: inline-block; font-size: 14px; font-weight: 600; color: #ffffff; background-color: #262626; border: 1px solid #404040; padding: 12px 20px; border-radius: 8px; text-decoration: none; margin: 4px;">Invite friends</a>
+      <a href="${VERSIONVAULT_URL}/premium" style="display: inline-block; font-size: 14px; font-weight: 600; color: #ffffff; background-color: #2563eb; padding: 12px 20px; border-radius: 8px; text-decoration: none; margin: 4px;">Upgrade — $25/yr</a>
+    </div>
+  `
+
+  const html = renderShell(label, userId, body)
+
+  const text = `>_ VersionVault - ${label}\n\nHey ${userName},\n\nYour free month of VersionVault Pro has wrapped up. You're on the free plan now, tracking ${trackedCount} app${trackedCount === 1 ? '' : 's'} — still within the free plan limit of ${FREE_TIER_TRACKING_LIMIT}, so nothing changed on your account.\n\nWant unlimited tracking back? Upgrade to Pro for $25/year, or invite friends to earn more free Pro time.\n\nInvite friends: ${VERSIONVAULT_URL}/user/referrals\nUpgrade: ${VERSIONVAULT_URL}/premium\n\n--\nVersionVault\nUnsubscribe: ${VERSIONVAULT_URL}/unsubscribe?uid=${userId}\n`
+
+  if (!resend) {
+    console.log(`📧 [dry-run] bonus_ended → ${email} (${trackedCount} apps)`)
+    return
+  }
+  const { error } = await throttledResendSend(resend, { from: VERSIONVAULT_FROM, to: email, subject, html, text })
+  if (error) console.error(`❌ bonus ended send failed for ${email}:`, error)
+  else console.log(`✅ Sent bonus ended email to ${email}`)
 }
