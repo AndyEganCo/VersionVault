@@ -98,7 +98,7 @@ serve(async (req) => {
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as Stripe.Invoice
         console.log(`✅ Invoice paid: ${invoice.id}`)
-        await handleInvoicePaymentSucceeded(invoice, supabase)
+        await handleInvoicePaymentSucceeded(invoice, supabase, stripe)
         break
       }
 
@@ -129,7 +129,11 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('❌ Error in handle-stripe-webhook:', error)
+    console.error('❌ Error in handle-stripe-webhook:', {
+      message: error?.message,
+      stack: error?.stack,
+      name: error?.name,
+    })
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -163,6 +167,66 @@ function toISOString(unixTimestamp: number | null | undefined): string | null {
   }
 }
 
+/**
+ * Pull current_period_start / current_period_end from a Stripe Subscription.
+ * Newer Stripe API versions moved these from the top level of the Subscription
+ * onto the line item (subscription.items.data[0]). Read from the line item
+ * first, fall back to the top-level field for older shapes.
+ */
+function getPeriodDates(sub: Stripe.Subscription) {
+  const item = sub.items?.data?.[0] as any
+  return {
+    start: toISOString(item?.current_period_start ?? (sub as any).current_period_start),
+    end: toISOString(item?.current_period_end ?? (sub as any).current_period_end),
+  }
+}
+
+/**
+ * Mark a user as a paid premium subscriber. Explicit upsert so we never depend
+ * on the database trigger firing — clears any prior trial granted_until.
+ */
+async function markUserPremium(userId: string, supabase: any) {
+  const { error } = await supabase
+    .from('premium_users')
+    .upsert(
+      [{
+        user_id: userId,
+        is_legacy: false,
+        granted_until: null,
+      }],
+      { onConflict: 'user_id' }
+    )
+
+  if (error) {
+    console.error(`❌ Error upserting premium_users for ${userId}:`, error)
+    throw error
+  }
+  console.log(`✅ premium_users upserted for ${userId}`)
+}
+
+/**
+ * Build the row payload for inserting/updating a subscription from a Stripe Subscription.
+ */
+function buildSubscriptionRow(
+  subscription: Stripe.Subscription,
+  userId: string,
+  customerId: string,
+  checkoutSessionId: string | null,
+) {
+  const { start, end } = getPeriodDates(subscription)
+  return {
+    user_id: userId,
+    stripe_customer_id: customerId,
+    stripe_subscription_id: subscription.id,
+    stripe_checkout_session_id: checkoutSessionId,
+    status: subscription.status,
+    plan_type: 'premium_yearly',
+    current_period_start: start,
+    current_period_end: end,
+    cancel_at_period_end: subscription.cancel_at_period_end ?? false,
+  }
+}
+
 // ============================================
 // Handler Functions
 // ============================================
@@ -174,7 +238,7 @@ async function handleCheckoutCompleted(
 ) {
   const userId = session.metadata?.user_id
   if (!userId) {
-    console.error('❌ No user_id in checkout session metadata')
+    console.error('❌ No user_id in checkout session metadata', { session_id: session.id })
     return
   }
 
@@ -184,39 +248,47 @@ async function handleCheckoutCompleted(
   if (mode === 'subscription') {
     // Premium subscription checkout
     const subscriptionId = session.subscription as string
+    console.log(`🔎 Retrieving subscription ${subscriptionId} from Stripe`)
 
     // Fetch full subscription details from Stripe
     const subscription = await stripe.subscriptions.retrieve(subscriptionId)
 
     // Create subscription record
+    const row = buildSubscriptionRow(subscription, userId, customerId, session.id)
     const { error } = await supabase
       .from('subscriptions')
-      .upsert([{
-        user_id: userId,
-        stripe_customer_id: customerId,
-        stripe_subscription_id: subscriptionId,
-        stripe_checkout_session_id: session.id,
-        status: subscription.status,
-        plan_type: 'premium_yearly',
-        current_period_start: toISOString(subscription.current_period_start),
-        current_period_end: toISOString(subscription.current_period_end),
-        cancel_at_period_end: subscription.cancel_at_period_end,
-      }], {
-        onConflict: 'stripe_subscription_id',
-      })
+      .upsert([row], { onConflict: 'stripe_subscription_id' })
 
     if (error) {
-      console.error('❌ Error creating subscription:', error)
+      console.error('❌ Error upserting subscription:', error)
       throw error
     }
 
-    console.log(`✅ Created subscription for user ${userId}`)
+    console.log(`✅ Upserted subscription ${subscriptionId} for user ${userId} (status=${subscription.status})`)
+
+    // Belt-and-suspenders: explicitly mark the user premium without depending on the trigger.
+    // The trigger only fires for status='active' / 'trialing', and Stripe checkout often arrives
+    // as 'incomplete' first. We want the user to see premium immediately on checkout.completed.
+    try {
+      await markUserPremium(userId, supabase)
+    } catch (err) {
+      // Don't let a premium_users hiccup roll back the subscription row insert.
+      console.error('⚠️ Continuing despite premium_users upsert failure', err)
+    }
 
     // Check if this user was referred — grant referrer paid conversion reward
-    await processReferralPaidReward(userId, supabase)
+    try {
+      await processReferralPaidReward(userId, supabase)
+    } catch (err) {
+      console.error('⚠️ processReferralPaidReward failed (non-fatal):', err)
+    }
 
     // Send welcome email
-    await sendSubscriptionWelcomeEmail(userId, supabase)
+    try {
+      await sendSubscriptionWelcomeEmail(userId, supabase)
+    } catch (err) {
+      console.error('⚠️ sendSubscriptionWelcomeEmail failed (non-fatal):', err)
+    }
 
   } else if (mode === 'payment') {
     // One-time donation checkout
@@ -259,23 +331,64 @@ async function handleSubscriptionChange(
   subscription: Stripe.Subscription,
   supabase: any
 ) {
-  const { error } = await supabase
+  const { start, end } = getPeriodDates(subscription)
+
+  const { data: updated, error } = await supabase
     .from('subscriptions')
     .update({
       status: subscription.status,
-      current_period_start: toISOString(subscription.current_period_start),
-      current_period_end: toISOString(subscription.current_period_end),
-      cancel_at_period_end: subscription.cancel_at_period_end,
+      current_period_start: start,
+      current_period_end: end,
+      cancel_at_period_end: subscription.cancel_at_period_end ?? false,
       canceled_at: toISOString(subscription.canceled_at),
     })
     .eq('stripe_subscription_id', subscription.id)
+    .select('user_id')
 
   if (error) {
     console.error('❌ Error updating subscription:', error)
     throw error
   }
 
+  // Recovery path: row didn't exist (we never saw checkout.session.completed for it).
+  // Insert from the subscription payload using metadata.user_id.
+  if (!updated || updated.length === 0) {
+    const userId = (subscription.metadata as any)?.user_id
+    if (!userId) {
+      console.error(`⚠️ No subscription row for ${subscription.id} and no metadata.user_id — cannot recover`)
+      return
+    }
+    const customerId = subscription.customer as string
+    console.log(`🩹 Recovering missing subscription row for ${subscription.id} (user ${userId})`)
+    const row = buildSubscriptionRow(subscription, userId, customerId, null)
+    const { error: insertErr } = await supabase
+      .from('subscriptions')
+      .upsert([row], { onConflict: 'stripe_subscription_id' })
+    if (insertErr) {
+      console.error('❌ Recovery upsert failed:', insertErr)
+      throw insertErr
+    }
+    if (subscription.status === 'active' || subscription.status === 'trialing') {
+      await markUserPremium(userId, supabase)
+    }
+    return
+  }
+
   console.log(`✅ Updated subscription ${subscription.id} status to ${subscription.status}`)
+
+  // If the subscription is now active, make sure premium_users reflects that
+  // even when the trigger doesn't fire (e.g. status column wasn't part of the
+  // change set, or trigger somehow no-ops on the conflict update path).
+  if (subscription.status === 'active' || subscription.status === 'trialing') {
+    const userId = updated[0]?.user_id
+    if (userId) {
+      try {
+        await markUserPremium(userId, supabase)
+      } catch (err) {
+        console.error('⚠️ premium_users upsert failed in handleSubscriptionChange:', err)
+      }
+    }
+  }
 }
 
 async function handleSubscriptionDeleted(
@@ -300,21 +413,58 @@ async function handleSubscriptionDeleted(
 
 async function handleInvoicePaymentSucceeded(
   invoice: Stripe.Invoice,
-  supabase: any
+  supabase: any,
+  stripe: Stripe,
 ) {
   const subscriptionId = invoice.subscription as string
   if (!subscriptionId) return
 
-  // Ensure subscription status is active
-  const { error } = await supabase
+  // Ensure subscription status is active and capture user_id
+  const { data: updated, error } = await supabase
     .from('subscriptions')
     .update({ status: 'active' })
     .eq('stripe_subscription_id', subscriptionId)
+    .select('user_id')
 
   if (error) {
     console.error('❌ Error updating subscription status:', error)
-  } else {
-    console.log(`✅ Confirmed subscription ${subscriptionId} is active`)
+    throw error
+  }
+
+  // Recovery path: subscription row never existed (e.g. checkout.session.completed
+  // failed and was never retried). Fetch the subscription from Stripe and insert it.
+  if (!updated || updated.length === 0) {
+    console.log(`🩹 No subscription row for ${subscriptionId} — recovering from Stripe`)
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+    const userId = (subscription.metadata as any)?.user_id
+    if (!userId) {
+      console.error(`⚠️ Cannot recover subscription ${subscriptionId}: no metadata.user_id on Stripe object`)
+      return
+    }
+    const customerId = subscription.customer as string
+    const row = buildSubscriptionRow(subscription, userId, customerId, null)
+    const { error: insertErr } = await supabase
+      .from('subscriptions')
+      .upsert([row], { onConflict: 'stripe_subscription_id' })
+    if (insertErr) {
+      console.error('❌ Recovery upsert failed in handleInvoicePaymentSucceeded:', insertErr)
+      throw insertErr
+    }
+    await markUserPremium(userId, supabase)
+    console.log(`✅ Recovered subscription ${subscriptionId} for user ${userId}`)
+    return
+  }
+
+  console.log(`✅ Confirmed subscription ${subscriptionId} is active`)
+
+  // Belt-and-suspenders: ensure premium_users reflects the active status.
+  const userId = updated[0]?.user_id
+  if (userId) {
+    try {
+      await markUserPremium(userId, supabase)
+    } catch (err) {
+      console.error('⚠️ premium_users upsert failed in handleInvoicePaymentSucceeded:', err)
+    }
   }
 }
 
