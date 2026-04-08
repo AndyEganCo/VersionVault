@@ -1,4 +1,4 @@
-import { LucideIcon, User, Bell, FileText, Heart, Users } from 'lucide-react';
+import { LucideIcon, User, Bell, FileText, Sparkles, Users } from 'lucide-react';
 
 /**
  * Navigation item with path, label, and optional icon
@@ -41,7 +41,7 @@ export const navigationConfig = {
     { path: '/user/profile', label: 'Profile', icon: User },
     { path: '/user/notifications', label: 'Notifications', icon: Bell },
     { path: '/requests', label: 'Requests', icon: FileText },
-    { path: '/user/contribute', label: 'Contribute', icon: Heart },
+    { path: '/premium', label: 'Premium', icon: Sparkles },
     { path: '/user/referrals', label: 'Invite Friends', icon: Users },
   ] as NavItem[],
 

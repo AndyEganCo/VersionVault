@@ -10,7 +10,6 @@ import { UserLayout } from '@/components/layout/user-layout';
 import { UserProfile } from '@/pages/user/profile';
 import { UserSettings } from '@/pages/user/settings';
 import { UserNotifications } from '@/pages/user/notifications';
-import { Contribute } from '@/pages/user/contribute';
 import { UserReferrals } from '@/pages/user/referrals';
 import { Signup } from '@/pages/signup';
 import { Premium } from '@/pages/premium';
@@ -59,7 +58,7 @@ export function Routes() {
           <Route path="profile" element={<UserProfile />} />
           <Route path="settings" element={<UserSettings />} />
           <Route path="notifications" element={<UserNotifications />} />
-          <Route path="contribute" element={<Contribute />} />
+          <Route path="contribute" element={<Navigate to="/premium" replace />} />
           <Route path="referrals" element={<UserReferrals />} />
         </Route>
 
