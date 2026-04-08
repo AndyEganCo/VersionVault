@@ -67,10 +67,13 @@ END;
 $$;
 
 -- Only the service role should call this function (the edge function uses the
--- service role key). Revoke from PUBLIC and authenticated to be explicit.
+-- service role key). Revoke the default PUBLIC EXECUTE and grant explicitly to
+-- service_role. Without the explicit grant the REVOKE FROM PUBLIC also locks
+-- out service_role, since the default access path is via PUBLIC.
 REVOKE ALL ON FUNCTION public.prepare_user_deletion(UUID) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.prepare_user_deletion(UUID) FROM authenticated;
 REVOKE ALL ON FUNCTION public.prepare_user_deletion(UUID) FROM anon;
+GRANT EXECUTE ON FUNCTION public.prepare_user_deletion(UUID) TO service_role;
 
 -- Verification
 DO $$
