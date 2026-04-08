@@ -1,0 +1,259 @@
+import { useState, useEffect } from 'react';
+import { PageHeader } from '@/components/layout/page-header';
+import { PageLayout } from '@/components/layout/page-layout';
+import { LoadingPage } from '@/components/loading';
+import { Badge } from '@/components/ui/badge';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { supabase } from '@/lib/supabase';
+import { formatDate } from '@/lib/date';
+import { Users, UserPlus, CheckCircle2, Crown } from 'lucide-react';
+
+interface ReferralRow {
+  referrer_id: string;
+  referrer_email: string;
+  code: string | null;
+  total: number;
+  verified: number;
+  paid: number;
+  last_referral_at: string | null;
+}
+
+export function AdminReferrals() {
+  const [rows, setRows] = useState<ReferralRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    activeReferrers: 0,
+    totalReferrals: 0,
+    verifiedReferrals: 0,
+    paidReferrals: 0,
+  });
+
+  useEffect(() => {
+    fetchReferrals();
+  }, []);
+
+  const fetchReferrals = async () => {
+    try {
+      setLoading(true);
+
+      const { data: referrals, error: refError } = await supabase
+        .from('referrals')
+        .select('referrer_id, status, created_at')
+        .order('created_at', { ascending: false });
+
+      if (refError) throw refError;
+
+      const referralList = referrals || [];
+
+      // Group by referrer
+      const byReferrer = new Map<string, ReferralRow>();
+      for (const r of referralList) {
+        const existing = byReferrer.get(r.referrer_id);
+        if (existing) {
+          existing.total += 1;
+          if (r.status === 'verified' || r.status === 'paid') existing.verified += 1;
+          if (r.status === 'paid') existing.paid += 1;
+          if (!existing.last_referral_at || r.created_at > existing.last_referral_at) {
+            existing.last_referral_at = r.created_at;
+          }
+        } else {
+          byReferrer.set(r.referrer_id, {
+            referrer_id: r.referrer_id,
+            referrer_email: '',
+            code: null,
+            total: 1,
+            verified: r.status === 'verified' || r.status === 'paid' ? 1 : 0,
+            paid: r.status === 'paid' ? 1 : 0,
+            last_referral_at: r.created_at,
+          });
+        }
+      }
+
+      const referrerIds = Array.from(byReferrer.keys());
+
+      // Fetch emails
+      if (referrerIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, email')
+          .in('id', referrerIds);
+
+        for (const u of usersData || []) {
+          const row = byReferrer.get(u.id);
+          if (row) row.referrer_email = u.email;
+        }
+
+        // Fetch referral codes
+        const { data: codesData } = await supabase
+          .from('referral_codes')
+          .select('user_id, code')
+          .in('user_id', referrerIds);
+
+        for (const c of codesData || []) {
+          const row = byReferrer.get(c.user_id);
+          if (row) row.code = c.code;
+        }
+      }
+
+      const sorted = Array.from(byReferrer.values()).sort((a, b) => b.total - a.total);
+      setRows(sorted);
+
+      setStats({
+        activeReferrers: sorted.length,
+        totalReferrals: referralList.length,
+        verifiedReferrals: referralList.filter(r => r.status === 'verified' || r.status === 'paid').length,
+        paidReferrals: referralList.filter(r => r.status === 'paid').length,
+      });
+    } catch (error) {
+      console.error('Error fetching referrals:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <LoadingPage />;
+  }
+
+  return (
+    <PageLayout>
+      <PageHeader
+        title="Referrals"
+        description="Users who are sharing VersionVault and how many referrals they've brought in"
+      />
+
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-4 mb-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Referrers</CardTitle>
+            <Users className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.activeReferrers}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Referrals</CardTitle>
+            <UserPlus className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalReferrals}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Verified</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-500">{stats.verifiedReferrals}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Paid</CardTitle>
+            <Crown className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-500">{stats.paidReferrals}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Leaderboard */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Top Referrers</CardTitle>
+          <CardDescription>
+            Sorted by total referrals
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {rows.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              No referrals yet
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">#</TableHead>
+                  <TableHead>User</TableHead>
+                  <TableHead>Code</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Verified</TableHead>
+                  <TableHead className="text-right">Paid</TableHead>
+                  <TableHead>Last Referral</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((row, idx) => (
+                  <TableRow key={row.referrer_id}>
+                    <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
+                    <TableCell className="font-medium">
+                      {row.referrer_email || (
+                        <span className="text-muted-foreground">Unknown</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {row.code ? (
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                          {row.code}
+                        </code>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      {row.total}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {row.verified > 0 ? (
+                        <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
+                          {row.verified}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {row.paid > 0 ? (
+                        <Badge variant="outline" className="bg-amber-500/10 text-amber-500 border-amber-500/20">
+                          {row.paid}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {row.last_referral_at ? formatDate(row.last_referral_at) : '—'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </PageLayout>
+  );
+}

@@ -20,6 +20,7 @@ import { AdminUsers } from '@/pages/admin/users';
 import { AdminNewsletter } from '@/pages/admin/newsletter';
 import { AdminSubscriptions } from '@/pages/admin/subscriptions';
 import { AdminDonations } from '@/pages/admin/donations';
+import { AdminReferrals } from '@/pages/admin/referrals';
 import { NewsletterCompose } from '@/pages/admin/newsletter-compose';
 import { Unsubscribe } from '@/pages/unsubscribe';
 import { VerifyEmail } from '@/pages/verify-email';
@@ -70,6 +71,7 @@ export function Routes() {
           <Route path="newsletter" element={<AdminNewsletter />} />
           <Route path="subscriptions" element={<AdminSubscriptions />} />
           <Route path="donations" element={<AdminDonations />} />
+          <Route path="referrals" element={<AdminReferrals />} />
           <Route path="newsletter/compose" element={<NewsletterCompose />} />
         </Route>
       </Route>
