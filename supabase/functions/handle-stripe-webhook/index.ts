@@ -182,6 +182,31 @@ function getPeriodDates(sub: Stripe.Subscription) {
 }
 
 /**
+ * Persist the Stripe customer ID on the user row so create-checkout-session
+ * can reuse the same customer on the next click instead of creating an orphan.
+ * Non-fatal — checkout webhook processing must still succeed if this fails.
+ */
+async function persistStripeCustomerId(
+  userId: string,
+  customerId: string | null | undefined,
+  supabase: any,
+) {
+  if (!userId || !customerId) return
+  try {
+    const { error } = await supabase
+      .from('users')
+      .update({ stripe_customer_id: customerId })
+      .eq('id', userId)
+      .is('stripe_customer_id', null)
+    if (error) {
+      console.error(`⚠️ Failed to persist stripe_customer_id ${customerId} for user ${userId}:`, error)
+    }
+  } catch (err) {
+    console.error('⚠️ persistStripeCustomerId threw:', err)
+  }
+}
+
+/**
  * Mark a user as a paid premium subscriber. Explicit upsert so we never depend
  * on the database trigger firing — clears any prior trial granted_until.
  */
@@ -265,6 +290,10 @@ async function handleCheckoutCompleted(
     }
 
     console.log(`✅ Upserted subscription ${subscriptionId} for user ${userId} (status=${subscription.status})`)
+
+    // Persist customer ID on the user row so future checkout clicks reuse it
+    // instead of orphaning a new customer.
+    await persistStripeCustomerId(userId, customerId, supabase)
 
     // Belt-and-suspenders: explicitly mark the user premium without depending on the trigger.
     // The trigger only fires for status='active' / 'trialing', and Stripe checkout often arrives
