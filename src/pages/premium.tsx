@@ -100,15 +100,33 @@ export function Premium() {
     { name: 'Priority support', free: false, pro: true },
   ];
 
+  const isTempPremium =
+    isPremium && !subscription && !premiumRow?.is_legacy && !!premiumRow?.granted_until;
+  const isLegacyPremium = isPremium && !subscription && !!premiumRow?.is_legacy;
+  const hasActiveSubscription = isPremium && !!subscription;
+
+  let headerTitle = 'Choose Your Plan';
+  let headerSubtitle = 'Track software updates your way. Upgrade for unlimited power.';
+  if (hasActiveSubscription) {
+    headerTitle = "You're on Pro";
+    headerSubtitle = 'Thanks for supporting VersionVault.';
+  } else if (isLegacyPremium) {
+    headerTitle = "You're a Legacy Pro member";
+    headerSubtitle = 'You have lifetime Pro access.';
+  } else if (isTempPremium) {
+    headerTitle = "You're on a Pro trial";
+    headerSubtitle = 'Keep Pro forever by upgrading any time.';
+  }
+
   return (
     <div className="container max-w-5xl mx-auto py-12">
       {/* Header */}
       <div className="text-center mb-12">
         <h1 className="text-4xl font-bold mb-4">
-          Choose Your Plan
+          {headerTitle}
         </h1>
         <p className="text-xl text-muted-foreground">
-          Track software updates your way. Upgrade for unlimited power.
+          {headerSubtitle}
         </p>
       </div>
 
@@ -146,7 +164,7 @@ export function Premium() {
         </div>
       )}
 
-      {isPremium && !subscription && !premiumRow?.is_legacy && premiumRow?.granted_until && (() => {
+      {isTempPremium && premiumRow?.granted_until && (() => {
         const expiresAt = new Date(premiumRow.granted_until);
         const msLeft = expiresAt.getTime() - Date.now();
         const daysLeft = Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
@@ -205,11 +223,11 @@ export function Premium() {
               <Button variant="outline" className="w-full" onClick={() => navigate('/signup')}>
                 Sign Up Free
               </Button>
-            ) : (
+            ) : !isPremium ? (
               <Button variant="outline" className="w-full" disabled>
                 Current Plan
               </Button>
-            )}
+            ) : null}
           </CardFooter>
         </Card>
 
@@ -248,7 +266,7 @@ export function Premium() {
             ))}
           </CardContent>
           <CardFooter>
-            {!isPremium ? (
+            {!isPremium || isTempPremium ? (
               <Button
                 onClick={handleUpgrade}
                 disabled={loading}
