@@ -7,12 +7,19 @@ import { createPremiumCheckoutSession, getSubscriptionStatus, createCustomerPort
 import { Check, X, Sparkles, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { FREE_TIER_TRACKING_LIMIT } from '@/lib/software/utils/tracking';
+import { supabase } from '@/lib/supabase';
+
+type PremiumRow = {
+  is_legacy: boolean | null;
+  granted_until: string | null;
+};
 
 export function Premium() {
   const { user, isPremium } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
+  const [premiumRow, setPremiumRow] = useState<PremiumRow | null>(null);
   const [checkingStatus, setCheckingStatus] = useState(true);
 
   useEffect(() => {
@@ -27,8 +34,16 @@ export function Premium() {
     if (!user) return;
 
     try {
-      const sub = await getSubscriptionStatus(user.id);
+      const [sub, { data: premium }] = await Promise.all([
+        getSubscriptionStatus(user.id),
+        supabase
+          .from('premium_users')
+          .select('is_legacy, granted_until')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      ]);
       setSubscription(sub);
+      setPremiumRow(premium ?? null);
     } catch (error) {
       console.error('Error checking subscription:', error);
     } finally {
@@ -119,7 +134,7 @@ export function Premium() {
         </div>
       )}
 
-      {isPremium && !subscription && (
+      {isPremium && !subscription && premiumRow?.is_legacy && (
         <div className="bg-primary/10 border border-primary rounded-lg p-4 mb-8 text-center">
           <div className="flex items-center justify-center gap-2">
             <Check className="h-5 w-5 text-primary" />
@@ -130,6 +145,31 @@ export function Premium() {
           </p>
         </div>
       )}
+
+      {isPremium && !subscription && !premiumRow?.is_legacy && premiumRow?.granted_until && (() => {
+        const expiresAt = new Date(premiumRow.granted_until);
+        const msLeft = expiresAt.getTime() - Date.now();
+        const daysLeft = Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+        return (
+          <div className="bg-primary/10 border border-primary rounded-lg p-4 mb-8 text-center">
+            <div className="flex items-center justify-center gap-2 mb-1">
+              <Check className="h-5 w-5 text-primary" />
+              <span className="font-medium">Pro — {daysLeft} day{daysLeft === 1 ? '' : 's'} left</span>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Your free month of Pro ends on {expiresAt.toLocaleDateString()}. Upgrade any time to keep going, or invite friends to earn more free months.
+            </p>
+            <div className="flex items-center justify-center gap-2 mt-3">
+              <Button onClick={handleUpgrade} disabled={loading} size="sm">
+                {loading ? 'Loading...' : 'Upgrade to Pro'}
+              </Button>
+              <Button onClick={() => navigate('/user/referrals')} variant="outline" size="sm">
+                Invite friends
+              </Button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Pricing Cards */}
       <div className="grid md:grid-cols-2 gap-8 mb-12">
