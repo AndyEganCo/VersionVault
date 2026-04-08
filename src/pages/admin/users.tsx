@@ -77,11 +77,11 @@ export function AdminUsers() {
         `Permanently delete ${email}? This cannot be undone. They can sign up again as a new user.`
       )
     ) {
-      const success = await deleteUser(userId);
-      if (success) {
+      const result = await deleteUser(userId);
+      if (result.success) {
         toast.success('User deleted');
       } else {
-        toast.error('Failed to delete user');
+        toast.error(result.error ?? 'Failed to delete user');
       }
     }
   };

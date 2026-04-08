@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, invokeEdgeFunction } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { useNavigate } from 'react-router-dom';
 
@@ -114,6 +114,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  // Tear down all client-side session state and redirect to /login. Used by
+  // both signOut and deleteOwnAccount so the cleanup stays in sync.
+  const clearLocalSession = async () => {
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (error) {
+      // Session may already be invalid (e.g., user was deleted server-side).
+      // Continue with local cleanup regardless.
+      console.warn('Local sign out failed, clearing state anyway:', error);
+    }
+    localStorage.clear();
+    setUser(null);
+    setIsAdmin(false);
+    setIsPremium(false);
+    navigate('/login');
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -146,42 +163,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) throw error;
         // Navigation happens automatically after OAuth redirect
       },
-      signOut: async () => {
-        try {
-          // Attempt to sign out via API
-          await supabase.auth.signOut({ scope: 'local' });
-        } catch (error) {
-          // If sign out fails (e.g., session already invalid), just log it
-          // We'll still clear local state and redirect
-          console.warn('Sign out API call failed, clearing local state:', error);
-        }
-
-        // Always clear local storage and state, even if API call failed
-        localStorage.clear();
-        setUser(null);
-        setIsAdmin(false);
-        setIsPremium(false);
-        navigate('/login');
-      },
+      signOut: clearLocalSession,
       deleteOwnAccount: async () => {
         if (!user) {
           throw new Error('Not signed in');
         }
-
-        const { data, error } = await supabase.functions.invoke('delete-user', {
-          body: { userId: user.id },
-        });
-
-        if (error) throw error;
-        if (data?.error) throw new Error(data.error);
-
-        // The auth user no longer exists, so the server-side session is already
-        // invalidated. Just clear local state and redirect.
-        localStorage.clear();
-        setUser(null);
-        setIsAdmin(false);
-        setIsPremium(false);
-        navigate('/login');
+        // Throws on any non-2xx with the actual server error message.
+        await invokeEdgeFunction('delete-user', { userId: user.id });
+        await clearLocalSession();
       }
     }}>
       {children}

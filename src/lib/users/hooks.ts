@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, invokeEdgeFunction } from '@/lib/supabase';
 
 export interface User {
   readonly id: string;
@@ -90,20 +90,15 @@ export function useUsers() {
     }
   };
 
-  const deleteUser = async (userId: string) => {
+  const deleteUser = async (userId: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      const { data, error } = await supabase.functions.invoke('delete-user', {
-        body: { userId },
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
+      await invokeEdgeFunction('delete-user', { userId });
       await fetchUsers();
-      return true;
+      return { success: true };
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete user';
       console.error('Error deleting user:', error);
-      return false;
+      return { success: false, error: message };
     }
   };
 

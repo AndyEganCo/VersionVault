@@ -9,6 +9,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function jsonResponse(body: unknown, status: number) {
+  return new Response(
+    JSON.stringify(body),
+    { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  )
+}
+
 serve(async (req) => {
   console.log(`📥 Received ${req.method} request to delete-user`)
 
@@ -21,10 +30,7 @@ serve(async (req) => {
     // Verify user is authenticated
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return jsonResponse({ error: 'Missing authorization header' }, 401)
     }
 
     // Initialize Supabase admin client (service role)
@@ -38,20 +44,20 @@ serve(async (req) => {
 
     if (authError || !caller) {
       console.error('Authentication error:', authError)
-      return new Response(
-        JSON.stringify({ error: 'Invalid authentication' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return jsonResponse({ error: 'Invalid authentication' }, 401)
     }
 
-    // Parse request body
-    const { userId } = await req.json()
+    // Parse request body. Malformed JSON should be a 400, not a 500.
+    let userId: unknown
+    try {
+      const body = await req.json()
+      userId = body?.userId
+    } catch (_parseError) {
+      return jsonResponse({ error: 'Invalid request body' }, 400)
+    }
 
-    if (!userId || typeof userId !== 'string') {
-      return new Response(
-        JSON.stringify({ error: 'Missing or invalid userId' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    if (typeof userId !== 'string' || !UUID_RE.test(userId)) {
+      return jsonResponse({ error: 'Missing or invalid userId' }, 400)
     }
 
     // Authorization: caller must be either deleting themselves or be an admin
@@ -66,47 +72,31 @@ serve(async (req) => {
 
       if (adminError) {
         console.error('Admin check failed:', adminError)
-        return new Response(
-          JSON.stringify({ error: 'Authorization check failed' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        return jsonResponse({ error: 'Authorization check failed' }, 500)
       }
 
       if (!adminRow) {
         console.warn(`⚠️ Non-admin user ${caller.id} attempted to delete user ${userId}`)
-        return new Response(
-          JSON.stringify({ error: 'Forbidden' }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        return jsonResponse({ error: 'Forbidden' }, 403)
       }
     }
 
-    // Last-admin protection: do not allow the only remaining admin to be deleted
-    const { data: targetAdminRow } = await supabase
-      .from('admin_users')
-      .select('user_id')
-      .eq('user_id', userId)
-      .maybeSingle()
+    // Atomically protect against deleting the last remaining admin. The RPC
+    // takes an EXCLUSIVE lock on admin_users, verifies the count, and removes
+    // the target's admin row inside the lock. This serializes concurrent
+    // delete-user calls so two admins cannot simultaneously delete each other
+    // and leave the system with zero admins.
+    const { error: prepError } = await supabase.rpc('prepare_user_deletion', {
+      target_user_id: userId,
+    })
 
-    if (targetAdminRow) {
-      const { count: adminCount, error: countError } = await supabase
-        .from('admin_users')
-        .select('user_id', { count: 'exact', head: true })
-
-      if (countError) {
-        console.error('Admin count failed:', countError)
-        return new Response(
-          JSON.stringify({ error: 'Authorization check failed' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+    if (prepError) {
+      // P0001 = our own RAISE EXCEPTION for the last-admin guard
+      if (prepError.code === 'P0001' || /last remaining admin/i.test(prepError.message ?? '')) {
+        return jsonResponse({ error: 'Cannot delete the last remaining admin' }, 400)
       }
-
-      if ((adminCount ?? 0) <= 1) {
-        return new Response(
-          JSON.stringify({ error: 'Cannot delete the last remaining admin' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
-      }
+      console.error('❌ prepare_user_deletion failed:', prepError)
+      return jsonResponse({ error: 'Failed to prepare user deletion' }, 500)
     }
 
     // Hard delete the user from auth.users -- cascades through all related tables
@@ -114,24 +104,15 @@ serve(async (req) => {
 
     if (deleteError) {
       console.error('❌ Failed to delete user:', deleteError)
-      return new Response(
-        JSON.stringify({ error: deleteError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return jsonResponse({ error: 'Failed to delete user' }, 500)
     }
 
     console.log(`✅ Deleted user ${userId} (initiated by ${caller.id}, self=${isSelfDelete})`)
 
-    return new Response(
-      JSON.stringify({ success: true }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return jsonResponse({ success: true }, 200)
 
   } catch (error) {
     console.error('❌ Error in delete-user:', error)
-    return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return jsonResponse({ error: 'Internal server error' }, 500)
   }
 })
