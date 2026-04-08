@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/auth-context';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,16 +17,24 @@ import {
   createCustomerPortalSession
 } from '@/lib/api/stripe';
 import { Check, Sparkles, Heart, Coffee, Zap, TrendingUp, DollarSign } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 const SUGGESTED_AMOUNTS = [5, 10, 25, 50, 100];
 
+type PremiumRow = {
+  is_legacy: boolean | null;
+  granted_until: string | null;
+};
+
 export function Contribute() {
   const { user, isPremium } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Premium state
   const [premiumLoading, setPremiumLoading] = useState(false);
   const [subscription, setSubscription] = useState<any>(null);
+  const [premiumRow, setPremiumRow] = useState<PremiumRow | null>(null);
   const [checkingStatus, setCheckingStatus] = useState(true);
 
   // Donation state
@@ -58,8 +66,16 @@ export function Contribute() {
     if (!user) return;
 
     try {
-      const sub = await getSubscriptionStatus(user.id);
+      const [sub, { data: premium }] = await Promise.all([
+        getSubscriptionStatus(user.id),
+        supabase
+          .from('premium_users')
+          .select('is_legacy, granted_until')
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      ]);
       setSubscription(sub);
+      setPremiumRow(premium ?? null);
     } catch (error) {
       console.error('Error checking subscription:', error);
     } finally {
@@ -239,7 +255,7 @@ export function Contribute() {
                 </div>
               )}
 
-              {isPremium && !subscription && (
+              {isPremium && !subscription && premiumRow?.is_legacy && (
                 <div className="bg-primary/10 border border-primary rounded-lg p-4">
                   <div className="flex items-center gap-2">
                     <Check className="h-5 w-5 text-primary" />
@@ -250,6 +266,31 @@ export function Contribute() {
                   </p>
                 </div>
               )}
+
+              {isPremium && !subscription && !premiumRow?.is_legacy && premiumRow?.granted_until && (() => {
+                const expiresAt = new Date(premiumRow.granted_until);
+                const msLeft = expiresAt.getTime() - Date.now();
+                const daysLeft = Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+                return (
+                  <div className="bg-primary/10 border border-primary rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Check className="h-5 w-5 text-primary" />
+                      <span className="font-medium">Pro — {daysLeft} day{daysLeft === 1 ? '' : 's'} left</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Your free month of Pro ends on {expiresAt.toLocaleDateString()}. Upgrade any time to keep going, or invite friends to earn more free months.
+                    </p>
+                    <div className="flex items-center gap-2 mt-3">
+                      <Button onClick={handleUpgrade} disabled={premiumLoading} size="sm">
+                        {premiumLoading ? 'Loading...' : 'Upgrade to Pro'}
+                      </Button>
+                      <Button onClick={() => navigate('/user/referrals')} variant="outline" size="sm">
+                        Invite friends
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
 
             <CardFooter className="flex flex-col gap-4">
