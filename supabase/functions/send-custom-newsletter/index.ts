@@ -19,7 +19,7 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 interface SendNewsletterRequest {
   subject: string;
   content: string; // HTML content
-  recipientType: 'test' | 'all' | 'segment';
+  recipientType: 'test' | 'all' | 'segment' | 'everyone';
   testEmail?: string;
   draftId?: string;
   includeSponsor?: boolean;
@@ -242,6 +242,37 @@ serve(async (req) => {
           `⚠️ Skipped ${skipped.length} Resend contact(s) with no matching Supabase user: ${skipped.join(', ')}`
         );
       }
+    } else if (recipientType === 'everyone') {
+      // Critical / transactional sends only — bypasses Resend audience,
+      // bypasses email_notifications opt-out, bypasses bounce filters.
+      // Includes unsubscribed users and known-bad addresses. The UI gates
+      // this with a hard confirmation; do not call this path casually.
+      console.warn(
+        '⚠️ recipientType=everyone: sending to all auth.users, ignoring opt-out and bounce state'
+      );
+      const { data: authData, error: authListError } = await supabase.auth.admin.listUsers({
+        perPage: 1000,
+      });
+      if (authListError) {
+        console.error('❌ Failed to list auth users:', authListError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to load user list' }),
+          {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+      if (authData?.users) {
+        recipients = authData.users
+          .filter((u) => !!u.email)
+          .map((u) => ({
+            email: u.email!,
+            user_id: u.id,
+            name: u.user_metadata?.name || u.email!.split('@')[0],
+          }));
+      }
+      console.log(`📋 'Everyone' recipient list: ${recipients.length} users`);
     }
 
     if (recipients.length === 0) {

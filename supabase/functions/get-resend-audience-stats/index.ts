@@ -29,6 +29,7 @@ interface AudienceStats {
   totalContacts: number
   subscribers: number
   unsubscribers: number
+  totalAuthUsers: number
 }
 
 serve(async (req) => {
@@ -129,10 +130,21 @@ serve(async (req) => {
       nextUrl = body.has_more && body.next_url ? body.next_url : null
     }
 
+    // Also fetch total auth.users count so the UI can show the size of the
+    // "Everyone" recipient option (which bypasses Resend entirely).
+    const { data: authData, error: authListError } = await supabase.auth.admin.listUsers({
+      perPage: 1000,
+    })
+    if (authListError) {
+      console.error('❌ Failed to list auth users:', authListError)
+    }
+    const totalAuthUsers = authData?.users?.length ?? 0
+
     const stats: AudienceStats = {
       totalContacts: allContacts.length,
       subscribers: allContacts.filter((c) => !c.unsubscribed).length,
       unsubscribers: allContacts.filter((c) => c.unsubscribed).length,
+      totalAuthUsers,
     }
 
     console.log(`📊 Audience stats: ${JSON.stringify(stats)}`)
