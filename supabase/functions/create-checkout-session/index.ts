@@ -80,16 +80,55 @@ serve(async (req) => {
       httpClient: Stripe.createFetchHttpClient(),
     })
 
-    // Check if user already has a Stripe customer ID
-    const { data: existingSubscription } = await supabase
-      .from('subscriptions')
+    // Resolve the Stripe customer for this user, with several fallbacks so we
+    // never strand orphaned customers in Stripe:
+    //
+    //   1. users.stripe_customer_id        — written here on first checkout
+    //   2. subscriptions.stripe_customer_id — legacy, paying users from before
+    //                                          users.stripe_customer_id existed
+    //   3. stripe.customers.list({email})   — catches orphans created by older
+    //                                          versions of this function that
+    //                                          made a new customer on every click
+    //   4. stripe.customers.create()        — only when truly nothing exists
+    //
+    // The resolved ID is then persisted on public.users so the next click is a
+    // single SELECT.
+    let customerId: string | null = null
+    let customerSource: 'users' | 'subscriptions' | 'stripe_email' | 'created' = 'created'
+
+    const { data: userRow } = await supabase
+      .from('users')
       .select('stripe_customer_id')
-      .eq('user_id', userId)
+      .eq('id', userId)
       .maybeSingle()
 
-    let customerId = existingSubscription?.stripe_customer_id
+    if (userRow?.stripe_customer_id) {
+      customerId = userRow.stripe_customer_id
+      customerSource = 'users'
+    }
 
-    // Create or retrieve Stripe customer
+    if (!customerId) {
+      const { data: existingSubscription } = await supabase
+        .from('subscriptions')
+        .select('stripe_customer_id')
+        .eq('user_id', userId)
+        .maybeSingle()
+      if (existingSubscription?.stripe_customer_id) {
+        customerId = existingSubscription.stripe_customer_id
+        customerSource = 'subscriptions'
+      }
+    }
+
+    if (!customerId) {
+      // Look up by email to catch orphans created by the previous bug.
+      // Stripe doesn't enforce email uniqueness, so we take the most recent.
+      const existing = await stripe.customers.list({ email: userEmail, limit: 1 })
+      if (existing.data.length > 0) {
+        customerId = existing.data[0].id
+        customerSource = 'stripe_email'
+      }
+    }
+
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: userEmail,
@@ -98,7 +137,23 @@ serve(async (req) => {
         },
       })
       customerId = customer.id
-      console.log(`✅ Created Stripe customer: ${customerId}`)
+      customerSource = 'created'
+    }
+
+    console.log(`👤 Stripe customer for ${userId}: ${customerId} (source=${customerSource})`)
+
+    // Persist on the user row so subsequent clicks reuse the same customer
+    // even if checkout never completes. Skip the write if the value is already
+    // there to avoid unnecessary work.
+    if (customerSource !== 'users') {
+      const { error: persistErr } = await supabase
+        .from('users')
+        .update({ stripe_customer_id: customerId })
+        .eq('id', userId)
+      if (persistErr) {
+        // Non-fatal — checkout can still proceed, the next click will just retry the lookup chain.
+        console.error('⚠️ Failed to persist stripe_customer_id on users row:', persistErr)
+      }
     }
 
     // Get the site URL for redirects
