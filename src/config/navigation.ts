@@ -56,6 +56,7 @@ export const navigationConfig = {
     { separator: true },
     { path: '/admin/subscriptions', label: 'Subscriptions' },
     { path: '/admin/donations', label: 'Donations' },
+    { path: '/admin/referrals', label: 'Referrals' },
   ] as NavigationItem[],
 };
 
