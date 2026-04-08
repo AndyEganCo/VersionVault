@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, invokeEdgeFunction } from '@/lib/supabase';
 
 export interface User {
   readonly id: string;
@@ -90,6 +90,18 @@ export function useUsers() {
     }
   };
 
+  const deleteUser = async (userId: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      await invokeEdgeFunction('delete-user', { userId });
+      await fetchUsers();
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete user';
+      console.error('Error deleting user:', error);
+      return { success: false, error: message };
+    }
+  };
+
   const togglePremium = async (userId: string, isPremium: boolean) => {
     try {
       if (isPremium) {
@@ -130,5 +142,6 @@ export function useUsers() {
     refreshUsers: fetchUsers,
     toggleAdmin,
     togglePremium,
+    deleteUser,
   };
 }
