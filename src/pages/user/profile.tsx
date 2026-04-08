@@ -2,6 +2,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { EmailForm } from '@/components/profile/email-form';
 import { ProfileForm } from '@/components/profile/profile-form';
 import { PasswordForm } from '@/components/profile/password-form';
+import { DeleteAccountForm } from '@/components/profile/delete-account-form';
 
 export function UserProfile() {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ export function UserProfile() {
       <ProfileForm />
       <EmailForm currentEmail={user.email || ''} />
       <PasswordForm />
+      <DeleteAccountForm />
     </div>
   );
 }

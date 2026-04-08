@@ -90,6 +90,23 @@ export function useUsers() {
     }
   };
 
+  const deleteUser = async (userId: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { userId },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      await fetchUsers();
+      return true;
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      return false;
+    }
+  };
+
   const togglePremium = async (userId: string, isPremium: boolean) => {
     try {
       if (isPremium) {
@@ -130,5 +147,6 @@ export function useUsers() {
     refreshUsers: fetchUsers,
     toggleAdmin,
     togglePremium,
+    deleteUser,
   };
 }

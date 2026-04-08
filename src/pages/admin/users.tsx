@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Shield, ShieldOff, Crown, Package } from 'lucide-react';
+import { Shield, ShieldOff, Crown, Package, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { UserSoftwareModal } from '@/components/admin/user-software-modal';
 
@@ -33,7 +33,7 @@ interface TrackingUser {
 
 export function AdminUsers() {
   const { user } = useAuth();
-  const { users, loading, toggleAdmin, togglePremium } = useUsers();
+  const { users, loading, toggleAdmin, togglePremium, deleteUser } = useUsers();
   const { counts: trackingCounts } = useUserTrackingCounts();
   const [trackingModalUser, setTrackingModalUser] = useState<TrackingUser | null>(null);
 
@@ -62,6 +62,26 @@ export function AdminUsers() {
         );
       } else {
         toast.error('Failed to update admin status');
+      }
+    }
+  };
+
+  const handleDelete = async (userId: string, email: string) => {
+    if (userId === user.id) {
+      toast.error('Use your profile page to delete your own account');
+      return;
+    }
+
+    if (
+      confirm(
+        `Permanently delete ${email}? This cannot be undone. They can sign up again as a new user.`
+      )
+    ) {
+      const success = await deleteUser(userId);
+      if (success) {
+        toast.success('User deleted');
+      } else {
+        toast.error('Failed to delete user');
       }
     }
   };
@@ -173,25 +193,38 @@ export function AdminUsers() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant={userItem.isAdmin ? 'destructive' : 'default'}
-                        onClick={() => handleToggleAdmin(userItem.id, userItem.isAdmin)}
-                        disabled={userItem.id === user.id}
-                        className="flex items-center gap-1"
-                      >
-                        {userItem.isAdmin ? (
-                          <>
-                            <ShieldOff className="h-4 w-4" />
-                            Remove Admin
-                          </>
-                        ) : (
-                          <>
-                            <Shield className="h-4 w-4" />
-                            Make Admin
-                          </>
-                        )}
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant={userItem.isAdmin ? 'destructive' : 'default'}
+                          onClick={() => handleToggleAdmin(userItem.id, userItem.isAdmin)}
+                          disabled={userItem.id === user.id}
+                          className="flex items-center gap-1"
+                        >
+                          {userItem.isAdmin ? (
+                            <>
+                              <ShieldOff className="h-4 w-4" />
+                              Remove Admin
+                            </>
+                          ) : (
+                            <>
+                              <Shield className="h-4 w-4" />
+                              Make Admin
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDelete(userItem.id, userItem.email)}
+                          disabled={userItem.id === user.id}
+                          className="flex items-center gap-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          title="Permanently delete user"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

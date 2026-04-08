@@ -12,6 +12,7 @@ type AuthContextType = {
   signUp: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteOwnAccount: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -156,6 +157,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         // Always clear local storage and state, even if API call failed
+        localStorage.clear();
+        setUser(null);
+        setIsAdmin(false);
+        setIsPremium(false);
+        navigate('/login');
+      },
+      deleteOwnAccount: async () => {
+        if (!user) {
+          throw new Error('Not signed in');
+        }
+
+        const { data, error } = await supabase.functions.invoke('delete-user', {
+          body: { userId: user.id },
+        });
+
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
+        // The auth user no longer exists, so the server-side session is already
+        // invalidated. Just clear local state and redirect.
         localStorage.clear();
         setUser(null);
         setIsAdmin(false);
