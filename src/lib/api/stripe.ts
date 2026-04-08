@@ -19,12 +19,12 @@ export async function createPremiumCheckoutSession(userId: string): Promise<stri
   });
 
   if (error) {
-    console.error('Error creating checkout session:', error);
-    // Check if it's a function error with a message
-    if (error.message) {
-      throw new Error(error.message);
-    }
-    throw new Error('Failed to create checkout session. Please ensure Edge Functions are deployed and Stripe is configured.');
+    // supabase-js wraps non-2xx Edge Function responses in FunctionsHttpError with
+    // a generic message. The actual error body is on error.context (a Response).
+    // Pull the real Stripe error out so the user sees something useful.
+    const detail = await readFunctionErrorDetail(error);
+    console.error('Error creating checkout session:', error, detail);
+    throw new Error(detail || error.message || 'Failed to create checkout session.');
   }
 
   if (!data?.url) {
@@ -32,6 +32,25 @@ export async function createPremiumCheckoutSession(userId: string): Promise<stri
   }
 
   return data.url;
+}
+
+/**
+ * Pull the real error message out of a supabase-js FunctionsHttpError.
+ * The Edge Function returns { error, code, param, type } in the body, but
+ * supabase-js only surfaces a generic "non-2xx" string on error.message.
+ */
+async function readFunctionErrorDetail(error: unknown): Promise<string | null> {
+  try {
+    const ctx = (error as { context?: Response }).context;
+    if (!ctx || typeof ctx.json !== 'function') return null;
+    const body = await ctx.clone().json();
+    if (!body) return null;
+    const parts = [body.error, body.code && `(${body.code})`, body.param && `param=${body.param}`]
+      .filter(Boolean);
+    return parts.length > 0 ? parts.join(' ') : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

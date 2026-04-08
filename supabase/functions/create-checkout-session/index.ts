@@ -47,6 +47,8 @@ serve(async (req) => {
     // Parse request body
     const { userId, mode, priceId, amount, donorName, donorMessage, isPublic } = await req.json()
 
+    console.log(`🔧 create-checkout-session: user=${userId} mode=${mode} priceId=${priceId ?? 'none'} amount=${amount ?? 'none'}`)
+
     if (userId !== user.id) {
       return new Response(
         JSON.stringify({ error: 'User ID mismatch' }),
@@ -190,9 +192,26 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('❌ Error in create-checkout-session:', error)
+    // Stripe errors have type/code/param fields that pinpoint what's wrong
+    // (e.g. "No such price: price_xxx" comes back as code='resource_missing' param='line_items[0][price]').
+    // Surface them in both the log and the response so failures are debuggable from a single click.
+    const details = {
+      message: error?.message,
+      name: error?.name,
+      type: (error as any)?.type,
+      code: (error as any)?.code,
+      param: (error as any)?.param,
+      statusCode: (error as any)?.statusCode,
+      stack: error?.stack,
+    }
+    console.error('❌ Error in create-checkout-session:', details)
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
+      JSON.stringify({
+        error: error?.message || 'Internal server error',
+        type: (error as any)?.type,
+        code: (error as any)?.code,
+        param: (error as any)?.param,
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   }
