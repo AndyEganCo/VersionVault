@@ -48,7 +48,7 @@ export function UserReferrals() {
   };
 
   const referralLink = referralCode
-    ? `${window.location.origin}/signup?ref=${referralCode}`
+    ? `${window.location.origin}/?ref=${referralCode}`
     : '';
 
   const copyToClipboard = async () => {

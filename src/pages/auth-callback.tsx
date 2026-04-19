@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { supabase, invokeEdgeFunction } from '@/lib/supabase';
+import { getStoredReferralCode, clearStoredReferralCode } from '@/lib/referral-tracking';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 
 export function AuthCallback() {
@@ -31,6 +32,22 @@ export function AuthCallback() {
         if (data.session) {
           // Successfully verified and logged in
           setStatus('success');
+
+          const storedCode = getStoredReferralCode();
+          const metaCode = data.session.user.user_metadata?.referral_code;
+          const referralCode = storedCode || metaCode;
+          if (referralCode) {
+            try {
+              await invokeEdgeFunction('process-referral', {
+                referredUserId: data.session.user.id,
+                referralCode,
+                type: 'signup',
+              });
+            } catch (err) {
+              console.error('[Referral] Failed to process referral:', err);
+            }
+            clearStoredReferralCode();
+          }
 
           // Redirect to dashboard (onboarding modal will show based on DB flag)
           setTimeout(() => {
