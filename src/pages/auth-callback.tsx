@@ -33,9 +33,16 @@ export function AuthCallback() {
           // Successfully verified and logged in
           setStatus('success');
 
-          const storedCode = getStoredReferralCode();
+          // Metadata is populated only during email signup, so its presence
+          // means this callback is an email verification. For OAuth signups,
+          // fall back to the stored code — but only if the user was just
+          // created, so existing users signing in via Google aren't credited
+          // as fresh referrals.
           const metaCode = data.session.user.user_metadata?.referral_code;
-          const referralCode = storedCode || metaCode;
+          const storedCode = getStoredReferralCode();
+          const ageMs = Date.now() - new Date(data.session.user.created_at).getTime();
+          const isRecentSignup = ageMs < 10 * 60 * 1000;
+          const referralCode = metaCode || (isRecentSignup ? storedCode : null);
           if (referralCode) {
             try {
               await invokeEdgeFunction('process-referral', {
@@ -46,8 +53,8 @@ export function AuthCallback() {
             } catch (err) {
               console.error('[Referral] Failed to process referral:', err);
             }
-            clearStoredReferralCode();
           }
+          clearStoredReferralCode();
 
           // Redirect to dashboard (onboarding modal will show based on DB flag)
           setTimeout(() => {
