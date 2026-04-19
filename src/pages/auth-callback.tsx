@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/lib/supabase';
+import { supabase, invokeEdgeFunction } from '@/lib/supabase';
+import { getStoredReferralCode, clearStoredReferralCode } from '@/lib/referral-tracking';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 
 export function AuthCallback() {
@@ -31,6 +32,29 @@ export function AuthCallback() {
         if (data.session) {
           // Successfully verified and logged in
           setStatus('success');
+
+          // Metadata is populated only during email signup, so its presence
+          // means this callback is an email verification. For OAuth signups,
+          // fall back to the stored code — but only if the user was just
+          // created, so existing users signing in via Google aren't credited
+          // as fresh referrals.
+          const metaCode = data.session.user.user_metadata?.referral_code;
+          const storedCode = getStoredReferralCode();
+          const ageMs = Date.now() - new Date(data.session.user.created_at).getTime();
+          const isRecentSignup = ageMs < 10 * 60 * 1000;
+          const referralCode = metaCode || (isRecentSignup ? storedCode : null);
+          if (referralCode) {
+            try {
+              await invokeEdgeFunction('process-referral', {
+                referredUserId: data.session.user.id,
+                referralCode,
+                type: 'signup',
+              });
+            } catch (err) {
+              console.error('[Referral] Failed to process referral:', err);
+            }
+          }
+          clearStoredReferralCode();
 
           // Redirect to dashboard (onboarding modal will show based on DB flag)
           setTimeout(() => {
