@@ -52,3 +52,35 @@ export function clearStoredReferralCode(): void {
     // ignore
   }
 }
+
+// OAuth-signup intent: set when user clicks "Continue with Google" on the
+// /signup page. Gives auth-callback a reliable signal that the user is in
+// a signup flow, so we can process a stored referral without depending on
+// user.created_at being < 10 min (which can't distinguish brand-new users
+// from deleted-and-recreated ones, and is easy to miss across redirects).
+const OAUTH_INTENT_KEY = 'vv_oauth_signup_intent';
+const OAUTH_INTENT_TTL_MS = 10 * 60 * 1000;
+
+export function markOAuthSignupIntent(): void {
+  try {
+    localStorage.setItem(OAUTH_INTENT_KEY, String(Date.now()));
+    console.log('[Referral] Marked OAuth signup intent');
+  } catch {
+    // ignore
+  }
+}
+
+export function consumeOAuthSignupIntent(): boolean {
+  try {
+    const raw = localStorage.getItem(OAUTH_INTENT_KEY);
+    localStorage.removeItem(OAUTH_INTENT_KEY);
+    if (!raw) return false;
+    const ts = Number(raw);
+    if (!Number.isFinite(ts)) return false;
+    const fresh = Date.now() - ts < OAUTH_INTENT_TTL_MS;
+    console.log(`[Referral] Consumed OAuth signup intent (fresh=${fresh})`);
+    return fresh;
+  } catch {
+    return false;
+  }
+}

@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase, invokeEdgeFunction } from '@/lib/supabase';
-import { getStoredReferralCode, clearStoredReferralCode } from '@/lib/referral-tracking';
+import {
+  getStoredReferralCode,
+  clearStoredReferralCode,
+  consumeOAuthSignupIntent,
+} from '@/lib/referral-tracking';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 
 export function AuthCallback() {
@@ -33,21 +37,26 @@ export function AuthCallback() {
           // Successfully verified and logged in
           setStatus('success');
 
-          // Metadata is populated only during email signup, so its presence
-          // means this callback is an email verification. For OAuth signups,
-          // fall back to the stored code — but only if the user was just
-          // created, so existing users signing in via Google aren't credited
-          // as fresh referrals.
+          // Metadata is populated during email signup, so its presence marks
+          // this callback as an email verification. For OAuth signups, fall
+          // back to the stored code if EITHER (a) the user marked explicit
+          // signup intent by clicking "Continue with Google" on /signup, or
+          // (b) the user was just created (< 10 min ago). Both guards exist
+          // so existing users signing in via Google aren't credited as fresh
+          // referrals just because their browser has a ref code cached.
           const metaCode = data.session.user.user_metadata?.referral_code;
           const storedCode = getStoredReferralCode();
+          const oauthIntent = consumeOAuthSignupIntent();
           const ageMs = Date.now() - new Date(data.session.user.created_at).getTime();
           const ageMin = Math.round(ageMs / 60000);
           const isRecentSignup = ageMs < 10 * 60 * 1000;
-          const referralCode = metaCode || (isRecentSignup ? storedCode : null);
+          const canUseStored = oauthIntent || isRecentSignup;
+          const referralCode = metaCode || (canUseStored ? storedCode : null);
           console.log(
             `[Referral] auth-callback — userId=${data.session.user.id} ` +
             `metaCode=${metaCode ?? '(none)'} storedCode=${storedCode ?? '(none)'} ` +
-            `userAge=${ageMin}min isRecentSignup=${isRecentSignup} resolved=${referralCode ?? '(none)'}`
+            `userAge=${ageMin}min isRecentSignup=${isRecentSignup} oauthIntent=${oauthIntent} ` +
+            `resolved=${referralCode ?? '(none)'}`
           );
           if (referralCode) {
             try {
