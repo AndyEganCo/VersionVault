@@ -154,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
       signUp: async (email, password, referralCode) => {
         console.log(`[Referral] supabase.auth.signUp — attaching user_metadata.referral_code=${referralCode ?? '(none)'}`);
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -163,6 +163,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
         });
         if (error) throw error;
+
+        // Record the referral immediately. Waiting for /auth/callback is
+        // fragile — if Supabase's redirect URL allow-list doesn't include
+        // /auth/callback, the user lands on / instead (session still
+        // establishes via detectSessionInUrl) and the callback never fires.
+        // The user row exists as soon as signUp returns, so we can process
+        // now. Failures are logged but don't block the signup flow.
+        const newUserId = data.user?.id;
+        if (referralCode && newUserId) {
+          try {
+            console.log(`[Referral] Invoking process-referral post-signup with code=${referralCode}, userId=${newUserId}`);
+            const result = await invokeEdgeFunction('process-referral', {
+              referredUserId: newUserId,
+              referralCode,
+              type: 'signup',
+            });
+            console.log('[Referral] process-referral succeeded:', result);
+          } catch (err) {
+            console.error('[Referral] process-referral failed (signup will continue):', err);
+          }
+        }
+
         navigate('/verify-email', { state: { email } });
       },
       signInWithGoogle: async () => {
