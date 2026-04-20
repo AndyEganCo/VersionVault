@@ -153,6 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         navigate('/dashboard');
       },
       signUp: async (email, password, referralCode) => {
+        console.log(`[Referral] supabase.auth.signUp — attaching user_metadata.referral_code=${referralCode ?? '(none)'}`);
         const { error } = await supabase.auth.signUp({
           email,
           password,
