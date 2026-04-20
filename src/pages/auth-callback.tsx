@@ -41,18 +41,28 @@ export function AuthCallback() {
           const metaCode = data.session.user.user_metadata?.referral_code;
           const storedCode = getStoredReferralCode();
           const ageMs = Date.now() - new Date(data.session.user.created_at).getTime();
+          const ageMin = Math.round(ageMs / 60000);
           const isRecentSignup = ageMs < 10 * 60 * 1000;
           const referralCode = metaCode || (isRecentSignup ? storedCode : null);
+          console.log(
+            `[Referral] auth-callback — userId=${data.session.user.id} ` +
+            `metaCode=${metaCode ?? '(none)'} storedCode=${storedCode ?? '(none)'} ` +
+            `userAge=${ageMin}min isRecentSignup=${isRecentSignup} resolved=${referralCode ?? '(none)'}`
+          );
           if (referralCode) {
             try {
-              await invokeEdgeFunction('process-referral', {
+              console.log(`[Referral] Invoking process-referral with code=${referralCode}`);
+              const result = await invokeEdgeFunction('process-referral', {
                 referredUserId: data.session.user.id,
                 referralCode,
                 type: 'signup',
               });
+              console.log('[Referral] process-referral succeeded:', result);
             } catch (err) {
-              console.error('[Referral] Failed to process referral:', err);
+              console.error('[Referral] process-referral failed:', err);
             }
+          } else {
+            console.log('[Referral] No code to process — skipping edge function');
           }
           clearStoredReferralCode();
 

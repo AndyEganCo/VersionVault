@@ -26,6 +26,7 @@ export function AuthForm({ mode }: AuthFormProps) {
 
     try {
       if (mode === 'signup') {
+        console.log(`[Referral] Email signup — referral code: ${referralCode ?? '(none)'}`);
         await signUp(email, password, referralCode);
         toast.success('Account created successfully');
       } else {
@@ -43,6 +44,9 @@ export function AuthForm({ mode }: AuthFormProps) {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
+      // Google OAuth can't carry custom metadata through the redirect, so the
+      // referral code is retrieved from localStorage in /auth/callback instead.
+      console.log(`[Referral] Google sign-in — stored code for callback: ${referralCode ?? '(none)'}`);
       await signInWithGoogle();
     } catch (error: any) {
       toast.error(error.message || 'Failed to sign in with Google');
