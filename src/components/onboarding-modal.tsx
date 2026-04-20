@@ -159,9 +159,11 @@ export function OnboardingModal() {
 
     setLoading(true);
     try {
-      // Save display name to auth user metadata
+      // Save display name to auth user metadata. Merge with existing
+      // metadata so we don't clobber referral_code or other keys — some
+      // GoTrue versions replace rather than merge when only new keys are sent.
       const { error: metadataError } = await supabase.auth.updateUser({
-        data: { display_name: name }
+        data: { ...(user.user_metadata ?? {}), display_name: name }
       });
 
       if (metadataError) {
@@ -212,10 +214,11 @@ export function OnboardingModal() {
   const handleClose = async () => {
     // Mark onboarding as dismissed (won't show again)
     if (user) {
-      // Save display name to auth metadata if they entered one
+      // Save display name to auth metadata if they entered one. Merge with
+      // existing metadata to preserve referral_code and other keys.
       if (name.trim()) {
         await supabase.auth.updateUser({
-          data: { display_name: name.trim() }
+          data: { ...(user.user_metadata ?? {}), display_name: name.trim() }
         });
       }
 
