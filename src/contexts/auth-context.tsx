@@ -1,7 +1,12 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { supabase, invokeEdgeFunction } from '@/lib/supabase';
-import type { User } from '@supabase/supabase-js';
+import type { Session, User } from '@supabase/supabase-js';
 import { useNavigate } from 'react-router-dom';
+import {
+  getStoredReferralCode,
+  clearStoredReferralCode,
+  consumeOAuthSignupIntent,
+} from '@/lib/referral-tracking';
 
 type AuthContextType = {
   user: User | null;
@@ -23,6 +28,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isPremium, setIsPremium] = useState(false);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  // Guards against double-processing within a page lifetime. The edge
+  // function is also idempotent server-side, but this avoids the extra
+  // round-trip.
+  const processedReferralForUserRef = useRef<string | null>(null);
+
+  // Decide whether a freshly-signed-in session should trigger process-referral
+  // and do it. Covers both email verification (metadata carries the code) and
+  // Google OAuth (relies on localStorage + signup intent flag or fresh
+  // created_at). Runs on any landing route, so we're not dependent on
+  // /auth/callback being the post-auth destination.
+  const maybeProcessReferral = async (session: Session) => {
+    const u = session.user;
+    if (processedReferralForUserRef.current === u.id) return;
+
+    const metaCode = u.user_metadata?.referral_code;
+    const storedCode = getStoredReferralCode();
+    const ageMs = Date.now() - new Date(u.created_at).getTime();
+    const isRecentSignup = ageMs < 10 * 60 * 1000;
+    const oauthIntent = consumeOAuthSignupIntent();
+    const canUseStored = oauthIntent || isRecentSignup;
+    const code = metaCode || (canUseStored ? storedCode : null);
+
+    if (!code) return;
+
+    processedReferralForUserRef.current = u.id;
+    try {
+      console.log(`[Referral] AuthContext invoking process-referral userId=${u.id} code=${code} (metaCode=${!!metaCode}, oauthIntent=${oauthIntent}, isRecentSignup=${isRecentSignup})`);
+      const result = await invokeEdgeFunction('process-referral', {
+        referredUserId: u.id,
+        referralCode: code,
+        type: 'signup',
+      });
+      console.log('[Referral] AuthContext process-referral succeeded:', result);
+    } catch (err) {
+      console.error('[Referral] AuthContext process-referral failed:', err);
+    } finally {
+      clearStoredReferralCode();
+    }
+  };
 
   useEffect(() => {
     let subscription: any;
@@ -93,6 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data.session?.user ?? null);
         await checkAdmin(data.session?.user?.id);
         await checkPremium(data.session?.user?.id);
+        if (data.session) maybeProcessReferral(data.session); // Fire and forget
         setLoading(false);
       } catch (err) {
         console.error('[Auth] Initialization error:', err);
@@ -103,12 +148,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth state changes
     // IMPORTANT: Don't await checkAdmin/checkPremium here - it would block the auth state change
     // and prevent getSession from completing, causing the app to freeze on refresh
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
 
       if (session?.user?.id) {
         checkAdmin(session.user.id); // Fire and forget
         checkPremium(session.user.id); // Fire and forget
+        if (event === 'SIGNED_IN') maybeProcessReferral(session); // Fire and forget
       } else {
         setIsAdmin(false);
         setIsPremium(false);

@@ -85,6 +85,26 @@ serve(async (req) => {
     }
 
     if (type === 'signup') {
+      // Idempotency: if a signup-rewarded referral already exists for this
+      // (referrer, referred) pair, return success without re-granting. This
+      // matters because the client now invokes us from multiple places
+      // (post-signUp in AuthContext, SIGNED_IN state change, the /auth/callback
+      // page) — any of which could fire for the same user on the same flow.
+      const { data: existing } = await supabase
+        .from('referrals')
+        .select('id, signup_rewarded')
+        .eq('referrer_id', referrerId)
+        .eq('referred_user_id', referredUserId)
+        .maybeSingle()
+
+      if (existing?.signup_rewarded) {
+        console.log(`⚠️  Signup referral already processed: referrer=${referrerId}, friend=${referredUserId}`)
+        return new Response(
+          JSON.stringify({ success: true, alreadyProcessed: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
       // Create or update referral record
       const { data: referral, error: refError } = await supabase
         .from('referrals')
