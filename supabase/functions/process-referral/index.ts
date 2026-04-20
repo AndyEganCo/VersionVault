@@ -136,10 +136,10 @@ serve(async (req) => {
         supabase.auth.admin.getUserById(referredUserId),
       ])
       if (refUser?.user?.email) {
-        await sendReferralRewardEmail(resend, refUser.user.email, 'signup', SIGNUP_REWARD_MONTHS, totalReferrals ?? 0, milestoneMonths)
+        await sendReferralRewardEmail(resend, refUser.user.email, referrerId, 'signup', SIGNUP_REWARD_MONTHS, totalReferrals ?? 0, milestoneMonths)
       }
       if (friendUser?.user?.email) {
-        await sendReferralRewardEmail(resend, friendUser.user.email, 'friend', FRIEND_REWARD_MONTHS, 0, 0)
+        await sendReferralRewardEmail(resend, friendUser.user.email, referredUserId, 'friend', FRIEND_REWARD_MONTHS, 0, 0)
       }
 
       console.log(`✅ Signup referral processed: referrer=${referrerId}, friend=${referredUserId}`)
@@ -168,7 +168,7 @@ serve(async (req) => {
 
         const { data: refUser } = await supabase.auth.admin.getUserById(referrerId)
         if (refUser?.user?.email) {
-          await sendReferralRewardEmail(resend, refUser.user.email, 'paid', PAID_REWARD_MONTHS, 0, 0)
+          await sendReferralRewardEmail(resend, refUser.user.email, referrerId, 'paid', PAID_REWARD_MONTHS, 0, 0)
         }
       }
 
@@ -222,40 +222,103 @@ async function checkMilestones(supabase: any, referrerId: string, totalReferrals
   return bonusMonths
 }
 
+function renderShell(label: string, userId: string, bodyHtml: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="background-color: #0a0a0a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 0;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #0a0a0a;">
+    <!-- Header -->
+    <div style="padding: 32px 24px 24px 24px; border-bottom: 1px solid #262626;">
+      <a href="${VERSIONVAULT_URL}" style="text-decoration: none;">
+        <div style="font-size: 20px; font-weight: 600; color: #ffffff; font-family: monospace;">
+          <span style="color: #a3a3a3;">&gt;_</span> VersionVault
+        </div>
+      </a>
+      <div style="font-size: 14px; color: #a3a3a3; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 8px;">
+        ${label}
+      </div>
+    </div>
+
+    ${bodyHtml}
+
+    <!-- Footer -->
+    <div style="padding: 24px; border-top: 1px solid #262626;">
+      <div style="font-size: 13px; color: #a3a3a3; text-align: center; margin-bottom: 16px;">
+        <a href="${VERSIONVAULT_URL}/user/notifications" style="color: #a3a3a3; text-decoration: underline;">Manage Preferences</a>
+        <span style="margin: 0 12px; color: #525252;">&bull;</span>
+        <a href="${VERSIONVAULT_URL}/unsubscribe?uid=${userId}" style="color: #a3a3a3; text-decoration: underline;">Unsubscribe</a>
+        <span style="margin: 0 12px; color: #525252;">&bull;</span>
+        <a href="${VERSIONVAULT_URL}/dashboard" style="color: #a3a3a3; text-decoration: underline;">Open Dashboard</a>
+      </div>
+      <div style="font-size: 12px; color: #525252; text-align: center; margin-bottom: 8px;">VersionVault &bull; Software Version Tracking</div>
+      <div style="font-size: 12px; color: #404040; text-align: center;">&copy; ${new Date().getFullYear()} VersionVault. All rights reserved.</div>
+    </div>
+  </div>
+</body>
+</html>`
+}
+
 async function sendReferralRewardEmail(
   resend: Resend | null,
   email: string,
+  userId: string,
   type: 'signup' | 'friend' | 'paid',
   months: number,
   totalReferrals: number,
   bonusMonths: number
 ) {
+  const labels = {
+    signup: 'REFERRAL REWARD',
+    friend: 'WELCOME GIFT',
+    paid: 'REFERRAL UPGRADE',
+  }
   const subjects = {
-    signup: `🎉 You earned ${months} month${months === 1 ? '' : 's'} of VersionVault Pro`,
-    friend: `Welcome! Enjoy ${months} month${months === 1 ? '' : 's'} of VersionVault Pro on us`,
-    paid: `🚀 Your friend upgraded! ${months} more months of Pro for you`,
+    signup: `You earned ${months} month${months === 1 ? '' : 's'} of VersionVault Pro`,
+    friend: `Welcome — enjoy ${months} month${months === 1 ? '' : 's'} of Pro on us`,
+    paid: `Your friend upgraded — ${months} more months of Pro for you`,
   }
   const headlines = {
     signup: `You just earned ${months} month${months === 1 ? '' : 's'} of Pro`,
     friend: `You've got ${months} free month${months === 1 ? '' : 's'} of Pro`,
-    paid: `Your referral became a paying subscriber!`,
+    paid: `Your referral became a paying subscriber`,
   }
   const bodies = {
-    signup: `A friend signed up with your referral code. You've been credited <strong>${months} month${months === 1 ? '' : 's'}</strong> of VersionVault Pro. You now have <strong>${totalReferrals}</strong> successful referral${totalReferrals === 1 ? '' : 's'} total.${bonusMonths > 0 ? ` You also unlocked a <strong>${bonusMonths}-month milestone bonus</strong>!` : ''}`,
-    friend: `Welcome to VersionVault! Because you joined through a friend, you're getting <strong>${months} month${months === 1 ? '' : 's'} of Pro</strong> on the house — unlimited tracked apps and all notification frequencies.`,
-    paid: `Great news — a friend you referred just upgraded to Pro. You've been credited <strong>${months} bonus months</strong> of VersionVault Pro.`,
+    signup: `A friend signed up with your referral code. You've been credited <strong style="color: #ffffff;">${months} month${months === 1 ? '' : 's'}</strong> of VersionVault Pro. You now have <strong style="color: #ffffff;">${totalReferrals}</strong> successful referral${totalReferrals === 1 ? '' : 's'} total.${bonusMonths > 0 ? ` You also unlocked a <strong style="color: #ffffff;">${bonusMonths}-month milestone bonus</strong>!` : ''}`,
+    friend: `Welcome to VersionVault! Because you joined through a friend, you're getting <strong style="color: #ffffff;">${months} month${months === 1 ? '' : 's'} of Pro</strong> on the house — unlimited tracked apps and all notification frequencies.`,
+    paid: `Great news — a friend you referred just upgraded to Pro. You've been credited <strong style="color: #ffffff;">${months} bonus month${months === 1 ? '' : 's'}</strong> of VersionVault Pro.`,
   }
 
-  const html = `<!DOCTYPE html><html><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#0f172a;">
-    <h1 style="font-size:24px;margin:0 0 16px;">${headlines[type]}</h1>
-    <p>${bodies[type]}</p>
-    <p style="margin:24px 0;">
-      <a href="${VERSIONVAULT_URL}/dashboard" style="background:#0f172a;color:#fff;padding:12px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Go to dashboard</a>
-    </p>
-    <p style="font-size:12px;color:#64748b;margin-top:32px;">VersionVault · <a href="${VERSIONVAULT_URL}/unsubscribe" style="color:#64748b;">Unsubscribe</a></p>
-  </body></html>`
+  const body = `
+    <!-- Greeting -->
+    <div style="padding: 24px;">
+      <div style="font-size: 16px; color: #ffffff; margin-bottom: 12px;">${headlines[type]}</div>
+      <div style="font-size: 14px; color: #a3a3a3; line-height: 1.6;">
+        ${bodies[type]}
+      </div>
+    </div>
 
-  const text = `${headlines[type]}\n\n${bodies[type].replace(/<[^>]+>/g, '')}\n\n${VERSIONVAULT_URL}/dashboard\n`
+    <!-- Reward card -->
+    <div style="padding: 0 24px 24px 24px;">
+      <div style="background-color: #171717; border: 1px solid #262626; border-radius: 8px; padding: 20px; text-align: center;">
+        <div style="font-size: 32px; font-weight: 700; color: #2563eb; margin-bottom: 4px;">+${months} month${months === 1 ? '' : 's'}</div>
+        <div style="font-size: 13px; color: #a3a3a3;">of Pro added to your account</div>
+      </div>
+    </div>
+
+    <!-- CTAs -->
+    <div style="padding: 0 24px 32px 24px; text-align: center;">
+      <a href="${VERSIONVAULT_URL}/dashboard" style="display: inline-block; font-size: 14px; font-weight: 600; color: #ffffff; background-color: #2563eb; padding: 12px 20px; border-radius: 8px; text-decoration: none; margin: 4px;">Go to dashboard</a>
+      <a href="${VERSIONVAULT_URL}/user/referrals" style="display: inline-block; font-size: 14px; font-weight: 600; color: #ffffff; background-color: #262626; border: 1px solid #404040; padding: 12px 20px; border-radius: 8px; text-decoration: none; margin: 4px;">Invite more friends</a>
+    </div>
+  `
+
+  const html = renderShell(labels[type], userId, body)
+
+  const text = `>_ VersionVault - ${labels[type]}\n\n${headlines[type]}\n\n${bodies[type].replace(/<[^>]+>/g, '')}\n\nDashboard: ${VERSIONVAULT_URL}/dashboard\nInvite more: ${VERSIONVAULT_URL}/user/referrals\n\n--\nVersionVault\nUnsubscribe: ${VERSIONVAULT_URL}/unsubscribe?uid=${userId}\n`
 
   if (!resend) {
     console.log(`📧 [dry-run] referral ${type} → ${email} (+${months}mo)`)

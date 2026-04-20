@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
 import { useSearchParams } from 'react-router-dom';
-import { getStoredReferralCode } from '@/lib/referral-tracking';
+import { getStoredReferralCode, markOAuthSignupIntent } from '@/lib/referral-tracking';
 
 type AuthFormProps = {
   mode: 'signin' | 'signup';
@@ -46,7 +46,10 @@ export function AuthForm({ mode }: AuthFormProps) {
     try {
       // Google OAuth can't carry custom metadata through the redirect, so the
       // referral code is retrieved from localStorage in /auth/callback instead.
-      console.log(`[Referral] Google sign-in — stored code for callback: ${referralCode ?? '(none)'}`);
+      // If this is the signup page, mark intent so the callback will credit
+      // the referral even if created_at doesn't register as "recent".
+      if (mode === 'signup') markOAuthSignupIntent();
+      console.log(`[Referral] Google ${mode} — stored code for callback: ${referralCode ?? '(none)'}`);
       await signInWithGoogle();
     } catch (error: any) {
       toast.error(error.message || 'Failed to sign in with Google');
