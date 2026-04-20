@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { supabase, invokeEdgeFunction } from '@/lib/supabase';
+import { invokeEdgeFunction } from '@/lib/supabase';
 import { formatDate } from '@/lib/date';
 import { toast } from 'sonner';
 import { Users, UserPlus, CheckCircle2, Crown, Gift } from 'lucide-react';
@@ -117,76 +117,28 @@ export function AdminReferrals() {
     try {
       setLoading(true);
 
-      const { data: referrals, error: refError } = await supabase
-        .from('referrals')
-        .select('referrer_id, status, created_at')
-        .order('created_at', { ascending: false });
+      const result = await invokeEdgeFunction<{
+        rows: ReferralRow[];
+        stats: {
+          activeReferrers: number;
+          totalReferrals: number;
+          verifiedReferrals: number;
+          paidReferrals: number;
+        };
+      }>('admin-list-referrals');
 
-      if (refError) throw refError;
-
-      const referralList = referrals || [];
-
-      // Group by referrer
-      const byReferrer = new Map<string, ReferralRow>();
-      for (const r of referralList) {
-        const existing = byReferrer.get(r.referrer_id);
-        if (existing) {
-          existing.total += 1;
-          if (r.status === 'verified' || r.status === 'paid') existing.verified += 1;
-          if (r.status === 'paid') existing.paid += 1;
-          if (!existing.last_referral_at || r.created_at > existing.last_referral_at) {
-            existing.last_referral_at = r.created_at;
-          }
-        } else {
-          byReferrer.set(r.referrer_id, {
-            referrer_id: r.referrer_id,
-            referrer_email: '',
-            code: null,
-            total: 1,
-            verified: r.status === 'verified' || r.status === 'paid' ? 1 : 0,
-            paid: r.status === 'paid' ? 1 : 0,
-            last_referral_at: r.created_at,
-          });
+      setRows(result.rows || []);
+      setStats(
+        result.stats || {
+          activeReferrers: 0,
+          totalReferrals: 0,
+          verifiedReferrals: 0,
+          paidReferrals: 0,
         }
-      }
-
-      const referrerIds = Array.from(byReferrer.keys());
-
-      // Fetch emails
-      if (referrerIds.length > 0) {
-        const { data: usersData } = await supabase
-          .from('users')
-          .select('id, email')
-          .in('id', referrerIds);
-
-        for (const u of usersData || []) {
-          const row = byReferrer.get(u.id);
-          if (row) row.referrer_email = u.email;
-        }
-
-        // Fetch referral codes
-        const { data: codesData } = await supabase
-          .from('referral_codes')
-          .select('user_id, code')
-          .in('user_id', referrerIds);
-
-        for (const c of codesData || []) {
-          const row = byReferrer.get(c.user_id);
-          if (row) row.code = c.code;
-        }
-      }
-
-      const sorted = Array.from(byReferrer.values()).sort((a, b) => b.total - a.total);
-      setRows(sorted);
-
-      setStats({
-        activeReferrers: sorted.length,
-        totalReferrals: referralList.length,
-        verifiedReferrals: referralList.filter(r => r.status === 'verified' || r.status === 'paid').length,
-        paidReferrals: referralList.filter(r => r.status === 'paid').length,
-      });
+      );
     } catch (error) {
       console.error('Error fetching referrals:', error);
+      toast.error((error as Error).message || 'Failed to load referrals');
     } finally {
       setLoading(false);
     }
