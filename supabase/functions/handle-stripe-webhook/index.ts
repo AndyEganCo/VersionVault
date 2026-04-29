@@ -3,6 +3,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import Stripe from 'https://esm.sh/stripe@14.11.0?target=deno'
+import { computeGrantExpiry } from '../_shared/grant-expiry.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -569,9 +570,10 @@ async function processReferralPaidReward(subscriberId: string, supabase: any) {
       return
     }
 
-    // Grant 3 months to referrer for paid conversion
-    const expiry = new Date()
-    expiry.setMonth(expiry.getMonth() + 3)
+    // Grant 3 months to referrer for paid conversion. Stack on top of any
+    // existing paid period or active grant so referral months never overlap
+    // paid Pro time.
+    const expiry = await computeGrantExpiry(supabase, referral.referrer_id, 3)
 
     const { error: grantError } = await supabase
       .from('premium_grants')
@@ -580,7 +582,7 @@ async function processReferralPaidReward(subscriberId: string, supabase: any) {
         months_granted: 3,
         source: 'referral_paid',
         referral_id: referral.id,
-        expires_at: expiry.toISOString(),
+        expires_at: expiry,
       })
 
     if (grantError) {

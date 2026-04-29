@@ -4,6 +4,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Resend } from 'https://esm.sh/resend@2.0.0'
 import { throttledResendSend } from '../_shared/resend-throttle.ts'
+import { computeGrantExpiry } from '../_shared/grant-expiry.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -119,26 +120,25 @@ serve(async (req) => {
 
       if (refError) throw refError
 
-      // Grant reward to referrer
-      const referrerExpiry = new Date()
-      referrerExpiry.setMonth(referrerExpiry.getMonth() + SIGNUP_REWARD_MONTHS)
+      // Grant reward to referrer — stack expiry on top of any existing paid
+      // subscription or active grant so free months never overlap paid time.
+      const referrerExpiry = await computeGrantExpiry(supabase, referrerId, SIGNUP_REWARD_MONTHS)
       await supabase.from('premium_grants').insert({
         user_id: referrerId,
         months_granted: SIGNUP_REWARD_MONTHS,
         source: 'referral_signup',
         referral_id: referral.id,
-        expires_at: referrerExpiry.toISOString(),
+        expires_at: referrerExpiry,
       })
 
       // Grant reward to referred friend (two-sided)
-      const friendExpiry = new Date()
-      friendExpiry.setMonth(friendExpiry.getMonth() + FRIEND_REWARD_MONTHS)
+      const friendExpiry = await computeGrantExpiry(supabase, referredUserId, FRIEND_REWARD_MONTHS)
       await supabase.from('premium_grants').insert({
         user_id: referredUserId,
         months_granted: FRIEND_REWARD_MONTHS,
         source: 'referral_signup',
         referral_id: referral.id,
-        expires_at: friendExpiry.toISOString(),
+        expires_at: friendExpiry,
       })
 
       // Check milestone bonuses for referrer
@@ -176,14 +176,13 @@ serve(async (req) => {
 
       if (referral) {
         // Grant paid conversion reward to referrer
-        const expiry = new Date()
-        expiry.setMonth(expiry.getMonth() + PAID_REWARD_MONTHS)
+        const expiry = await computeGrantExpiry(supabase, referrerId, PAID_REWARD_MONTHS)
         await supabase.from('premium_grants').insert({
           user_id: referrerId,
           months_granted: PAID_REWARD_MONTHS,
           source: 'referral_paid',
           referral_id: referral.id,
-          expires_at: expiry.toISOString(),
+          expires_at: expiry,
         })
 
         const { data: refUser } = await supabase.auth.admin.getUserById(referrerId)
@@ -227,13 +226,12 @@ async function checkMilestones(supabase: any, referrerId: string, totalReferrals
   let bonusMonths = 0
   for (const milestone of milestones) {
     if (totalReferrals >= milestone.threshold && !grantedMonths.has(milestone.months)) {
-      const expiry = new Date()
-      expiry.setMonth(expiry.getMonth() + milestone.months)
+      const expiry = await computeGrantExpiry(supabase, referrerId, milestone.months)
       await supabase.from('premium_grants').insert({
         user_id: referrerId,
         months_granted: milestone.months,
         source: 'milestone_bonus',
-        expires_at: expiry.toISOString(),
+        expires_at: expiry,
       })
       console.log(`🎉 Milestone bonus: ${milestone.months} months for ${milestone.threshold} referrals`)
       bonusMonths += milestone.months
