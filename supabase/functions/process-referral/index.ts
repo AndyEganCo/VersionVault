@@ -6,7 +6,7 @@ import { Resend } from 'https://esm.sh/resend@2.0.0'
 import Stripe from 'https://esm.sh/stripe@14.11.0?target=deno'
 import { throttledResendSend } from '../_shared/resend-throttle.ts'
 import { computeGrantExpiry } from '../_shared/grant-expiry.ts'
-import { extendStripeTrialToGrants } from '../_shared/extend-stripe-trial.ts'
+import { addReferralCreditToCustomer } from '../_shared/customer-balance-credit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -42,13 +42,18 @@ serve(async (req) => {
       ? new Stripe(stripeSecretKey, { apiVersion: '2023-10-16', httpClient: Stripe.createFetchHttpClient() })
       : null
 
-    async function syncStripeTrial(uid: string) {
+    // For users who already have an active subscription, deliver the granted
+    // months as a Stripe customer-balance credit instead of pushing trial_end.
+    // Keeps the Stripe-side renewal date stable and the subscription label
+    // "Active" rather than "Free trial". Pre-checkout grants (no subscription
+    // yet) still apply via trial_end set by create-checkout-session.
+    async function applyStripeCredit(uid: string, months: number, source: string) {
       if (!stripe) return
       try {
-        const result = await extendStripeTrialToGrants(stripe, supabase, uid)
-        console.log(`Stripe trial sync for ${uid}:`, result)
+        const result = await addReferralCreditToCustomer(stripe, supabase, uid, months, source)
+        console.log(`Stripe credit for ${uid}:`, result)
       } catch (err) {
-        console.error(`⚠️ Stripe trial sync failed for ${uid}:`, err)
+        console.error(`Stripe credit failed for ${uid}:`, err)
       }
     }
 
@@ -158,7 +163,10 @@ serve(async (req) => {
       })
 
       // Push Stripe trial_end out for both sides if they have active subs.
-      await Promise.all([syncStripeTrial(referrerId), syncStripeTrial(referredUserId)])
+      await Promise.all([
+        applyStripeCredit(referrerId, SIGNUP_REWARD_MONTHS, 'referral_signup'),
+        applyStripeCredit(referredUserId, FRIEND_REWARD_MONTHS, 'referral_signup'),
+      ])
 
       // Check milestone bonuses for referrer
       const { count: totalReferrals } = await supabase
@@ -167,7 +175,7 @@ serve(async (req) => {
         .eq('referrer_id', referrerId)
         .in('status', ['verified', 'paid'])
 
-      const milestoneMonths = await checkMilestones(supabase, referrerId, totalReferrals ?? 0)
+      const milestoneMonths = await checkMilestones(supabase, referrerId, totalReferrals ?? 0, applyStripeCredit)
 
       // Notify both sides
       const [{ data: refUser }, { data: friendUser }] = await Promise.all([
@@ -204,7 +212,7 @@ serve(async (req) => {
           expires_at: expiry,
         })
 
-        await syncStripeTrial(referrerId)
+        await applyStripeCredit(referrerId, PAID_REWARD_MONTHS, 'referral_paid')
 
         const { data: refUser } = await supabase.auth.admin.getUserById(referrerId)
         if (refUser?.user?.email) {
@@ -228,8 +236,12 @@ serve(async (req) => {
   }
 })
 
-async function checkMilestones(supabase: any, referrerId: string, totalReferrals: number): Promise<number> {
-  // Check which milestones have already been granted
+async function checkMilestones(
+  supabase: any,
+  referrerId: string,
+  totalReferrals: number,
+  applyStripeCredit: (uid: string, months: number, source: string) => Promise<void>,
+): Promise<number> {
   const { data: existingMilestones } = await supabase
     .from('premium_grants')
     .select('months_granted')
@@ -254,7 +266,8 @@ async function checkMilestones(supabase: any, referrerId: string, totalReferrals
         source: 'milestone_bonus',
         expires_at: expiry,
       })
-      console.log(`🎉 Milestone bonus: ${milestone.months} months for ${milestone.threshold} referrals`)
+      await applyStripeCredit(referrerId, milestone.months, 'milestone_bonus')
+      console.log(`Milestone bonus: ${milestone.months} months for ${milestone.threshold} referrals`)
       bonusMonths += milestone.months
     }
   }
