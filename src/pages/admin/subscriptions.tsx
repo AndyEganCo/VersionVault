@@ -22,6 +22,18 @@ import { supabase } from '@/lib/supabase';
 import { formatDate } from '@/lib/date';
 import { CreditCard, TrendingUp } from 'lucide-react';
 
+interface ActiveDiscount {
+  stripe_coupon_id: string;
+  promotion_code: string | null;
+  coupon_name: string | null;
+  percent_off: number | null;
+  amount_off: number | null;
+  currency: string | null;
+  duration: string | null;
+  duration_in_months: number | null;
+  end_at: string | null;
+}
+
 interface Subscription {
   id: string;
   user_id: string;
@@ -34,6 +46,24 @@ interface Subscription {
   cancel_at_period_end: boolean;
   created_at: string;
   user_email?: string;
+  active_discount?: ActiveDiscount | null;
+}
+
+function formatDiscount(d: ActiveDiscount): string {
+  const amount = d.percent_off
+    ? `${d.percent_off}% off`
+    : d.amount_off
+      ? `${(d.amount_off / 100).toFixed(2)} ${(d.currency ?? 'usd').toUpperCase()} off`
+      : 'discount';
+  const duration =
+    d.duration === 'forever'
+      ? 'forever'
+      : d.duration === 'once'
+        ? 'once'
+        : d.duration === 'repeating' && d.duration_in_months
+          ? `${d.duration_in_months} mo`
+          : '';
+  return duration ? `${amount} (${duration})` : amount;
 }
 
 export function AdminSubscriptions() {
@@ -69,16 +99,38 @@ export function AdminSubscriptions() {
 
       if (usersError) throw usersError;
 
+      // Fetch active discounts for all subscriptions in one query
+      const subIds = (subscriptionsData || []).map((s: any) => s.id);
+      const { data: discountsData, error: discountsError } = subIds.length
+        ? await supabase
+            .from('subscription_discounts')
+            .select('subscription_id, stripe_coupon_id, promotion_code, coupon_name, percent_off, amount_off, currency, duration, duration_in_months, end_at, created_at')
+            .in('subscription_id', subIds)
+            .is('removed_at', null)
+            .order('created_at', { ascending: false })
+        : { data: [], error: null };
+
+      if (discountsError) throw discountsError;
+
+      // Map subscription_id -> first active discount
+      const discountMap: Record<string, ActiveDiscount> = {};
+      for (const d of discountsData || []) {
+        if (!discountMap[d.subscription_id]) {
+          discountMap[d.subscription_id] = d as ActiveDiscount;
+        }
+      }
+
       // Create a map of user_id to email
       const userEmailMap = (usersData || []).reduce((acc: any, user: any) => {
         acc[user.id] = user.email;
         return acc;
       }, {});
 
-      // Transform data to include user email
+      // Transform data to include user email and active discount
       const subscriptionsWithEmail = (subscriptionsData || []).map((sub: any) => ({
         ...sub,
         user_email: userEmailMap[sub.user_id] || 'Unknown',
+        active_discount: discountMap[sub.id] ?? null,
       }));
 
       setSubscriptions(subscriptionsWithEmail);
@@ -194,6 +246,7 @@ export function AdminSubscriptions() {
                   <TableHead>User</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Plan</TableHead>
+                  <TableHead>Discount</TableHead>
                   <TableHead>Period Start</TableHead>
                   <TableHead>Period End</TableHead>
                   <TableHead>Stripe ID</TableHead>
@@ -212,6 +265,25 @@ export function AdminSubscriptions() {
                       <Badge variant="secondary">
                         {sub.plan_type === 'premium_yearly' ? '$25/year' : sub.plan_type}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {sub.active_discount ? (
+                        <div className="flex flex-col gap-1">
+                          <Badge
+                            variant="outline"
+                            className="w-fit bg-purple-500/10 text-purple-500 border-purple-500/20"
+                          >
+                            {formatDiscount(sub.active_discount)}
+                          </Badge>
+                          {(sub.active_discount.promotion_code || sub.active_discount.coupon_name) && (
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {sub.active_discount.promotion_code ?? sub.active_discount.coupon_name}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {formatDate(sub.current_period_start)}
