@@ -49,6 +49,20 @@ interface Subscription {
   active_discount?: ActiveDiscount | null;
 }
 
+// Steady-state monthly contribution of a single subscription, in dollars.
+// Only `forever` discounts permanently reduce MRR. `once` and `repeating`
+// discounts reset to full price after they expire, so steady-state MRR is
+// unchanged. premium_yearly is the only plan today: $25 / 12 ~= $2.08/mo.
+function monthlyRateForSub(sub: Subscription): number {
+  const annual = sub.plan_type === 'premium_yearly' ? 25 : 0;
+  const monthly = annual / 12;
+  const d = sub.active_discount;
+  if (!d || d.duration !== 'forever') return monthly;
+  if (d.percent_off != null) return monthly * (1 - d.percent_off / 100);
+  if (d.amount_off != null) return Math.max(0, monthly - d.amount_off / 100 / 12);
+  return monthly;
+}
+
 function formatDiscount(d: ActiveDiscount): string {
   const amount = d.percent_off
     ? `${d.percent_off}% off`
@@ -135,10 +149,11 @@ export function AdminSubscriptions() {
 
       setSubscriptions(subscriptionsWithEmail);
 
-      // Calculate stats
-      const active = subscriptionsWithEmail.filter((s: Subscription) => s.status === 'active').length;
+      // Calculate stats — MRR sums each active sub's discount-aware monthly rate
+      const activeSubs = subscriptionsWithEmail.filter((s: Subscription) => s.status === 'active');
+      const active = activeSubs.length;
       const canceled = subscriptionsWithEmail.filter((s: Subscription) => s.cancel_at_period_end).length;
-      const mrr = active * 25 / 12; // $25/year = ~$2.08/month
+      const mrr = activeSubs.reduce((sum: number, s: Subscription) => sum + monthlyRateForSub(s), 0);
 
       setStats({
         total: subscriptionsWithEmail.length,
