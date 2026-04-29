@@ -14,6 +14,7 @@ import { BetaBanner } from '@/components/beta-banner';
 import { Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
 import type { Software } from '@/lib/software/types';
 import { formatDate } from '@/lib/date';
+import { FREE_TIER_TRACKING_LIMIT } from '@/lib/software/utils/tracking';
 
 export function Home() {
   const { user, loading } = useAuth();
@@ -293,6 +294,44 @@ export function Home() {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Pricing */}
+        <div className="space-y-6 bg-muted/30 rounded-lg p-8 md:p-12">
+          <div className="text-center space-y-2">
+            <h2 className="text-3xl font-bold">Simple Pricing</h2>
+            <p className="text-muted-foreground">Start free. Upgrade when you outgrow it.</p>
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4 max-w-3xl mx-auto">
+            <div className="rounded-lg border bg-background p-5">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-lg font-semibold">Free</span>
+                <span className="text-sm text-muted-foreground">$0 forever</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                Track up to {FREE_TIER_TRACKING_LIMIT} apps · Weekly emails
+              </p>
+            </div>
+            <div className="rounded-lg border-2 border-primary bg-background p-5">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-lg font-semibold flex items-center gap-1.5">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Pro
+                </span>
+                <span className="text-sm text-muted-foreground">$25/year</span>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                Unlimited apps · Daily, weekly, or monthly emails
+              </p>
+            </div>
+          </div>
+
+          <p className="text-center text-sm">
+            <Link to="/premium" className="text-primary hover:underline">
+              See full plan comparison →
+            </Link>
+          </p>
         </div>
 
         {/* Ad Banner */}
