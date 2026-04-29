@@ -102,11 +102,17 @@ export async function createCustomerPortalSession(userId: string): Promise<strin
  * Get user's subscription status
  */
 export async function getSubscriptionStatus(userId: string) {
+  // 'trialing' covers the case where Stripe is in a free-time window we
+  // pushed forward via trial_end (referral or admin grants on top of an
+  // active sub). The user still has a paid Pro subscription — Stripe just
+  // isn't billing them right now.
   const { data, error } = await supabase
     .from('subscriptions')
     .select('*')
     .eq('user_id', userId)
-    .eq('status', 'active')
+    .in('status', ['active', 'trialing'])
+    .order('current_period_end', { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (error) {
