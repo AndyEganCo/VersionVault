@@ -5,7 +5,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import Stripe from 'https://esm.sh/stripe@14.11.0?target=deno'
 import { computeGrantExpiry } from '../_shared/grant-expiry.ts'
-import { extendStripeTrialToGrants } from '../_shared/extend-stripe-trial.ts'
+import { addReferralCreditToCustomer } from '../_shared/customer-balance-credit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -80,7 +80,8 @@ serve(async (req) => {
     }
 
     // Stack expiry on top of any existing paid subscription period or active
-    // grant so admin-granted months never overlap paid Pro time.
+    // grant so the grant is meaningful if/when the user later goes from
+    // free to paid (Checkout reads this via trial_end).
     const expiresAt = await computeGrantExpiry(supabase, targetUserId, months)
 
     const { data: grant, error: grantError } = await supabase
@@ -99,9 +100,9 @@ serve(async (req) => {
       return jsonResponse({ error: grantError.message }, 500)
     }
 
-    // If the user has an active Stripe subscription, push its trial_end out
-    // so the renewal date reflects the new free time. Non-fatal — the grant
-    // is already recorded, this just keeps Stripe in sync.
+    // If the user already has a paid subscription, the grant is delivered as
+    // a Stripe customer-balance credit applied to their next invoice — so the
+    // renewal date stays put and Stripe shows "Active" rather than "trial".
     let stripeSync: unknown = { skipped: true, reason: 'no stripe key' }
     const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY')
     if (stripeSecretKey) {
@@ -110,14 +111,14 @@ serve(async (req) => {
           apiVersion: '2023-10-16',
           httpClient: Stripe.createFetchHttpClient(),
         })
-        stripeSync = await extendStripeTrialToGrants(stripe, supabase, targetUserId)
+        stripeSync = await addReferralCreditToCustomer(stripe, supabase, targetUserId, months, 'admin_grant')
       } catch (err) {
-        console.error('⚠️ extendStripeTrialToGrants failed:', err)
+        console.error('addReferralCreditToCustomer failed:', err)
         stripeSync = { error: (err as Error).message }
       }
     }
 
-    console.log(`✅ Admin ${caller.id} granted ${months}mo to ${targetUserId}`, stripeSync)
+    console.log(`Admin ${caller.id} granted ${months}mo to ${targetUserId}`, stripeSync)
     return jsonResponse({ success: true, grant, stripeSync }, 200)
   } catch (error) {
     console.error('admin-grant-premium error:', error)

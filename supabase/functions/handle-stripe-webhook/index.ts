@@ -4,7 +4,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import Stripe from 'https://esm.sh/stripe@14.11.0?target=deno'
 import { computeGrantExpiry } from '../_shared/grant-expiry.ts'
-import { extendStripeTrialToGrants } from '../_shared/extend-stripe-trial.ts'
+import { addReferralCreditToCustomer } from '../_shared/customer-balance-credit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -702,13 +702,13 @@ async function processReferralPaidReward(subscriberId: string, supabase: any, st
       .update({ status: 'paid', paid_rewarded: true })
       .eq('id', referral.id)
 
-    // If the referrer has an active subscription, push its trial_end out so
-    // the renewal date reflects the new free time.
+    // Apply the granted months as a Stripe customer-balance credit so the
+    // referrer's next invoice is reduced rather than the renewal date moving.
     try {
-      const result = await extendStripeTrialToGrants(stripe, supabase, referral.referrer_id)
-      console.log(`Stripe trial sync for referrer ${referral.referrer_id}:`, result)
+      const result = await addReferralCreditToCustomer(stripe, supabase, referral.referrer_id, 3, 'referral_paid')
+      console.log(`Stripe credit for referrer ${referral.referrer_id}:`, result)
     } catch (err) {
-      console.error('extendStripeTrialToGrants failed:', err)
+      console.error('addReferralCreditToCustomer failed:', err)
     }
 
     console.log(`Granted 3 months to referrer ${referral.referrer_id} for paid conversion`)
