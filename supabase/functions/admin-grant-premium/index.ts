@@ -3,6 +3,7 @@
 // compensating for bugs, or gifting Pro time.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { computeGrantExpiry } from '../_shared/grant-expiry.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -76,8 +77,9 @@ serve(async (req) => {
       return jsonResponse({ error: 'Provide either userId (UUID) or email' }, 400)
     }
 
-    const expiresAt = new Date()
-    expiresAt.setMonth(expiresAt.getMonth() + months)
+    // Stack expiry on top of any existing paid subscription period or active
+    // grant so admin-granted months never overlap paid Pro time.
+    const expiresAt = await computeGrantExpiry(supabase, targetUserId, months)
 
     const { data: grant, error: grantError } = await supabase
       .from('premium_grants')
@@ -85,7 +87,7 @@ serve(async (req) => {
         user_id: targetUserId,
         months_granted: months,
         source: 'admin_grant',
-        expires_at: expiresAt.toISOString(),
+        expires_at: expiresAt,
       })
       .select()
       .single()
