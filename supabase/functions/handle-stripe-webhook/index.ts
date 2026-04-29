@@ -4,6 +4,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import Stripe from 'https://esm.sh/stripe@14.11.0?target=deno'
 import { computeGrantExpiry } from '../_shared/grant-expiry.ts'
+import { extendStripeTrialToGrants } from '../_shared/extend-stripe-trial.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -397,7 +398,7 @@ async function handleCheckoutCompleted(
 
     // Check if this user was referred  grant referrer paid conversion reward
     try {
-      await processReferralPaidReward(userId, supabase)
+      await processReferralPaidReward(userId, supabase, stripe)
     } catch (err) {
       console.error(' processReferralPaidReward failed (non-fatal):', err)
     }
@@ -660,7 +661,7 @@ async function sendDonationThankYouEmail(userId: string, amount: number, supabas
 // Referral Helper Functions
 // ============================================
 
-async function processReferralPaidReward(subscriberId: string, supabase: any) {
+async function processReferralPaidReward(subscriberId: string, supabase: any, stripe: Stripe) {
   try {
     // Check if this subscriber was referred by someone
     const { data: referral } = await supabase
@@ -700,6 +701,15 @@ async function processReferralPaidReward(subscriberId: string, supabase: any) {
       .from('referrals')
       .update({ status: 'paid', paid_rewarded: true })
       .eq('id', referral.id)
+
+    // If the referrer has an active subscription, push its trial_end out so
+    // the renewal date reflects the new free time.
+    try {
+      const result = await extendStripeTrialToGrants(stripe, supabase, referral.referrer_id)
+      console.log(`Stripe trial sync for referrer ${referral.referrer_id}:`, result)
+    } catch (err) {
+      console.error('extendStripeTrialToGrants failed:', err)
+    }
 
     console.log(`Granted 3 months to referrer ${referral.referrer_id} for paid conversion`)
   } catch (error) {

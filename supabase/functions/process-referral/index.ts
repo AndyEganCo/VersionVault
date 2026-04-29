@@ -3,8 +3,10 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Resend } from 'https://esm.sh/resend@2.0.0'
+import Stripe from 'https://esm.sh/stripe@14.11.0?target=deno'
 import { throttledResendSend } from '../_shared/resend-throttle.ts'
 import { computeGrantExpiry } from '../_shared/grant-expiry.ts'
+import { extendStripeTrialToGrants } from '../_shared/extend-stripe-trial.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,6 +37,20 @@ serve(async (req) => {
     )
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
     const resend = resendApiKey ? new Resend(resendApiKey) : null
+    const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY')
+    const stripe = stripeSecretKey
+      ? new Stripe(stripeSecretKey, { apiVersion: '2023-10-16', httpClient: Stripe.createFetchHttpClient() })
+      : null
+
+    async function syncStripeTrial(uid: string) {
+      if (!stripe) return
+      try {
+        const result = await extendStripeTrialToGrants(stripe, supabase, uid)
+        console.log(`Stripe trial sync for ${uid}:`, result)
+      } catch (err) {
+        console.error(`⚠️ Stripe trial sync failed for ${uid}:`, err)
+      }
+    }
 
     const { referredUserId, referralCode, type } = await req.json()
 
@@ -141,6 +157,9 @@ serve(async (req) => {
         expires_at: friendExpiry,
       })
 
+      // Push Stripe trial_end out for both sides if they have active subs.
+      await Promise.all([syncStripeTrial(referrerId), syncStripeTrial(referredUserId)])
+
       // Check milestone bonuses for referrer
       const { count: totalReferrals } = await supabase
         .from('referrals')
@@ -184,6 +203,8 @@ serve(async (req) => {
           referral_id: referral.id,
           expires_at: expiry,
         })
+
+        await syncStripeTrial(referrerId)
 
         const { data: refUser } = await supabase.auth.admin.getUserById(referrerId)
         if (refUser?.user?.email) {
