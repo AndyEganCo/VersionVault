@@ -170,6 +170,32 @@ serve(async (req) => {
         )
       }
 
+      // If the user has free Pro time remaining (referral or trial grants),
+      // defer the first Stripe charge until that time expires by passing
+      // trial_end. This guarantees free months and paid months never overlap.
+      // Stripe requires trial_end to be at least 48h in the future, so we
+      // ignore short remaining grants and let those play out alongside the
+      // first paid period (no extra charge to the user, just a small overlap
+      // we accept rather than refusing checkout).
+      const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
+        metadata: { user_id: userId },
+      }
+
+      const { data: premiumRow } = await supabase
+        .from('premium_users')
+        .select('granted_until')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (premiumRow?.granted_until) {
+        const grantedUntilMs = new Date(premiumRow.granted_until).getTime()
+        const minTrialEndMs = Date.now() + 48 * 60 * 60 * 1000
+        if (grantedUntilMs > minTrialEndMs) {
+          subscriptionData.trial_end = Math.floor(grantedUntilMs / 1000)
+          console.log(`⏳ Deferring billing via trial_end=${premiumRow.granted_until} for user ${userId}`)
+        }
+      }
+
       session = await stripe.checkout.sessions.create({
         customer: customerId,
         mode: 'subscription',
@@ -186,11 +212,7 @@ serve(async (req) => {
         metadata: {
           user_id: userId,
         },
-        subscription_data: {
-          metadata: {
-            user_id: userId,
-          },
-        },
+        subscription_data: subscriptionData,
       })
 
       console.log(`✅ Created subscription checkout session: ${session.id}`)
