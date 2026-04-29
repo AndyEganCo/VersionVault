@@ -49,3 +49,10 @@ create policy "users can read their own subscription discounts"
         and s.user_id = auth.uid()
     )
   );
+
+-- Admins read everyone's discounts on the admin subscribers page.
+create policy "Admins can read all subscription_discounts"
+  on subscription_discounts
+  for select
+  to authenticated
+  using ((select auth.uid()) in (select user_id from admin_users));
