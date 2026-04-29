@@ -3,7 +3,9 @@
 // compensating for bugs, or gifting Pro time.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import Stripe from 'https://esm.sh/stripe@14.11.0?target=deno'
 import { computeGrantExpiry } from '../_shared/grant-expiry.ts'
+import { extendStripeTrialToGrants } from '../_shared/extend-stripe-trial.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -97,8 +99,26 @@ serve(async (req) => {
       return jsonResponse({ error: grantError.message }, 500)
     }
 
-    console.log(`✅ Admin ${caller.id} granted ${months}mo to ${targetUserId}`)
-    return jsonResponse({ success: true, grant }, 200)
+    // If the user has an active Stripe subscription, push its trial_end out
+    // so the renewal date reflects the new free time. Non-fatal — the grant
+    // is already recorded, this just keeps Stripe in sync.
+    let stripeSync: unknown = { skipped: true, reason: 'no stripe key' }
+    const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY')
+    if (stripeSecretKey) {
+      try {
+        const stripe = new Stripe(stripeSecretKey, {
+          apiVersion: '2023-10-16',
+          httpClient: Stripe.createFetchHttpClient(),
+        })
+        stripeSync = await extendStripeTrialToGrants(stripe, supabase, targetUserId)
+      } catch (err) {
+        console.error('⚠️ extendStripeTrialToGrants failed:', err)
+        stripeSync = { error: (err as Error).message }
+      }
+    }
+
+    console.log(`✅ Admin ${caller.id} granted ${months}mo to ${targetUserId}`, stripeSync)
+    return jsonResponse({ success: true, grant, stripeSync }, 200)
   } catch (error) {
     console.error('admin-grant-premium error:', error)
     return jsonResponse({ error: (error as Error).message }, 500)

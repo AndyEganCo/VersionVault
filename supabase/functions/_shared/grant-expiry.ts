@@ -1,10 +1,16 @@
 // Compute the expiry timestamp for a new premium_grants row so that referral
-// months stack on top of any existing paid subscription period and any other
-// active free grants — never overlapping with paid Pro time.
+// and admin grants stack on top of any existing paid subscription period and
+// any other future grants — never overlapping with paid Pro time.
 //
-// Anchor = MAX(now, premium_users.granted_until, subscriptions.current_period_end
-//              for active/trialing subs)
+// Anchor = MAX(now,
+//              premium_grants.MAX(expires_at) where expires_at > now,
+//              subscriptions.current_period_end for active/trialing subs)
 // expires_at = anchor + monthsGranted months
+//
+// We query premium_grants directly rather than premium_users.granted_until
+// because granted_until is intentionally NULL while a user has an active
+// paid subscription, even though deferred grants may still be sitting in
+// premium_grants waiting to take over after the subscription ends.
 
 export async function computeGrantExpiry(
   supabase: any,
@@ -14,15 +20,18 @@ export async function computeGrantExpiry(
   const now = new Date()
   let anchor = now
 
-  const { data: premiumRow } = await supabase
-    .from('premium_users')
-    .select('granted_until')
+  const { data: latestGrant } = await supabase
+    .from('premium_grants')
+    .select('expires_at')
     .eq('user_id', userId)
+    .gt('expires_at', now.toISOString())
+    .order('expires_at', { ascending: false })
+    .limit(1)
     .maybeSingle()
 
-  if (premiumRow?.granted_until) {
-    const grantedUntil = new Date(premiumRow.granted_until)
-    if (grantedUntil > anchor) anchor = grantedUntil
+  if (latestGrant?.expires_at) {
+    const grantExpiry = new Date(latestGrant.expires_at)
+    if (grantExpiry > anchor) anchor = grantExpiry
   }
 
   const { data: sub } = await supabase
