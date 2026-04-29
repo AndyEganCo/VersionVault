@@ -11,9 +11,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { BetaBanner } from '@/components/beta-banner';
-import { Search, Mail, Bell, Sparkles, Clock, History } from 'lucide-react';
+import { Search, Mail, Bell, Sparkles, Clock, History, Check } from 'lucide-react';
 import type { Software } from '@/lib/software/types';
 import { formatDate } from '@/lib/date';
+import { FREE_TIER_TRACKING_LIMIT } from '@/lib/software/utils/tracking';
 
 export function Home() {
   const { user, loading } = useAuth();
@@ -367,6 +368,79 @@ export function Home() {
                 </p>
               </div>
             )}
+
+            <div className="pt-8 space-y-4">
+              <div className="text-center space-y-2">
+                <h2 className="text-3xl font-bold">Simple, honest pricing</h2>
+                <p className="text-muted-foreground">
+                  Start free. Upgrade when you need more.
+                </p>
+              </div>
+              <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Free</CardTitle>
+                    <CardDescription>Get started tracking software</CardDescription>
+                    <div className="pt-2">
+                      <span className="text-3xl font-bold">$0</span>
+                      <span className="text-muted-foreground"> /forever</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span>Track up to {FREE_TIER_TRACKING_LIMIT} apps</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span>Weekly email notifications</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span>Version history & release notes</span>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card className="border-2 border-primary shadow-lg relative">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
+                      Most Popular
+                    </span>
+                  </div>
+                  <CardHeader>
+                    <CardTitle className="text-xl flex items-center gap-2">
+                      <Sparkles className="h-5 w-5 text-primary" />
+                      Pro
+                    </CardTitle>
+                    <CardDescription>For power users who track everything</CardDescription>
+                    <div className="pt-2">
+                      <span className="text-3xl font-bold">$25</span>
+                      <span className="text-muted-foreground"> /year</span>
+                      <span className="text-xs text-muted-foreground ml-2">~$2/month</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span>Unlimited app tracking</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span>Daily, weekly, or monthly emails</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                      <span>Priority support</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+              <p className="text-center text-sm text-muted-foreground">
+                <Link to="/premium" className="text-primary hover:underline">
+                  See full plan comparison
+                </Link>
+              </p>
+            </div>
 
             <div className="text-center pt-8">
               <div className="bg-primary/5 rounded-lg p-8 space-y-4">
