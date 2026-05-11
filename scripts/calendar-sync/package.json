@@ -1,0 +1,17 @@
+{
+  "name": "calendar-sync",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "sync:sprint": "tsx sync.ts sprint",
+    "sync:travel": "tsx sync.ts travel"
+  },
+  "dependencies": {
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.0.0"
+  }
+}
